@@ -16,7 +16,7 @@
     "test": "node --test dist/**/*.test.js",
     "dev": "tsc -b --watch"
   },
-  "dependencies": {
+  "optionalDependencies": {
     "playwright": "^1.52.0"
   }
 }

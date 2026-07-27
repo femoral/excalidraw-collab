@@ -137,3 +137,29 @@ export {
   type SkeletonConverterHolder,
   type SkeletonErrorDetails,
 } from "./skeleton.js";
+export {
+  DEFAULT_RENDER_SCALE,
+  MAX_RENDER_SCALE,
+  etagMatches,
+  isRenderNotInstalledError,
+  mapWorkerRenderError,
+  parseRenderDark,
+  parseRenderScale,
+  registerRenderRoutes,
+  renderWorkerDisabledError,
+  renderWorkerNotInstalledError,
+  SceneRenderService,
+  type RenderUnavailableReason,
+  type SceneRenderResult,
+  type SceneRenderWorker,
+} from "./render.js";
+export {
+  RENDERS_SUBDIR,
+  RenderCache,
+  optionsFileStem,
+  renderCacheEtag,
+  renderCachePath,
+  type RenderCacheKey,
+  type RenderCacheOptions,
+  type RenderFormat,
+} from "./render-cache.js";

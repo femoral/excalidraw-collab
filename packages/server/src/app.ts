@@ -24,6 +24,12 @@ import {
 } from "./events.js";
 import { FileStore, registerFileRoutes } from "./files.js";
 import { registerLockRoutes } from "./locks.js";
+import {
+  registerRenderRoutes,
+  SceneRenderService,
+  type SceneRenderWorker,
+} from "./render.js";
+import { RenderCache } from "./render-cache.js";
 import { registerSceneRoutes } from "./scenes.js";
 import {
   registerSkeletonRoutes,
@@ -79,6 +85,25 @@ export type BuildAppDeps = {
    * Inject a mock in tests; production wires Playwright via main.ts.
    */
   skeletonConverter?: SkeletonConverter | SkeletonConverterHolder | null;
+  /**
+   * Shared PNG/SVG render worker. When omitted:
+   *   - `config.renderWorker === "on"` → opened via `@excalidraw-collab/render`
+   *     (`openRenderWorker`, never loads Playwright when env is off)
+   *   - otherwise → `null` (routes return 501)
+   * Pass an explicit `null` or a mock in tests.
+   */
+  renderWorker?: SceneRenderWorker | null;
+  /**
+   * Shared scene-render service (GET render.png/svg). When omitted and
+   * db + file store are set, a default service is created.
+   */
+  renders?: SceneRenderService;
+  /**
+   * Base URL of the web app that serves `/render` (for the Playwright
+   * worker). Defaults to `http://127.0.0.1:<config.port>` when the
+   * server also hosts static assets.
+   */
+  renderBaseUrl?: string;
 };
 
 function isFastifyError(err: unknown): err is FastifyError {
@@ -201,6 +226,31 @@ export async function buildApp(
         store: fileStore,
         diffs,
       });
+
+      // Render service: one shared worker (or null → 501). Injected
+      // workers win over config so tests never need Chromium.
+      const { renders, ownedWorker } = await createRenderService(
+        deps,
+        config,
+        fileStore,
+      );
+      app.decorate("renders", renders);
+      await registerRenderRoutes(app, {
+        db: deps.db,
+        store: fileStore,
+        renders,
+        config,
+      });
+
+      if (ownedWorker) {
+        app.addHook("onClose", async () => {
+          try {
+            await ownedWorker.close();
+          } catch {
+            // ignore shutdown races
+          }
+        });
+      }
     }
   }
 
@@ -291,6 +341,61 @@ async function registerStatic(
   });
 }
 
+/**
+ * Build or accept a {@link SceneRenderService}.
+ *
+ * - Explicit `deps.renders` is used as-is (no worker lifecycle owned here).
+ * - Explicit `deps.renderWorker` (including `null`) wires a new service;
+ *   the caller owns close.
+ * - When config says `on` and nothing was injected, open via
+ *   `@excalidraw-collab/render` (`openRenderWorker`) and own its close.
+ * - Otherwise worker is `null` → routes return 501; Playwright is never
+ *   imported on that path.
+ */
+async function createRenderService(
+  deps: BuildAppDeps,
+  config: Config,
+  fileStore: FileStore,
+): Promise<{
+  renders: SceneRenderService;
+  /** Worker opened by us; close on app shutdown. */
+  ownedWorker: SceneRenderWorker | null;
+}> {
+  if (deps.renders) {
+    return { renders: deps.renders, ownedWorker: null };
+  }
+
+  let worker: SceneRenderWorker | null;
+  let ownedWorker: SceneRenderWorker | null = null;
+
+  if (deps.renderWorker !== undefined) {
+    worker = deps.renderWorker;
+  } else if (config.renderWorker === "on") {
+    // Dynamic import keeps Playwright out of the cold graph when off.
+    // openRenderWorker with forced env never loads worker.js when "off";
+    // we force "on" here because config already said on.
+    const { openRenderWorker } = await import("@excalidraw-collab/render");
+    const baseUrl =
+      deps.renderBaseUrl ?? `http://127.0.0.1:${config.port}`;
+    worker = await openRenderWorker(
+      { baseUrl },
+      { RENDER_WORKER: "on" },
+    );
+    ownedWorker = worker;
+  } else {
+    worker = null;
+  }
+
+  const renders = new SceneRenderService(
+    deps.db!,
+    fileStore,
+    worker,
+    new RenderCache(config.dataDir),
+    config.dataDir,
+  );
+  return { renders, ownedWorker };
+}
+
 // Augment Fastify with decorations so later issues type-check cleanly.
 declare module "fastify" {
   interface FastifyInstance {
@@ -303,5 +408,7 @@ declare module "fastify" {
     diffs?: SceneDiffService;
     /** Long-poll event hub (present when db is configured). */
     events?: SceneEventHub;
+    /** Scene render service (present when db/fileStore is configured). */
+    renders?: SceneRenderService;
   }
 }
