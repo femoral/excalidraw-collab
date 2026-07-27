@@ -237,7 +237,7 @@ describe("POST /api/scenes", () => {
 });
 
 describe("GET /api/scenes", () => {
-  test("listing shape includes name, slug, head, updatedAt, lock, elementCount", async () => {
+  test("listing shape includes name, slug, head, updatedAt, lock, elementCount, headAuthor", async () => {
     const dataDir = tempDataDir();
     const token = "bootstrap-scenes-token-list";
     const { app, db } = await buildScenesApp({
@@ -253,6 +253,7 @@ describe("GET /api/scenes", () => {
     });
     assert.equal(create.statusCode, 201);
     const created = create.json() as SceneInfo;
+    assert.equal(created.headAuthor, null);
 
     // Attach a head version so elementCount is non-zero.
     const emptyApp = gzipJson({});
@@ -287,6 +288,55 @@ describe("GET /api/scenes", () => {
       expiresAt: "2099-01-01T00:00:00.000Z",
     });
     assert.equal(item.elementCount, 2);
+    assert.equal(item.headAuthor, "admin");
+  });
+});
+
+describe("PATCH /api/scenes/:slug", () => {
+  test("renames display name without changing slug", async () => {
+    const dataDir = tempDataDir();
+    const token = "bootstrap-scenes-token-rename";
+    const { app } = await buildScenesApp({
+      dataDir,
+      bootstrapToken: token,
+    });
+
+    const create = await app.inject({
+      method: "POST",
+      url: "/api/scenes",
+      headers: bearer(token),
+      payload: { name: "Old Name", slug: "keep-me" },
+    });
+    assert.equal(create.statusCode, 201);
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/api/scenes/keep-me",
+      headers: bearer(token),
+      payload: { name: "New Name" },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = res.json() as SceneInfo;
+    assert.equal(body.name, "New Name");
+    assert.equal(body.slug, "keep-me");
+  });
+
+  test("unknown slug returns 404", async () => {
+    const dataDir = tempDataDir();
+    const token = "bootstrap-scenes-token-rename-404";
+    const { app } = await buildScenesApp({
+      dataDir,
+      bootstrapToken: token,
+    });
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/api/scenes/missing",
+      headers: bearer(token),
+      payload: { name: "Nope" },
+    });
+    assert.equal(res.statusCode, 404);
+    assert.equal((res.json() as ErrorEnvelope).error.code, ErrorCode.NOT_FOUND);
   });
 });
 

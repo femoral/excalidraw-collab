@@ -42,11 +42,14 @@ export type SceneRow = {
 };
 
 /**
- * Scene list/detail row with the head version's element count joined in.
- * When `head_version` is 0 (no versions yet), `element_count` is 0.
+ * Scene list/detail row with head-version metadata joined in.
+ * When `head_version` is 0 (no versions yet), `element_count` is 0 and
+ * `head_author` is null.
  */
 export type SceneListRow = SceneRow & {
   element_count: number;
+  /** Author of the head version, or null when there is no head version yet. */
+  head_author: string | null;
 };
 
 export type VersionRow = {
@@ -590,14 +593,15 @@ export class Database {
   }
 
   /**
-   * Live scenes ordered by recency, with head-version element_count joined.
-   * Soft-deleted scenes are omitted.
+   * Live scenes ordered by recency, with head-version element_count and
+   * author joined. Soft-deleted scenes are omitted.
    */
   listScenes(): SceneListRow[] {
     const rows = this.raw
       .prepare(
         `SELECT s.*,
-                COALESCE(v.element_count, 0) AS element_count
+                COALESCE(v.element_count, 0) AS element_count,
+                v.author AS head_author
          FROM scenes s
          LEFT JOIN versions v
            ON v.scene_id = s.id AND v.version = s.head_version
@@ -609,13 +613,14 @@ export class Database {
   }
 
   /**
-   * Live scene by slug with head element_count. Soft-deleted → undefined.
+   * Live scene by slug with head element_count and author. Soft-deleted → undefined.
    */
   getSceneListRowBySlug(slug: string): SceneListRow | undefined {
     const row = this.raw
       .prepare(
         `SELECT s.*,
-                COALESCE(v.element_count, 0) AS element_count
+                COALESCE(v.element_count, 0) AS element_count,
+                v.author AS head_author
          FROM scenes s
          LEFT JOIN versions v
            ON v.scene_id = s.id AND v.version = s.head_version
@@ -635,6 +640,24 @@ export class Database {
         `UPDATE scenes SET head_version = ?, updated_at = ? WHERE id = ?`,
       )
       .run(headVersion, updatedAt, id);
+  }
+
+  /**
+   * Rename a live scene. Returns the updated row, or undefined if the scene
+   * is missing or soft-deleted. Does not change the slug.
+   */
+  updateSceneName(
+    id: string,
+    name: string,
+    updatedAt: string = nowIso(),
+  ): SceneRow | undefined {
+    this.raw
+      .prepare(
+        `UPDATE scenes SET name = ?, updated_at = ?
+         WHERE id = ? AND deleted_at IS NULL`,
+      )
+      .run(name, updatedAt, id);
+    return this.getSceneById(id);
   }
 
   setSceneLock(
@@ -1159,9 +1182,14 @@ function mapScene(row: Record<string, unknown> | SceneRow): SceneRow {
 }
 
 function mapSceneList(row: Record<string, unknown>): SceneListRow {
+  const headAuthor =
+    row.head_author === null || row.head_author === undefined
+      ? null
+      : String(row.head_author);
   return {
     ...mapScene(row),
     element_count: Number(row.element_count ?? 0),
+    head_author: headAuthor,
   };
 }
 
