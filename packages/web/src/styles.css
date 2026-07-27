@@ -1542,6 +1542,218 @@ code {
 }
 
 /* ---------------------------------------------------------------------------
+   What-changed panel + remote toast (issue #22)
+   --------------------------------------------------------------------------- */
+
+.remote-toast {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding: 0.65rem 0.85rem;
+  background: #fff9db;
+  border-bottom: 1px solid #ffe066;
+  color: var(--text);
+  z-index: 4;
+  font-size: 0.8125rem;
+}
+
+.remote-toast-error {
+  background: var(--danger-soft);
+  border-bottom-color: #ffc9c9;
+}
+
+.remote-toast-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.remote-toast-message {
+  margin: 0;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.remote-toast-hint,
+.remote-toast-error-text {
+  margin: 0.25rem 0 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.remote-toast-error-text {
+  color: var(--danger);
+}
+
+.remote-toast-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.remote-toast-dismiss {
+  margin-left: 0.15rem;
+}
+
+.what-changed-panel {
+  position: absolute;
+  top: 3.25rem;
+  right: 0.75rem;
+  z-index: 5;
+  width: min(22rem, calc(100% - 1.5rem));
+  max-height: min(70vh, 32rem);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+/* Sit below chrome + optional toast */
+.editor-shell:has(.remote-toast) .what-changed-panel {
+  top: 6.5rem;
+}
+
+.what-changed-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.7rem 0.75rem 0.45rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(
+    180deg,
+    var(--accent-soft) 0%,
+    var(--bg-elevated) 120%
+  );
+  flex: 0 0 auto;
+}
+
+.what-changed-header-text {
+  min-width: 0;
+}
+
+.what-changed-title {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.what-changed-subtitle {
+  margin: 0.2rem 0 0;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.what-changed-counts {
+  font-family: var(--mono);
+  font-weight: 600;
+}
+
+.what-changed-lede {
+  margin: 0;
+  padding: 0.45rem 0.9rem 0.35rem;
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  line-height: 1.4;
+  flex: 0 0 auto;
+}
+
+.what-changed-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.15rem 0.45rem 0.55rem;
+  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.what-changed-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.4rem 0.45rem;
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.12rem;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  text-align: left;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+button.what-changed-item {
+  cursor: pointer;
+}
+
+button.what-changed-item:hover {
+  background: var(--bg-muted);
+  border-color: var(--border);
+}
+
+button.what-changed-item:focus-visible {
+  box-shadow: var(--focus-ring);
+  border-color: var(--accent);
+}
+
+.what-changed-item.is-deleted {
+  opacity: 0.78;
+  cursor: default;
+  background: var(--diff-delete-soft);
+  border-color: transparent;
+}
+
+.what-changed-deleted-tag {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--diff-delete);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.what-changed-appstate-note {
+  margin: 0;
+  padding: 0.35rem 0.9rem 0.65rem;
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  border-top: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+
+.what-changed-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 1.5rem 1rem;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  text-align: center;
+}
+
+.what-changed-state-error {
+  color: var(--danger);
+}
+
+/* ---------------------------------------------------------------------------
    Reduced motion
    --------------------------------------------------------------------------- */
 

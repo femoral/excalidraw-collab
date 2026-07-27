@@ -400,3 +400,88 @@ test("getSceneDocument GETs /scene", async () => {
   await client.getSceneDocument("arch");
   assert.equal(url, "/api/scenes/arch/scene");
 });
+
+test("getSceneEvents long-poll returns event body on 200", async () => {
+  let url = "";
+  let signalPassed = false;
+  const ac = new AbortController();
+  const client = createApiClient({
+    getToken: () => "t",
+    onUnauthorized: () => {},
+    fetchImpl: async (input, init) => {
+      url = String(input);
+      signalPassed = init?.signal === ac.signal;
+      return new Response(
+        JSON.stringify({
+          version: 4,
+          parentVersion: 3,
+          author: "agent",
+          message: "pushed",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          elementCount: 2,
+          sceneHash: "h4",
+          headVersion: 4,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    },
+  });
+
+  const event = await client.getSceneEvents("arch", 3, { signal: ac.signal });
+  assert.equal(url, "/api/scenes/arch/events?since=3");
+  assert.equal(signalPassed, true);
+  assert.ok(event);
+  assert.equal(event!.headVersion, 4);
+  assert.equal(event!.author, "agent");
+});
+
+test("getSceneEvents returns null on 204 timeout", async () => {
+  const client = createApiClient({
+    getToken: () => "t",
+    onUnauthorized: () => {},
+    fetchImpl: async () => new Response(null, { status: 204 }),
+  });
+  assert.equal(await client.getSceneEvents("arch", 2), null);
+});
+
+test("mergeScene POSTs to /scene?merge=true (issue #29 seam)", async () => {
+  let url = "";
+  let method = "";
+  let body: unknown;
+  const client = createApiClient({
+    getToken: () => "t",
+    onUnauthorized: () => {},
+    fetchImpl: async (input, init) => {
+      url = String(input);
+      method = String(init?.method);
+      body = JSON.parse(String(init?.body));
+      return new Response(
+        JSON.stringify({
+          version: 5,
+          parentVersion: 3,
+          author: "me",
+          message: "merge with v4",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          elementCount: 3,
+          sceneHash: "hm",
+          headVersion: 5,
+        }),
+        { status: 201, headers: { "content-type": "application/json" } },
+      );
+    },
+  });
+
+  const result = await client.mergeScene("arch", {
+    parentVersion: 3,
+    elements: [{ id: "local" }],
+    message: "merge with v4",
+  });
+  assert.equal(url, "/api/scenes/arch/scene?merge=true");
+  assert.equal(method, "POST");
+  assert.deepEqual(body, {
+    parentVersion: 3,
+    elements: [{ id: "local" }],
+    message: "merge with v4",
+  });
+  assert.equal(result.headVersion, 5);
+});
