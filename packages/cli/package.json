@@ -16,7 +16,8 @@
   "types": "./dist/index.d.ts",
   "files": [
     "bin",
-    "dist"
+    "dist",
+    "skills"
   ],
   "scripts": {
     "build": "node --eval \"const{rmSync}=require('node:fs');rmSync('dist',{recursive:true,force:true});rmSync('tsconfig.tsbuildinfo',{force:true})\" && tsc -b",

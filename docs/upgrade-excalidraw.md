@@ -124,5 +124,5 @@ for upstream.
 ## Related docs
 
 - Design authority: [PLAN.md](../PLAN.md) §2, §6, §9
-- Agent workflow: [AGENTS.md](../AGENTS.md)
+- Agent workflow: [the bundled skill](../packages/cli/skills/excalidraw-collab/SKILL.md)
 - CLI surface: [cli.md](./cli.md)

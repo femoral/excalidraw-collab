@@ -254,8 +254,8 @@ excalicli watch arch                    # long-poll; prints diff on each new ver
 excalicli token create|ls|revoke NAME   # admin token required
 ```
 
-Ships with an `AGENTS.md` snippet documenting the loop, so Claude Code picks up the workflow
-without prompting:
+Ships an agent skill (`excalicli skills install`) documenting the loop, so Claude Code
+picks up the workflow without prompting:
 
 ```
 pull → describe/diff --since-last-pull → edit → push -m "..."   (409 → diff → merge → retry)

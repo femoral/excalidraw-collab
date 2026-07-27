@@ -14,8 +14,8 @@ dependency. Upgrades are a version bump plus the
 
 | Doc | Audience |
 |---|---|
-| [AGENTS.md](./AGENTS.md) | Coding agents — turn loop, conflicts, exit codes |
 | [docs/cli.md](./docs/cli.md) | Full `excalicli` reference (generated from the CLI parsers) |
+| [packages/cli/skills/excalidraw-collab](./packages/cli/skills/excalidraw-collab) | Agent skill — turn loop, conflicts, exit codes (install with `excalicli skills install`) |
 | [docs/upgrade-excalidraw.md](./docs/upgrade-excalidraw.md) | Bumping `@excalidraw/excalidraw` |
 | [PLAN.md](./PLAN.md) | Architecture, data model, HTTP API |
 | [deploy/README.md](./deploy/README.md) | Kubernetes / kustomize |
@@ -53,8 +53,20 @@ excalicli describe arch
 excalicli diff arch --since-last-pull
 ```
 
-Agent workflow (pull → diff → describe → edit → push, conflict handling):
-see **[AGENTS.md](./AGENTS.md)**.
+### Teach your coding agent the workflow
+
+The CLI ships an agent skill (turn loop, conflict handling, exit codes). Install
+it into a skills directory instead of copying instructions by hand:
+
+```sh
+excalicli skills install                 # ./.claude/skills/excalidraw-collab/
+excalicli skills install --scope user    # ~/.claude/skills/excalidraw-collab/
+excalicli skills install --client agents # .agents/skills/… instead of .claude/
+excalicli skills ls                      # what's bundled
+```
+
+`--dir PATH` targets an arbitrary skills directory, `--force` overwrites an
+existing install, and `--dry-run` shows what would be written.
 
 ### Local dev without Docker
 
@@ -136,7 +148,7 @@ excalicli pull --all -o ./export/          # escape hatch: head of every scene a
 packages/
   core/     pure TS: types, diff, digest, normalize (zero runtime deps)
   server/   Fastify HTTP API + SQLite + file store
-  cli/      excalicli
+  cli/      excalicli (+ skills/ — the agent skill it installs)
   web/      Vite + React + @excalidraw/excalidraw
   render/   headless Chromium worker (optional)
 docker/     Dockerfile + compose

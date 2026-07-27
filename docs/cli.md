@@ -201,6 +201,26 @@ Tokens are not restored (secrets are never in the archive). Version
 authorship names, messages, parent links, and image bytes are preserved.
 ```
 
+### `skills`
+
+List or install the agent skill bundled with this CLI (Claude/agents skills directory, project or user scope)
+
+```
+excalicli skills ls | install [NAME] [options] [--json]
+
+  ls                 List skills bundled with this CLI
+  install [NAME]     Copy a bundled skill into a skills directory
+
+  --client NAME      claude (default) | agents — picks .claude/ or .agents/
+  --scope NAME       project (default) | user — cwd, or your home directory
+  --dir PATH         Explicit skills directory; overrides --client/--scope
+  --force            Overwrite an existing installation
+  --dry-run          Report what would be written, touch nothing
+
+Default target: ./.claude/skills/NAME/  (--scope user → ~/.claude/skills/NAME/)
+NAME defaults to the only bundled skill when there is exactly one.
+```
+
 ### `token`
 
 Create, list, or revoke named tokens (admin token required)
