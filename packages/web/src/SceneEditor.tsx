@@ -4,7 +4,7 @@
  * Also supports opening a past version read-only (`?v=N`) with restore.
  */
 
-import { Excalidraw, MainMenu } from "@excalidraw/excalidraw";
+import { CaptureUpdateAction, Excalidraw, MainMenu } from "@excalidraw/excalidraw";
 import type {
   AppState,
   BinaryFiles,
@@ -36,6 +36,7 @@ import {
   filesNeedingUpload,
   formatFileUploadError,
   formatLockBadge,
+  formatRemoteUpdateToast,
   getEditorUnsavedFlag,
   hasUnsavedChanges,
   isEditorLockActive,
@@ -44,12 +45,14 @@ import {
   selectInitialSource,
   setEditorUnsavedFlag,
   shouldShowLockControls,
+  shouldShowRemoteUpdateToast,
   turnMenuLabel,
   turnMenuShouldClaim,
   UNSAVED_LEAVE_MESSAGE,
   validateCommitMessage,
   type EditorLock,
   type EditorSnapshot,
+  type RemoteUpdateToast,
   type SaveIndicator,
 } from "./editor-logic.ts";
 import {
@@ -145,6 +148,12 @@ export function SceneEditor({
   const [lock, setLock] = useState<EditorLock>(null);
   const [selfName, setSelfName] = useState<string | null>(null);
   const [lockBusy, setLockBusy] = useState(false);
+
+  /** Remote head advanced while we still have a local draft base. */
+  const [remoteToast, setRemoteToast] = useState<RemoteUpdateToast | null>(
+    null,
+  );
+  const [remoteBusy, setRemoteBusy] = useState<"load" | "merge" | null>(null);
 
   const headVersionRef = useRef(0);
   const uploadedFilesRef = useRef(new Set<string>());
@@ -594,6 +603,208 @@ export function SceneEditor({
     }
   }
 
+  // ----- long-poll: remote head toast (Load / Merge into mine) --------------
+
+  useEffect(() => {
+    if (readOnly || load.kind !== "ready") return;
+
+    const ac = new AbortController();
+    let stopped = false;
+    // Cursor for long-poll; independent of headVersionRef so a remote push
+    // can toast without clobbering our local parentVersion until Load/Merge.
+    let since = headVersionRef.current;
+
+    const loop = async () => {
+      while (!stopped && !ac.signal.aborted) {
+        // If we committed (or loaded) locally, never poll behind that head.
+        if (headVersionRef.current > since) {
+          since = headVersionRef.current;
+        }
+        try {
+          const event = await api.pollEvents(slug, since, {
+            signal: ac.signal,
+          });
+          if (stopped || ac.signal.aborted) break;
+          if (!event) continue; // 204 idle — re-poll
+
+          const show = shouldShowRemoteUpdateToast(event, {
+            localHead: headVersionRef.current,
+            selfName,
+          });
+          if (show) {
+            setRemoteToast({
+              version: event.headVersion,
+              author: event.author,
+              message: event.message,
+            });
+          }
+          // Advance poll cursor so we do not re-deliver the same event.
+          if (event.headVersion > since) {
+            since = event.headVersion;
+          }
+        } catch (err) {
+          if (stopped || ac.signal.aborted) break;
+          if (err instanceof ApiError && err.isUnauthorized) return;
+          // Transient network blip: brief pause then retry.
+          await new Promise((r) => setTimeout(r, 1500));
+        }
+      }
+    };
+
+    void loop();
+    return () => {
+      stopped = true;
+      ac.abort();
+    };
+  }, [api, slug, readOnly, load.kind, selfName]);
+
+  async function handleRemoteLoad() {
+    if (remoteBusy || !remoteToast) return;
+    setRemoteBusy("load");
+    try {
+      const doc = await api.getSceneDocument(slug);
+      const apiHandle = apiRef.current;
+      if (apiHandle) {
+        const elements =
+          (doc.elements as readonly OrderedExcalidrawElement[]) ?? [];
+        const appState = (doc.appState ?? {}) as Partial<AppState>;
+        const files = toBinaryFiles(
+          doc.files as Record<string, BinaryFilePayload> | undefined,
+        );
+        // Remote load must not land in the undo stack (PLAN.md §10).
+        apiHandle.updateScene({
+          elements,
+          appState: appState as unknown as AppState,
+          captureUpdate: CaptureUpdateAction.NEVER,
+        });
+        if (Object.keys(files).length > 0) {
+          apiHandle.addFiles(Object.values(files));
+        }
+        latestSnapshotRef.current = snapshotFromEditor(
+          apiHandle.getSceneElementsIncludingDeleted(),
+          apiHandle.getAppState(),
+          apiHandle.getFiles(),
+        );
+      }
+      headVersionRef.current = remoteToast.version;
+      setLoad((prev) =>
+        prev.kind === "ready"
+          ? {
+              ...prev,
+              headVersion: remoteToast.version,
+              viewingVersion: remoteToast.version,
+              draftStale: false,
+            }
+          : prev,
+      );
+      setRemoteToast(null);
+      setBanner(
+        `Loaded v${remoteToast.version} from ${remoteToast.author}. Local draft replaced.`,
+      );
+      setSaveIndicator("idle");
+    } catch (err) {
+      if (err instanceof ApiError && err.isUnauthorized) return;
+      setBanner(
+        err instanceof Error ? err.message : "Failed to load remote scene.",
+      );
+    } finally {
+      setRemoteBusy(null);
+    }
+  }
+
+  async function handleRemoteMergeIntoMine() {
+    if (remoteBusy || !remoteToast) return;
+    setRemoteBusy("merge");
+    try {
+      await coalescerRef.current?.flushNow();
+      const apiHandle = apiRef.current;
+      let snapshot = latestSnapshotRef.current;
+      if (apiHandle) {
+        snapshot = snapshotFromEditor(
+          apiHandle.getSceneElementsIncludingDeleted(),
+          apiHandle.getAppState(),
+          apiHandle.getFiles(),
+        );
+        latestSnapshotRef.current = snapshot;
+      }
+      if (!snapshot) {
+        setBanner("Nothing to merge yet.");
+        return;
+      }
+
+      const need = filesNeedingUpload(
+        snapshot.files,
+        uploadedFilesRef.current,
+      );
+      for (const file of need) {
+        await api.uploadFile(file);
+        uploadedFilesRef.current.add(file.id);
+      }
+
+      const body = buildCommitPayload(
+        snapshot,
+        headVersionRef.current,
+        `merge remote v${remoteToast.version} into mine`,
+        { includeFiles: true },
+      );
+      const result = await api.commitScene(slug, body, { merge: true });
+      await api.deleteDraft(slug);
+
+      // Refresh editor from the merge result (server is source of truth).
+      const doc = await api.getSceneDocument(slug);
+      if (apiHandle) {
+        const elements =
+          (doc.elements as readonly OrderedExcalidrawElement[]) ?? [];
+        const appState = (doc.appState ?? {}) as Partial<AppState>;
+        const files = toBinaryFiles(
+          doc.files as Record<string, BinaryFilePayload> | undefined,
+        );
+        apiHandle.updateScene({
+          elements,
+          appState: appState as unknown as AppState,
+          captureUpdate: CaptureUpdateAction.NEVER,
+        });
+        if (Object.keys(files).length > 0) {
+          apiHandle.addFiles(Object.values(files));
+        }
+      }
+
+      const next = postCommitState(result.headVersion);
+      headVersionRef.current = next.headVersion;
+      setSaveIndicator(next.saveIndicator);
+      setLoad((prev) =>
+        prev.kind === "ready"
+          ? {
+              ...prev,
+              headVersion: next.headVersion,
+              viewingVersion: next.headVersion,
+              draftStale: false,
+            }
+          : prev,
+      );
+      setRemoteToast(null);
+
+      let bannerMsg = `Merged into v${result.version}`;
+      if (result.mergeParents) {
+        bannerMsg += ` (parents v${result.mergeParents.local}+v${result.mergeParents.remote})`;
+      }
+      if (result.diff) {
+        const s = result.diff.summary;
+        bannerMsg += ` — merge decided +${s.added} -${s.deleted} ~${s.updated}`;
+      }
+      setBanner(bannerMsg);
+    } catch (err) {
+      if (err instanceof ApiError && err.isUnauthorized) return;
+      setBanner(
+        err instanceof Error
+          ? err.message
+          : "Merge failed. Is RENDER_WORKER=on on the server?",
+      );
+    } finally {
+      setRemoteBusy(null);
+    }
+  }
+
   // ----- advisory turn lock -------------------------------------------------
 
   async function handleClaimOrReleaseTurn() {
@@ -834,6 +1045,47 @@ export function SceneEditor({
           </button>
         </div>
       </div>
+
+      {remoteToast ? (
+        <div
+          className="editor-remote-toast"
+          role="status"
+          aria-live="polite"
+          data-testid="remote-update-toast"
+        >
+          <span className="editor-remote-toast-text">
+            {formatRemoteUpdateToast(remoteToast)}
+          </span>
+          <span className="editor-remote-toast-actions">
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              disabled={remoteBusy !== null}
+              onClick={() => void handleRemoteLoad()}
+            >
+              {remoteBusy === "load" ? "Loading…" : "Load"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              disabled={remoteBusy !== null}
+              onClick={() => void handleRemoteMergeIntoMine()}
+              title="Server-side merge via reconcileElements (needs RENDER_WORKER=on)"
+            >
+              {remoteBusy === "merge" ? "Merging…" : "Merge into mine"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              disabled={remoteBusy !== null}
+              onClick={() => setRemoteToast(null)}
+              aria-label="Dismiss"
+            >
+              Dismiss
+            </button>
+          </span>
+        </div>
+      ) : null}
 
       {banner ? (
         <div

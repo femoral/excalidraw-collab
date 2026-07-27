@@ -15,6 +15,8 @@
 
 export {
   RenderError,
+  type MergeRequest,
+  type MergeResult,
   type RenderFormat,
   type RenderOptions,
   type RenderRequest,
@@ -24,7 +26,13 @@ export {
   type RenderWorkerOptions,
 } from "./types.js";
 
-export { RENDER_MSG } from "./protocol.js";
+export {
+  RENDER_MSG,
+  type PageExportRequest,
+  type PageMergeRequest,
+  type PageRenderRequest,
+  type PageRenderResponse,
+} from "./protocol.js";
 
 /**
  * Whether the render worker should be loaded for this process.

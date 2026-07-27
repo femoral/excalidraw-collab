@@ -1,27 +1,43 @@
 /**
- * Hidden headless export surface at `/render`.
+ * Hidden headless export + merge surface at `/render`.
  *
  * Driven by Playwright (packages/render): the page announces READY, then
- * accepts REQUEST messages and replies with RESPONSE carrying PNG base64 or
- * SVG markup. Uses only public `@excalidraw/excalidraw` export helpers —
- * never mutates element internals.
+ * accepts REQUEST messages and replies with RESPONSE.
+ *
+ * Jobs:
+ *   1. PNG/SVG export via public `exportToBlob` / `exportToSvg`
+ *   2. Server-side merge via public `restoreElements` + `reconcileElements`
+ *
+ * Never mutates element internals by hand — public `@excalidraw/excalidraw`
+ * exports only.
  */
 import { useEffect, useState, type ReactElement } from "react";
-import { exportToBlob, exportToSvg } from "@excalidraw/excalidraw";
+import {
+  exportToBlob,
+  exportToSvg,
+  reconcileElements,
+  restoreElements,
+} from "@excalidraw/excalidraw";
+import type { AppState } from "@excalidraw/excalidraw/types";
+import type { OrderedExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type { BinaryFiles, ExcalidrawElement } from "@excalidraw-collab/core";
 import {
   blobToBase64,
   buildExportAppState,
   filterExportElements,
+  isExportRequest,
+  isMergeRequest,
   isRenderRequest,
   normalizeRenderOptions,
   RENDER_MSG,
+  type RenderExportRequestMessage,
+  type RenderMergeRequestMessage,
   type RenderRequestMessage,
   type RenderResponseMessage,
 } from "./render-logic.ts";
 
-async function handleRenderRequest(
-  msg: RenderRequestMessage,
+async function handleExportRequest(
+  msg: RenderExportRequestMessage,
 ): Promise<RenderResponseMessage> {
   const options = normalizeRenderOptions(msg.options);
   const elements = filterExportElements(msg.scene.elements) as ExcalidrawElement[];
@@ -66,6 +82,63 @@ async function handleRenderRequest(
     ok: true,
     mimeType: "image/svg+xml",
     data: svg.outerHTML,
+  };
+}
+
+/**
+ * Upstream-only merge. restoreElements first (ordering / fractional indices),
+ * then reconcileElements(local, remote, appState). No hand-rolled conflict rules.
+ */
+function handleMergeRequest(
+  msg: RenderMergeRequestMessage,
+): RenderResponseMessage {
+  // restoreElements repairs ordering so reconcileElements can run.
+  const localRestored = restoreElements(
+    msg.local.elements as Parameters<typeof restoreElements>[0],
+    null,
+  );
+  const remoteRestored = restoreElements(
+    msg.remote.elements as Parameters<typeof restoreElements>[0],
+    null,
+  );
+
+  // AppState is only consulted for "currently editing" local bias. Server-side
+  // merges pass {} so pure version / versionNonce rules apply.
+  const appState = (msg.appState ?? {}) as unknown as AppState;
+
+  const merged = reconcileElements(
+    localRestored,
+    remoteRestored as unknown as Parameters<typeof reconcileElements>[1],
+    appState,
+  );
+
+  // Serialize plain objects (strip brand types) for postMessage.
+  const elements = (merged as OrderedExcalidrawElement[]).map((el) => ({
+    ...el,
+  }));
+
+  return {
+    type: RENDER_MSG.RESPONSE,
+    id: msg.id,
+    ok: true,
+    elements,
+  };
+}
+
+async function handleRenderRequest(
+  msg: RenderRequestMessage,
+): Promise<RenderResponseMessage> {
+  if (isMergeRequest(msg)) {
+    return handleMergeRequest(msg);
+  }
+  if (isExportRequest(msg)) {
+    return handleExportRequest(msg);
+  }
+  return {
+    type: RENDER_MSG.RESPONSE,
+    id: (msg as { id: string }).id,
+    ok: false,
+    error: "unknown render request",
   };
 }
 
@@ -150,7 +223,7 @@ export function RenderPage(): ReactElement {
     >
       <h1 style={{ fontSize: 14, margin: 0 }}>excalidraw-collab render</h1>
       <p style={{ fontSize: 12, margin: "8px 0 0", opacity: 0.7 }}>
-        Headless export surface — driven via postMessage.
+        Headless export + merge surface — driven via postMessage.
       </p>
       <p style={{ fontSize: 12, margin: "8px 0 0" }} data-testid="render-status">
         status: {status}

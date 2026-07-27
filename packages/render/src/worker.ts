@@ -13,11 +13,15 @@ import {
 } from "playwright";
 import {
   RENDER_MSG,
+  type PageExportRequest,
+  type PageMergeRequest,
   type PageRenderRequest,
   type PageRenderResponse,
 } from "./protocol.js";
 import {
   RenderError,
+  type MergeRequest,
+  type MergeResult,
   type RenderRequest,
   type RenderResult,
   type RenderWorker,
@@ -369,80 +373,71 @@ export function createRenderWorker(
     freePages.push(page);
   }
 
-  async function runOnPage(
+  /**
+   * Post a request into the page and wait for the matching RESPONSE.
+   * Shared by export and merge (same pool, same timeout/kill recovery).
+   */
+  async function postToPage(
     page: Page,
-    request: RenderRequest,
-  ): Promise<RenderResult> {
-    const id = `r-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    const payload: PageRenderRequest = {
-      type: RENDER_MSG.REQUEST,
-      id,
-      format: request.format,
-      scene: {
-        elements: request.scene.elements,
-        appState: request.scene.appState,
-        files: request.scene.files ?? null,
-      },
-      options: request.options,
-    };
-
+    payload: PageRenderRequest,
+  ): Promise<PageRenderResponse> {
     // page.evaluate body runs in the browser; avoid relying on DOM libs in this
-      // Node package by treating the page global as a loose bag of fields.
-      const resultPromise = page.evaluate(
-        async ({ msg, responseType }) => {
-          const w = globalThis as unknown as {
-            addEventListener: (
-              type: string,
-              listener: (event: { data: unknown }) => void,
-            ) => void;
-            removeEventListener: (
-              type: string,
-              listener: (event: { data: unknown }) => void,
-            ) => void;
-            postMessage: (message: unknown, targetOrigin: string) => void;
-            __excalidrawCollabRenderResults?: PageRenderResponse[];
-          };
-          const response = await new Promise<PageRenderResponse>(
-            (resolve, reject) => {
-              const onMessage = (event: { data: unknown }) => {
-                const data = event.data as PageRenderResponse | undefined;
-                if (!data || data.type !== responseType || data.id !== msg.id) {
-                  return;
-                }
-                w.removeEventListener("message", onMessage);
-                resolve(data);
-              };
-              w.addEventListener("message", onMessage);
-              w.postMessage(msg, "*");
+    // Node package by treating the page global as a loose bag of fields.
+    const resultPromise = page.evaluate(
+      async ({ msg, responseType }) => {
+        const w = globalThis as unknown as {
+          addEventListener: (
+            type: string,
+            listener: (event: { data: unknown }) => void,
+          ) => void;
+          removeEventListener: (
+            type: string,
+            listener: (event: { data: unknown }) => void,
+          ) => void;
+          postMessage: (message: unknown, targetOrigin: string) => void;
+          __excalidrawCollabRenderResults?: PageRenderResponse[];
+        };
+        const response = await new Promise<PageRenderResponse>(
+          (resolve, reject) => {
+            const onMessage = (event: { data: unknown }) => {
+              const data = event.data as PageRenderResponse | undefined;
+              if (!data || data.type !== responseType || data.id !== msg.id) {
+                return;
+              }
+              w.removeEventListener("message", onMessage);
+              resolve(data);
+            };
+            w.addEventListener("message", onMessage);
+            w.postMessage(msg, "*");
 
-              // Fallback poll — covers rare cases where the page's own
-              // postMessage self-delivery is flaky under automation.
-              const started = Date.now();
-              const poll = () => {
-                const queue = w.__excalidrawCollabRenderResults;
-                if (Array.isArray(queue)) {
-                  const idx = queue.findIndex((r) => r.id === msg.id);
-                  if (idx >= 0) {
-                    const [item] = queue.splice(idx, 1);
-                    w.removeEventListener("message", onMessage);
-                    resolve(item!);
-                    return;
-                  }
-                }
-                if (Date.now() - started > 120_000) {
+            // Fallback poll — covers rare cases where the page's own
+            // postMessage self-delivery is flaky under automation.
+            const started = Date.now();
+            const poll = () => {
+              const queue = w.__excalidrawCollabRenderResults;
+              if (Array.isArray(queue)) {
+                const idx = queue.findIndex((r) => r.id === msg.id);
+                if (idx >= 0) {
+                  const [item] = queue.splice(idx, 1);
                   w.removeEventListener("message", onMessage);
-                  reject(new Error("render response not received in page"));
+                  resolve(item!);
                   return;
                 }
-                setTimeout(poll, 20);
-              };
+              }
+              if (Date.now() - started > 120_000) {
+                w.removeEventListener("message", onMessage);
+                reject(new Error("render response not received in page"));
+                return;
+              }
               setTimeout(poll, 20);
-            },
-          );
-          return response;
-        },
-        { msg: payload, responseType: RENDER_MSG.RESPONSE },
-      );
+            };
+            setTimeout(poll, 20);
+          },
+        );
+        return response;
+      },
+      { msg: payload, responseType: RENDER_MSG.RESPONSE },
+    );
 
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<never>((_resolve, reject) => {
@@ -467,29 +462,11 @@ export function createRenderWorker(
     });
 
     try {
-      const response = await Promise.race([
+      return await Promise.race([
         resultPromise,
         timeoutPromise,
         closedPromise,
       ]);
-      if (!response.ok) {
-        throw new RenderError(
-          "RENDER_FAILED",
-          response.error || "render failed in page",
-        );
-      }
-      if (request.format === "png") {
-        return {
-          format: "png",
-          mimeType: "image/png",
-          bytes: base64ToBytes(response.data),
-        };
-      }
-      return {
-        format: "svg",
-        mimeType: "image/svg+xml",
-        bytes: utf8ToBytes(response.data),
-      };
     } finally {
       if (timeoutId !== undefined) clearTimeout(timeoutId);
       if (onPageClose) page.off("close", onPageClose);
@@ -501,21 +478,86 @@ export function createRenderWorker(
     }
   }
 
-  async function render(request: RenderRequest): Promise<RenderResult> {
+  async function runExportOnPage(
+    page: Page,
+    request: RenderRequest,
+  ): Promise<RenderResult> {
+    const id = `r-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const payload: PageExportRequest = {
+      type: RENDER_MSG.REQUEST,
+      id,
+      op: "export",
+      format: request.format,
+      scene: {
+        elements: request.scene.elements,
+        appState: request.scene.appState,
+        files: request.scene.files ?? null,
+      },
+      options: request.options,
+    };
+
+    const response = await postToPage(page, payload);
+    if (!response.ok) {
+      throw new RenderError(
+        "RENDER_FAILED",
+        response.error || "render failed in page",
+      );
+    }
+    if (!("data" in response) || typeof response.data !== "string") {
+      throw new RenderError(
+        "RENDER_FAILED",
+        "export response missing data payload",
+      );
+    }
+    if (request.format === "png") {
+      return {
+        format: "png",
+        mimeType: "image/png",
+        bytes: base64ToBytes(response.data),
+      };
+    }
+    return {
+      format: "svg",
+      mimeType: "image/svg+xml",
+      bytes: utf8ToBytes(response.data),
+    };
+  }
+
+  async function runMergeOnPage(
+    page: Page,
+    request: MergeRequest,
+  ): Promise<MergeResult> {
+    const id = `m-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const payload: PageMergeRequest = {
+      type: RENDER_MSG.REQUEST,
+      id,
+      op: "merge",
+      local: { elements: request.local.elements },
+      remote: { elements: request.remote.elements },
+      appState: request.appState,
+    };
+
+    const response = await postToPage(page, payload);
+    if (!response.ok) {
+      throw new RenderError(
+        "RENDER_FAILED",
+        response.error || "merge failed in page",
+      );
+    }
+    if (!("elements" in response) || !Array.isArray(response.elements)) {
+      throw new RenderError(
+        "RENDER_FAILED",
+        "merge response missing elements array",
+      );
+    }
+    return { elements: response.elements };
+  }
+
+  async function withPage<T>(
+    run: (page: Page) => Promise<T>,
+  ): Promise<T> {
     if (closed) {
       throw new RenderError("BROWSER_CLOSED", "render worker is closed");
-    }
-    if (request.format !== "png" && request.format !== "svg") {
-      throw new RenderError(
-        "INVALID_REQUEST",
-        `format must be "png" or "svg", got ${JSON.stringify(request.format)}`,
-      );
-    }
-    if (!request.scene || !Array.isArray(request.scene.elements)) {
-      throw new RenderError(
-        "INVALID_REQUEST",
-        "scene.elements must be an array",
-      );
     }
 
     clearIdleTimer();
@@ -525,7 +567,7 @@ export function createRenderWorker(
     try {
       page = await acquirePage();
       try {
-        return await runOnPage(page, request);
+        return await run(page);
       } catch (err) {
         destroyPage = true;
         throw asRenderError(err, "RENDER_FAILED");
@@ -541,6 +583,38 @@ export function createRenderWorker(
     }
   }
 
+  async function render(request: RenderRequest): Promise<RenderResult> {
+    if (request.format !== "png" && request.format !== "svg") {
+      throw new RenderError(
+        "INVALID_REQUEST",
+        `format must be "png" or "svg", got ${JSON.stringify(request.format)}`,
+      );
+    }
+    if (!request.scene || !Array.isArray(request.scene.elements)) {
+      throw new RenderError(
+        "INVALID_REQUEST",
+        "scene.elements must be an array",
+      );
+    }
+    return withPage((page) => runExportOnPage(page, request));
+  }
+
+  async function merge(request: MergeRequest): Promise<MergeResult> {
+    if (!request.local || !Array.isArray(request.local.elements)) {
+      throw new RenderError(
+        "INVALID_REQUEST",
+        "merge local.elements must be an array",
+      );
+    }
+    if (!request.remote || !Array.isArray(request.remote.elements)) {
+      throw new RenderError(
+        "INVALID_REQUEST",
+        "merge remote.elements must be an array",
+      );
+    }
+    return withPage((page) => runMergeOnPage(page, request));
+  }
+
   async function close(): Promise<void> {
     closed = true;
     await tearDownBrowser();
@@ -548,6 +622,7 @@ export function createRenderWorker(
 
   return {
     render,
+    merge,
     close,
     get isRunning() {
       return browser !== null && browser.isConnected();

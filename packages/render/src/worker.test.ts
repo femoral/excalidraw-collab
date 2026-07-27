@@ -251,6 +251,126 @@ describe("render worker (playwright)", async () => {
       assert.ok(files.includes(f), `missing fixture ${f}`);
     }
   });
+
+  /** Minimal rectangle accepted by restoreElements / reconcileElements. */
+  function mergeRect(
+    id: string,
+    opts: {
+      x?: number;
+      version?: number;
+      versionNonce?: number;
+    } = {},
+  ): Record<string, unknown> {
+    return {
+      id,
+      type: "rectangle",
+      x: opts.x ?? 0,
+      y: 0,
+      width: 100,
+      height: 50,
+      angle: 0,
+      strokeColor: "#000000",
+      backgroundColor: "transparent",
+      fillStyle: "solid",
+      strokeWidth: 1,
+      strokeStyle: "solid",
+      roughness: 1,
+      opacity: 100,
+      groupIds: [],
+      frameId: null,
+      roundness: null,
+      seed: 1,
+      version: opts.version ?? 1,
+      versionNonce: opts.versionNonce ?? 1,
+      isDeleted: false,
+      boundElements: null,
+      updated: 1,
+      link: null,
+      locked: false,
+    };
+  }
+
+  test("merge: divergent edits to different elements both survive", async () => {
+    // local edited B, remote edited A — both must remain after reconcile.
+    const result = await worker.merge({
+      local: {
+        elements: [
+          mergeRect("a", { x: 0, version: 1, versionNonce: 1 }),
+          mergeRect("b", { x: 200, version: 2, versionNonce: 3 }),
+        ],
+      },
+      remote: {
+        elements: [
+          mergeRect("a", { x: 50, version: 2, versionNonce: 2 }),
+          mergeRect("b", { x: 100, version: 1, versionNonce: 1 }),
+        ],
+      },
+      appState: {},
+    });
+    assert.ok(Array.isArray(result.elements));
+    const byId = Object.fromEntries(
+      result.elements.map((e) => {
+        const el = e as { id: string; x: number };
+        return [el.id, el];
+      }),
+    );
+    assert.ok(byId.a, "element a present");
+    assert.ok(byId.b, "element b present");
+    assert.equal(byId.a.x, 50, "remote edit to a survives");
+    assert.equal(byId.b.x, 200, "local edit to b survives");
+  });
+
+  test("merge: same element resolves by upstream version rule, deterministically", async () => {
+    const local = {
+      elements: [mergeRect("a", { x: 1, version: 2, versionNonce: 1 })],
+    };
+    const remote = {
+      elements: [mergeRect("a", { x: 99, version: 3, versionNonce: 99 })],
+    };
+
+    const first = await worker.merge({ local, remote, appState: {} });
+    const second = await worker.merge({ local, remote, appState: {} });
+
+    // Deterministic: identical inputs → identical outputs.
+    assert.deepEqual(
+      first.elements.map((e) => ({
+        id: (e as { id: string }).id,
+        x: (e as { x: number }).x,
+        version: (e as { version: number }).version,
+      })),
+      second.elements.map((e) => ({
+        id: (e as { id: string }).id,
+        x: (e as { x: number }).x,
+        version: (e as { version: number }).version,
+      })),
+    );
+
+    // Upstream rule: remote.version (3) > local.version (2) → remote content
+    // wins (x=99). restoreElements may bump version numbers, so assert on
+    // content (x), not the absolute version after restore.
+    const winner = first.elements[0] as { x: number };
+    assert.equal(winner.x, 99, "higher remote.version must win");
+
+    // Local wins when its version is higher.
+    const localWins = await worker.merge({
+      local: {
+        elements: [mergeRect("a", { x: 7, version: 5, versionNonce: 1 })],
+      },
+      remote: {
+        elements: [mergeRect("a", { x: 50, version: 2, versionNonce: 20 })],
+      },
+      appState: {},
+    });
+    assert.equal(
+      (localWins.elements[0] as { x: number }).x,
+      7,
+      "higher local.version must win",
+    );
+
+    // Note: same-version versionNonce ties are decided by upstream after
+    // restoreElements (which may rewrite nonces). We do not assert that
+    // edge here — only that the version-primary rule matches reconcileElements.
+  });
 });
 
 // Ensure the type export is used (compile-time).

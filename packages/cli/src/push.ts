@@ -1,8 +1,12 @@
 /**
- * `excalicli push SLUG [-f file] -m "message" [--force] [--respect-lock]`
+ * `excalicli push SLUG [-f file] -m "message" [--force|--merge] [--respect-lock]`
  *
  * Sends the recorded pulled version as `parentVersion` so conflicts are
  * detected without the user tracking version numbers by hand.
+ *
+ * On a stale parent, `--force` overwrites head; `--merge` asks the server to
+ * run upstream `reconcileElements` in the render worker (response includes
+ * the merge diff). Force and merge are mutually exclusive.
  *
  * Advisory locks: when someone else holds the turn, push **warns** and still
  * succeeds. Pass `--respect-lock` to refuse with exit 5 (LOCK_HELD) instead.
@@ -12,9 +16,11 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { apiFetch } from "./api.js";
 import {
+  formatConflictDiff,
   formatConflictMessage,
   resolutionCommands,
   type ConflictDetails,
+  type ConflictDiff,
 } from "./conflict.js";
 import type { Command, CommandContext } from "./commands.js";
 import { CliError, UsageError } from "./errors.js";
@@ -33,6 +39,9 @@ export type PushVersionResponse = {
   elementCount: number;
   sceneHash: string;
   headVersion: number;
+  merged?: boolean;
+  mergeParents?: { local: number; remote: number };
+  diff?: unknown;
 };
 
 function requireAuth(ctx: CommandContext): void {
@@ -49,6 +58,7 @@ function parsePushArgs(args: string[]): {
   file?: string;
   message: string;
   force: boolean;
+  merge: boolean;
   respectLock: boolean;
 } {
   let values: {
@@ -57,6 +67,7 @@ function parsePushArgs(args: string[]): {
     m?: string;
     message?: string;
     force?: boolean;
+    merge?: boolean;
     "respect-lock"?: boolean;
   };
   let positionals: string[];
@@ -69,6 +80,7 @@ function parsePushArgs(args: string[]): {
         m: { type: "string", short: "m" },
         message: { type: "string" },
         force: { type: "boolean", default: false },
+        merge: { type: "boolean", default: false },
         "respect-lock": { type: "boolean", default: false },
         help: { type: "boolean", short: "h", default: false },
       },
@@ -81,6 +93,7 @@ function parsePushArgs(args: string[]): {
       m?: string;
       message?: string;
       force?: boolean;
+      merge?: boolean;
       "respect-lock"?: boolean;
     };
     positionals = parsed.positionals;
@@ -90,13 +103,13 @@ function parsePushArgs(args: string[]): {
 
   if (positionals.length === 0) {
     throw new UsageError(
-      'push requires SLUG\n\nUsage: excalicli push SLUG [-f file] -m "message" [--force] [--respect-lock]',
+      'push requires SLUG\n\nUsage: excalicli push SLUG [-f file] -m "message" [--force|--merge] [--respect-lock]',
     );
   }
   if (positionals.length > 1) {
     throw new UsageError(
       `unexpected arguments: ${positionals.slice(1).join(" ")}\n\n` +
-        'Usage: excalicli push SLUG [-f file] -m "message" [--force] [--respect-lock]',
+        'Usage: excalicli push SLUG [-f file] -m "message" [--force|--merge] [--respect-lock]',
     );
   }
 
@@ -108,15 +121,22 @@ function parsePushArgs(args: string[]): {
   const message = (values.message ?? values.m)?.trim() ?? "";
   if (message.length === 0) {
     throw new UsageError(
-      'push requires -m / --message\n\nUsage: excalicli push SLUG [-f file] -m "message" [--force] [--respect-lock]',
+      'push requires -m / --message\n\nUsage: excalicli push SLUG [-f file] -m "message" [--force|--merge] [--respect-lock]',
     );
   }
 
   const file = values.file ?? values.f;
   const force = values.force === true;
+  const merge = values.merge === true;
   const respectLock = values["respect-lock"] === true;
 
-  return { slug, file, message, force, respectLock };
+  if (force && merge) {
+    throw new UsageError(
+      "--force and --merge are mutually exclusive; choose one conflict resolution strategy",
+    );
+  }
+
+  return { slug, file, message, force, merge, respectLock };
 }
 
 /** Active advisory lock (null when free or expired). */
@@ -220,7 +240,9 @@ async function resolveParentVersion(
 
 async function runPush(ctx: CommandContext): Promise<CommandResult> {
   requireAuth(ctx);
-  const { slug, file, message, force, respectLock } = parsePushArgs(ctx.args);
+  const { slug, file, message, force, merge, respectLock } = parsePushArgs(
+    ctx.args,
+  );
   const server = ctx.config.server!;
 
   // Advisory lock check (never enforced by the server). Warn, or refuse with
@@ -289,7 +311,10 @@ async function runPush(ctx: CommandContext): Promise<CommandResult> {
     body.files = scene.files;
   }
 
-  const qs = force ? "?force=true" : "";
+  const params = new URLSearchParams();
+  if (force) params.set("force", "true");
+  if (merge) params.set("merge", "true");
+  const qs = params.toString() ? `?${params.toString()}` : "";
   let result: PushVersionResponse;
   try {
     result = await apiFetch<PushVersionResponse>({
@@ -331,18 +356,36 @@ async function runPush(ctx: CommandContext): Promise<CommandResult> {
     sceneHash: result.sceneHash,
     path: filePath,
     force,
+    merge,
+    merged: result.merged === true,
+    mergeParents: result.mergeParents,
+    diff: result.diff,
     respectLock,
     lockHeldBy,
   };
 
+  let human =
+    `Pushed ${slug} v${result.version}` +
+    (force ? " (force)" : "") +
+    (result.merged ? " (merged)" : merge ? " (merge)" : "") +
+    ` — "${result.message}"\n` +
+    `parent: v${result.parentVersion ?? parentVersion}  author: ${result.author}\n`;
+
+  if (result.merged && result.mergeParents) {
+    human +=
+      `merge parents: v${result.mergeParents.local}+v${result.mergeParents.remote}\n`;
+  }
+  if (result.merged && result.diff) {
+    // Surface the merge decision so a silent merge is never worse than a
+    // conflict (PLAN.md / issue #29).
+    human += "\nMerge decided (remote head → result):\n";
+    human += formatConflictDiff(result.diff as ConflictDiff);
+  }
+
   return {
     data,
     warning: lockWarning,
-    human:
-      `Pushed ${slug} v${result.version}` +
-      (force ? " (force)" : "") +
-      ` — "${result.message}"\n` +
-      `parent: v${result.parentVersion ?? parentVersion}  author: ${result.author}\n`,
+    human,
   };
 }
 
@@ -351,10 +394,11 @@ export const pushCommand: Command = {
   description:
     "Upload a .excalidraw file as a new version (uses last pulled version as parent)",
   usage:
-    'excalicli push SLUG [-f file] -m "message" [--force] [--respect-lock] [--json]\n\n' +
+    'excalicli push SLUG [-f file] -m "message" [--force|--merge] [--respect-lock] [--json]\n\n' +
     "  -f file          Input path (default: SLUG.excalidraw)\n" +
     "  -m message       Commit message (required)\n" +
     "  --force          Overwrite head even if parentVersion is stale\n" +
+    "  --merge          On stale parent, server-side reconcileElements (needs RENDER_WORKER=on)\n" +
     "  --respect-lock   Exit 5 if someone else holds the advisory turn lock\n" +
     "parentVersion comes from .excalidraw-collab/state.json (set by pull/push).\n" +
     "A fresh scene (head 0) or --force can push without a prior pull.\n" +

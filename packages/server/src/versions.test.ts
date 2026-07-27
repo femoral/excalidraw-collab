@@ -12,6 +12,8 @@ import {
 } from "./db.js";
 import { ErrorCode, type ErrorEnvelope } from "./errors.js";
 import { FileStore, hashFileContent } from "./files.js";
+import type { SceneMergeService } from "./merge.js";
+import { MERGE_WORKER_DISABLED_MESSAGE } from "./merge.js";
 import {
   resolveVersionRef,
   type ConflictDetails,
@@ -41,6 +43,7 @@ function testConfig(overrides: Partial<Config> = {}): Config {
 async function buildVersionsApp(opts: {
   dataDir: string;
   bootstrapToken: string;
+  merge?: SceneMergeService | null;
 }): Promise<{ app: FastifyInstance; db: Database; store: FileStore }> {
   const db = openDatabase(opts.dataDir);
   openDbs.push(db);
@@ -55,9 +58,63 @@ async function buildVersionsApp(opts: {
     fileStore: store,
     readinessCheck: () => db.isHealthy(),
     fastifyOpts: { logger: false },
+    merge: opts.merge,
   });
   openApps.push(app);
   return { app, db, store };
+}
+
+/**
+ * Test double that mirrors upstream reconcileElements version rule:
+ *   local wins when local.version > remote.version, or same version with
+ *   lower versionNonce; otherwise remote. Elements only on one side are kept.
+ * Used so HTTP merge tests stay free of Playwright while still asserting
+ * the same decision surface (not a novel conflict policy).
+ */
+function versionRuleMergeService(): SceneMergeService {
+  return {
+    async merge({ localElements, remoteElements }) {
+      type El = {
+        id: string;
+        version?: number;
+        versionNonce?: number;
+        [k: string]: unknown;
+      };
+      const local = localElements as El[];
+      const remote = remoteElements as El[];
+      const localMap = new Map(local.map((e) => [e.id, e]));
+      const out: El[] = [];
+      const added = new Set<string>();
+
+      for (const r of remote) {
+        if (added.has(r.id)) continue;
+        const l = localMap.get(r.id);
+        if (l) {
+          const lv = l.version ?? 0;
+          const rv = r.version ?? 0;
+          const lvn = l.versionNonce ?? 0;
+          const rvn = r.versionNonce ?? 0;
+          // Match shouldDiscardRemoteElement: local wins if newer version, or
+          // same version and lower versionNonce.
+          if (lv > rv || (lv === rv && lvn < rvn)) {
+            out.push(l);
+          } else {
+            out.push(r);
+          }
+        } else {
+          out.push(r);
+        }
+        added.add(r.id);
+      }
+      for (const l of local) {
+        if (!added.has(l.id)) {
+          out.push(l);
+          added.add(l.id);
+        }
+      }
+      return { elements: out };
+    },
+  };
 }
 
 function bearer(token: string): { authorization: string } {
@@ -174,10 +231,13 @@ async function pushScene(
     message: string;
     author?: string;
   },
-  opts: { force?: boolean; slug?: string } = {},
+  opts: { force?: boolean; merge?: boolean; slug?: string } = {},
 ) {
   const slug = opts.slug ?? "arch";
-  const qs = opts.force ? "?force=true" : "";
+  const params = new URLSearchParams();
+  if (opts.force) params.set("force", "true");
+  if (opts.merge) params.set("merge", "true");
+  const qs = params.toString() ? `?${params.toString()}` : "";
   return app.inject({
     method: "POST",
     url: `/api/scenes/${slug}/scene${qs}`,
@@ -413,6 +473,256 @@ describe("POST/GET /api/scenes/:slug/scene", () => {
     const scene = db.getSceneBySlug("arch")!;
     assert.equal(scene.head_version, 1);
     assert.equal(db.listVersions(scene.id).length, 1);
+  });
+
+  test("?merge=true without render worker returns 501 with actionable message", async () => {
+    const dataDir = tempDataDir();
+    const token = "versions-token-merge-off";
+    // No merge service injected → same as RENDER_WORKER=off.
+    const { app } = await buildVersionsApp({
+      dataDir,
+      bootstrapToken: token,
+    });
+    await createScene(app, token);
+
+    await pushScene(app, token, {
+      parentVersion: 0,
+      elements: [rect("a")],
+      message: "v1",
+    });
+
+    const res = await pushScene(
+      app,
+      token,
+      {
+        parentVersion: 0,
+        elements: [rect("b")],
+        message: "stale merge attempt",
+      },
+      { merge: true },
+    );
+    assert.equal(res.statusCode, 501, res.body);
+    const env = res.json() as ErrorEnvelope;
+    assert.equal(env.error.code, ErrorCode.NOT_IMPLEMENTED);
+    assert.match(env.error.message, /RENDER_WORKER=on/);
+    assert.equal(env.error.message, MERGE_WORKER_DISABLED_MESSAGE);
+  });
+
+  test("?merge=true + force is rejected as validation error", async () => {
+    const dataDir = tempDataDir();
+    const token = "versions-token-merge-force";
+    const { app } = await buildVersionsApp({
+      dataDir,
+      bootstrapToken: token,
+      merge: versionRuleMergeService(),
+    });
+    await createScene(app, token);
+    await pushScene(app, token, {
+      parentVersion: 0,
+      elements: [rect("a")],
+      message: "v1",
+    });
+
+    const res = await pushScene(
+      app,
+      token,
+      {
+        parentVersion: 0,
+        elements: [rect("b")],
+        message: "both",
+      },
+      { force: true, merge: true },
+    );
+    assert.equal(res.statusCode, 400, res.body);
+    assert.equal(
+      (res.json() as ErrorEnvelope).error.code,
+      ErrorCode.VALIDATION,
+    );
+  });
+
+  test("merge of divergent edits to different elements keeps both", async () => {
+    const dataDir = tempDataDir();
+    const token = "versions-token-merge-both";
+    const { app, db } = await buildVersionsApp({
+      dataDir,
+      bootstrapToken: token,
+      merge: versionRuleMergeService(),
+    });
+    await createScene(app, token);
+
+    // Base: element A and B at version 1.
+    await pushScene(app, token, {
+      parentVersion: 0,
+      elements: [
+        { ...rect("a"), x: 0, version: 1, versionNonce: 1 },
+        { ...rect("b"), x: 100, version: 1, versionNonce: 1 },
+      ],
+      message: "base",
+    });
+
+    // Remote advances A (stays on parent 1).
+    await pushScene(app, token, {
+      parentVersion: 1,
+      elements: [
+        { ...rect("a"), x: 50, version: 2, versionNonce: 2 },
+        { ...rect("b"), x: 100, version: 1, versionNonce: 1 },
+      ],
+      message: "remote moved a",
+    });
+
+    // Local still on parent 1, edited B only.
+    const merged = await pushScene(
+      app,
+      token,
+      {
+        parentVersion: 1,
+        elements: [
+          { ...rect("a"), x: 0, version: 1, versionNonce: 1 },
+          { ...rect("b"), x: 200, version: 2, versionNonce: 3 },
+        ],
+        message: "local moved b",
+      },
+      { merge: true },
+    );
+    assert.equal(merged.statusCode, 201, merged.body);
+    const body = merged.json() as PushVersionResponse;
+    assert.equal(body.merged, true);
+    assert.deepEqual(body.mergeParents, { local: 1, remote: 2 });
+    assert.ok(body.diff, "merge response must include a diff");
+    assert.match(body.message, /merge: parents v1\+v2/);
+    assert.equal(body.version, 3);
+
+    // Both edits survive: A at remote's x=50, B at local's x=200.
+    const pull = await app.inject({
+      method: "GET",
+      url: "/api/scenes/arch/scene",
+      headers: bearer(token),
+    });
+    const doc = pull.json() as {
+      elements: Array<{ id: string; x: number }>;
+    };
+    const byId = Object.fromEntries(doc.elements.map((e) => [e.id, e]));
+    assert.equal(byId.a!.x, 50, "remote edit to A must survive");
+    assert.equal(byId.b!.x, 200, "local edit to B must survive");
+
+    const scene = db.getSceneBySlug("arch")!;
+    assert.equal(scene.head_version, 3);
+  });
+
+  test("merge same-element conflict is deterministic and follows version rule", async () => {
+    const dataDir = tempDataDir();
+    const token = "versions-token-merge-same";
+    const merge = versionRuleMergeService();
+    const { app } = await buildVersionsApp({
+      dataDir,
+      bootstrapToken: token,
+      merge,
+    });
+    await createScene(app, token);
+
+    await pushScene(app, token, {
+      parentVersion: 0,
+      elements: [{ ...rect("a"), x: 0, version: 1, versionNonce: 10 }],
+      message: "base",
+    });
+
+    // Remote: higher version on A.
+    await pushScene(app, token, {
+      parentVersion: 1,
+      elements: [{ ...rect("a"), x: 99, version: 3, versionNonce: 99 }],
+      message: "remote",
+    });
+
+    const localPayload = {
+      parentVersion: 1,
+      elements: [{ ...rect("a"), x: 1, version: 2, versionNonce: 1 }],
+      message: "local lower version",
+    };
+
+    const first = await pushScene(app, token, localPayload, { merge: true });
+    assert.equal(first.statusCode, 201, first.body);
+    const firstBody = first.json() as PushVersionResponse;
+    assert.equal(firstBody.merged, true);
+    assert.ok(firstBody.diff);
+
+    // Pull committed scene after first merge.
+    const pull1 = await app.inject({
+      method: "GET",
+      url: "/api/scenes/arch/scene?v=3",
+      headers: bearer(token),
+    });
+    const doc1 = pull1.json() as {
+      elements: Array<{ id: string; x: number; version: number }>;
+    };
+    assert.equal(doc1.elements.length, 1);
+    // Remote has version 3 > local 2 → remote wins (x=99).
+    assert.equal(doc1.elements[0]!.x, 99);
+    assert.equal(doc1.elements[0]!.version, 3);
+
+    // Re-run the same merge inputs via the service alone for determinism.
+    const again1 = await merge.merge({
+      localElements: localPayload.elements,
+      remoteElements: [{ ...rect("a"), x: 99, version: 3, versionNonce: 99 }],
+      appState: {},
+    });
+    const again2 = await merge.merge({
+      localElements: localPayload.elements,
+      remoteElements: [{ ...rect("a"), x: 99, version: 3, versionNonce: 99 }],
+      appState: {},
+    });
+    assert.deepEqual(again1.elements, again2.elements);
+    assert.equal((again1.elements[0] as { x: number }).x, 99);
+
+    // Local wins when version is higher.
+    const dataDir2 = tempDataDir();
+    const token2 = "versions-token-merge-same-local";
+    const { app: app2 } = await buildVersionsApp({
+      dataDir: dataDir2,
+      bootstrapToken: token2,
+      merge: versionRuleMergeService(),
+    });
+    await createScene(app2, token2, "Arch2", "arch2");
+    await pushScene(
+      app2,
+      token2,
+      {
+        parentVersion: 0,
+        elements: [{ ...rect("a"), x: 0, version: 1, versionNonce: 10 }],
+        message: "base",
+      },
+      { slug: "arch2" },
+    );
+    await pushScene(
+      app2,
+      token2,
+      {
+        parentVersion: 1,
+        elements: [{ ...rect("a"), x: 50, version: 2, versionNonce: 20 }],
+        message: "remote lower",
+      },
+      { slug: "arch2" },
+    );
+    const localWins = await pushScene(
+      app2,
+      token2,
+      {
+        parentVersion: 1,
+        elements: [{ ...rect("a"), x: 7, version: 5, versionNonce: 1 }],
+        message: "local higher version",
+      },
+      { merge: true, slug: "arch2" },
+    );
+    assert.equal(localWins.statusCode, 201, localWins.body);
+    const pullLocal = await app2.inject({
+      method: "GET",
+      url: "/api/scenes/arch2/scene",
+      headers: bearer(token2),
+    });
+    const docLocal = pullLocal.json() as {
+      elements: Array<{ x: number; version: number }>;
+    };
+    assert.equal(docLocal.elements[0]!.x, 7);
+    assert.equal(docLocal.elements[0]!.version, 5);
   });
 
   test("?force=true commits on a stale parent; history stays gapless", async () => {

@@ -7,11 +7,12 @@ import {
   resolutionCommands,
 } from "./conflict.js";
 
-test("resolutionCommands include pull, push, and force", () => {
+test("resolutionCommands include pull, push, merge, and force", () => {
   const cmds = resolutionCommands("arch", "added queue");
   assert.deepEqual(cmds, [
     "excalicli pull arch",
     'excalicli push arch -m "added queue"',
+    'excalicli push arch -m "added queue" --merge',
     'excalicli push arch -m "added queue" --force',
   ]);
 });
@@ -86,6 +87,7 @@ test("formatConflictMessage names exact next commands", () => {
   assert.match(msg, /parentVersion 2 does not match head 4/);
   assert.match(msg, /excalicli pull arch/);
   assert.match(msg, /excalicli push arch -m "my edit"/);
+  assert.match(msg, /--merge/);
   assert.match(msg, /--force/);
   assert.match(msg, /Nothing was changed on the server/);
 });

@@ -71,6 +71,23 @@ export type CommitSceneResponse = {
   elementCount: number;
   sceneHash: string;
   headVersion: number;
+  /** Present when the server ran a merge (`?merge=true`). */
+  merged?: boolean;
+  mergeParents?: { local: number; remote: number };
+  /** Diff of remote head → merge result. */
+  diff?: SceneDiffResponse;
+};
+
+/** Long-poll body from GET /api/scenes/:slug/events?since=N. */
+export type SceneEventResponse = {
+  version: number;
+  parentVersion: number | null;
+  author: string;
+  message: string;
+  createdAt: string;
+  elementCount: number;
+  sceneHash: string;
+  headVersion: number;
 };
 
 /** Excalidraw BinaryFileData-shaped payload for /api/files and scene push. */
@@ -249,6 +266,8 @@ export type RequestOptions = {
   headers?: Record<string, string>;
   /** When true, return raw Response body as ArrayBuffer (binary GET). */
   binary?: boolean;
+  /** AbortSignal for long-poll / unmount cancellation. */
+  signal?: AbortSignal;
 };
 
 /**
@@ -326,6 +345,7 @@ export function createApiClient(options: ApiClientOptions) {
       method: init.method ?? "GET",
       headers,
       body,
+      signal: init.signal,
     });
 
     if (init.binary) {
@@ -441,15 +461,42 @@ export function createApiClient(options: ApiClientOptions) {
     /**
      * Push a committed turn. Author is taken from the token server-side.
      * On 409 the ApiError.details carries the conflict diff.
+     * Pass `merge: true` to request server-side reconcileElements on a stale
+     * parent (requires RENDER_WORKER=on).
      */
     async commitScene(
       slug: string,
       body: CommitSceneBody,
+      opts?: { force?: boolean; merge?: boolean },
     ): Promise<CommitSceneResponse> {
+      const params = new URLSearchParams();
+      if (opts?.force) params.set("force", "true");
+      if (opts?.merge) params.set("merge", "true");
+      const qs = params.toString() ? `?${params.toString()}` : "";
       return request<CommitSceneResponse>(
-        `/api/scenes/${encodeURIComponent(slug)}/scene`,
+        `/api/scenes/${encodeURIComponent(slug)}/scene${qs}`,
         { method: "POST", body },
       );
+    },
+
+    /**
+     * Long-poll for head changes past `since`. Returns null on 204 (timeout /
+     * no change). Abort via `signal` when the editor unmounts.
+     */
+    async pollEvents(
+      slug: string,
+      since: number,
+      opts?: { signal?: AbortSignal },
+    ): Promise<SceneEventResponse | null> {
+      const path =
+        `/api/scenes/${encodeURIComponent(slug)}/events` +
+        `?since=${encodeURIComponent(String(since))}`;
+      const event = await request<SceneEventResponse | undefined>(path, {
+        method: "GET",
+        signal: opts?.signal,
+      });
+      // 204 / empty body → no event this poll cycle.
+      return event ?? null;
     },
 
     async getDraft(slug: string): Promise<DraftResponse | null> {

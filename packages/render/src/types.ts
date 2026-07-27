@@ -33,6 +33,21 @@ export type RenderResult = {
   format: RenderFormat;
 };
 
+/** Input for server-side merge (upstream reconcileElements). */
+export type MergeRequest = {
+  local: { elements: readonly unknown[] };
+  remote: { elements: readonly unknown[] };
+  /**
+   * Passed through as reconcileElements' appState. Prefer `{}` for pure
+   * version/versionNonce resolution (no "currently editing" local bias).
+   */
+  appState?: Record<string, unknown>;
+};
+
+export type MergeResult = {
+  elements: unknown[];
+};
+
 export type RenderWorkerOptions = {
   /**
    * Base URL of the web app that serves `/render` (e.g. `http://127.0.0.1:3000`).
@@ -55,6 +70,11 @@ export type RenderWorkerOptions = {
 export type RenderWorker = {
   /** Render a scene to PNG or SVG. Lazily launches the browser on first call. */
   render(request: RenderRequest): Promise<RenderResult>;
+  /**
+   * Merge two element arrays via upstream `restoreElements` +
+   * `reconcileElements` in the browser page. Same page pool as export.
+   */
+  merge(request: MergeRequest): Promise<MergeResult>;
   /** Shut down the browser and drain the pool. Safe to call multiple times. */
   close(): Promise<void>;
   /** True while a Chromium process is held open. */

@@ -3,6 +3,8 @@ import { test } from "node:test";
 import {
   buildExportAppState,
   filterExportElements,
+  isExportRequest,
+  isMergeRequest,
   isRenderRequest,
   normalizeRenderOptions,
   RENDER_MSG,
@@ -90,6 +92,62 @@ test("isRenderRequest validates shape", () => {
       id: "1",
       format: "png",
       scene: { elements: [] },
+    }),
+    true,
+  );
+});
+
+test("isExportRequest rejects merge ops", () => {
+  assert.equal(
+    isExportRequest({
+      type: RENDER_MSG.REQUEST,
+      id: "1",
+      op: "merge",
+      local: { elements: [] },
+      remote: { elements: [] },
+    }),
+    false,
+  );
+});
+
+test("isMergeRequest validates local/remote elements", () => {
+  assert.equal(isMergeRequest(null), false);
+  assert.equal(
+    isMergeRequest({
+      type: RENDER_MSG.REQUEST,
+      id: "1",
+      format: "png",
+      scene: { elements: [] },
+    }),
+    false,
+  );
+  assert.equal(
+    isMergeRequest({
+      type: RENDER_MSG.REQUEST,
+      id: "m1",
+      op: "merge",
+      local: { elements: [{ id: "a" }] },
+      remote: { elements: [{ id: "b" }] },
+    }),
+    true,
+  );
+  assert.equal(
+    isMergeRequest({
+      type: RENDER_MSG.REQUEST,
+      id: "m2",
+      op: "merge",
+      local: { elements: "nope" },
+      remote: { elements: [] },
+    }),
+    false,
+  );
+  assert.equal(
+    isRenderRequest({
+      type: RENDER_MSG.REQUEST,
+      id: "m1",
+      op: "merge",
+      local: { elements: [] },
+      remote: { elements: [] },
     }),
     true,
   );

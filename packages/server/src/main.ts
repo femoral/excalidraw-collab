@@ -2,9 +2,24 @@
 // Filter node:sqlite experimental warnings before the db module loads it.
 import "./sqlite-warning.js";
 
+import { openRenderWorker, type RenderWorker } from "@excalidraw-collab/render";
 import { buildApp } from "./app.js";
 import { ConfigError, loadConfig } from "./config.js";
 import { openDatabase, type Database } from "./db.js";
+import type { SceneMergeService } from "./merge.js";
+
+function mergeServiceFromWorker(worker: RenderWorker): SceneMergeService {
+  return {
+    async merge(input) {
+      const result = await worker.merge({
+        local: { elements: input.localElements },
+        remote: { elements: input.remoteElements },
+        appState: input.appState ?? {},
+      });
+      return { elements: result.elements };
+    },
+  };
+}
 
 async function main(): Promise<void> {
   let config;
@@ -26,16 +41,37 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // Optional render worker for server-side merge (and later export/skeleton).
+  // baseUrl points at this process once listen() binds — merge() is lazy so
+  // the first real request happens after the server is up.
+  let renderWorker: RenderWorker | null = null;
+  let merge: SceneMergeService | null = null;
+  if (config.renderWorker === "on") {
+    const baseUrl = `http://127.0.0.1:${config.port}`;
+    renderWorker = await openRenderWorker({ baseUrl });
+    if (renderWorker) {
+      merge = mergeServiceFromWorker(renderWorker);
+    }
+  }
+
   const app = await buildApp({
     config,
     db,
     readinessCheck: () => db.isHealthy(),
+    merge,
   });
 
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info(`received ${signal}, shutting down`);
     try {
       await app.close();
+      if (renderWorker) {
+        try {
+          await renderWorker.close();
+        } catch {
+          // ignore worker teardown errors on shutdown
+        }
+      }
       db.close();
       process.exit(0);
     } catch (err) {
@@ -58,7 +94,13 @@ async function main(): Promise<void> {
 
   await app.listen({ port: config.port, host: "0.0.0.0" });
   app.log.info(
-    { port: config.port, dataDir: config.dataDir, dbPath: db.dbPath },
+    {
+      port: config.port,
+      dataDir: config.dataDir,
+      dbPath: db.dbPath,
+      renderWorker: config.renderWorker,
+      mergeEnabled: merge !== null,
+    },
     "server listening",
   );
 }

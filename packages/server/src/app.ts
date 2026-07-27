@@ -24,6 +24,7 @@ import {
 } from "./events.js";
 import { FileStore, registerFileRoutes } from "./files.js";
 import { registerLockRoutes } from "./locks.js";
+import type { SceneMergeService } from "./merge.js";
 import { registerSceneRoutes } from "./scenes.js";
 import { registerTokenRoutes } from "./tokens.js";
 import { registerVersionRoutes } from "./versions.js";
@@ -67,6 +68,11 @@ export type BuildAppDeps = {
    * {@link EVENTS_TIMEOUT_MS} (30 s). Shorten in tests.
    */
   eventsTimeoutMs?: number;
+  /**
+   * Server-side merge (render worker adapter). When omitted, `?merge=true`
+   * on a stale parent returns 501. Inject a mock in tests.
+   */
+  merge?: SceneMergeService | null;
 };
 
 function isFastifyError(err: unknown): err is FastifyError {
@@ -179,6 +185,7 @@ export async function buildApp(
         store: fileStore,
         diffs,
         events,
+        merge: deps.merge,
       });
       await registerDiffRoutes(app, {
         db: deps.db,
@@ -287,5 +294,7 @@ declare module "fastify" {
     diffs?: SceneDiffService;
     /** Long-poll event hub (present when db is configured). */
     events?: SceneEventHub;
+    /** Server-side merge service (present when a render worker is wired). */
+    merge?: SceneMergeService | null;
   }
 }
