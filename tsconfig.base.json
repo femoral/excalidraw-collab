@@ -18,7 +18,6 @@
     "noUnusedParameters": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
-    "typeRoots": ["./types", "./node_modules/@types"],
-    "types": ["node-minimal"]
+    "types": ["node"]
   }
 }
