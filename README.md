@@ -25,7 +25,8 @@ docker/     image + compose
 
 ## Status
 
-Pre-implementation. Work is tracked as issues grouped into waves — see the roadmap issue.
+Pre-implementation. Work is decomposed into 35 issues grouped into dependency waves —
+see [the roadmap](https://github.com/femoral/excalidraw-collab/issues/36).
 
 ## Workflow
 
