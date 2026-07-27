@@ -18,6 +18,7 @@ import {
 import { FileStore, registerFileRoutes } from "./files.js";
 import { registerSceneRoutes } from "./scenes.js";
 import { registerTokenRoutes } from "./tokens.js";
+import { registerVersionRoutes } from "./versions.js";
 
 /** Injectable readiness probe; issue #5 will plug SQLite reachability here. */
 export type ReadinessCheck = () => boolean | Promise<boolean>;
@@ -130,6 +131,10 @@ export async function buildApp(
         db: deps.db,
         store: fileStore,
         config,
+      });
+      await registerVersionRoutes(app, {
+        db: deps.db,
+        store: fileStore,
       });
     }
   }
