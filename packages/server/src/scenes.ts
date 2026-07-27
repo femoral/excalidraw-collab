@@ -27,6 +27,11 @@ export type SceneInfo = {
   } | null;
   /** Element count of the head version; 0 when head_version is 0. */
   elementCount: number;
+  /**
+   * Author of the head version (token name). Null when the scene has no
+   * versions yet (`headVersion === 0`).
+   */
+  headAuthor: string | null;
 };
 
 function toLock(
@@ -51,6 +56,7 @@ export function toSceneInfo(row: SceneListRow): SceneInfo {
     updatedAt: row.updated_at,
     lock: toLock(row),
     elementCount: row.element_count,
+    headAuthor: row.head_author ?? null,
   };
 }
 
@@ -118,6 +124,15 @@ const createSceneBodySchema = {
   properties: {
     name: { type: "string", minLength: 1, maxLength: 256 },
     slug: { type: "string", minLength: 1, maxLength: SLUG_MAX_LENGTH },
+  },
+  additionalProperties: false,
+} as const;
+
+const renameSceneBodySchema = {
+  type: "object",
+  required: ["name"],
+  properties: {
+    name: { type: "string", minLength: 1, maxLength: 256 },
   },
   additionalProperties: false,
 } as const;
@@ -201,6 +216,7 @@ export async function registerSceneRoutes(
           const info = toSceneInfo({
             ...row,
             element_count: 0,
+            head_author: null,
           });
           return reply.status(201).send(info);
         },
@@ -224,6 +240,59 @@ export async function registerSceneRoutes(
             );
           }
           return toSceneInfo(row);
+        },
+      );
+
+      /**
+       * Rename a scene (display name only; slug is stable).
+       * Body: `{ name }` — same validation as create.
+       */
+      api.patch<{ Params: { slug: string }; Body: { name: string } }>(
+        "/scenes/:slug",
+        {
+          schema: {
+            body: renameSceneBodySchema,
+          },
+        },
+        async (request) => {
+          const { slug } = request.params;
+          const existing = db.getSceneListRowBySlug(slug);
+          if (!existing) {
+            throw new AppError(
+              ErrorCode.NOT_FOUND,
+              `scene not found: ${slug}`,
+              404,
+            );
+          }
+
+          const name = request.body.name.trim();
+          if (name.length === 0) {
+            throw new AppError(
+              ErrorCode.VALIDATION,
+              "name must not be empty",
+              400,
+            );
+          }
+
+          const updated = db.updateSceneName(existing.id, name);
+          if (!updated) {
+            throw new AppError(
+              ErrorCode.NOT_FOUND,
+              `scene not found: ${slug}`,
+              404,
+            );
+          }
+
+          // Re-read list row so head_author / element_count stay accurate.
+          const listRow = db.getSceneListRowBySlug(slug);
+          if (!listRow) {
+            throw new AppError(
+              ErrorCode.NOT_FOUND,
+              `scene not found: ${slug}`,
+              404,
+            );
+          }
+          return toSceneInfo(listRow);
         },
       );
 
