@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import { describe, test } from "node:test";
 
 import {
+  APP_STATE_DEFAULTS,
   diffScenes,
   formatDiff,
   isEmptyDiff,
@@ -639,5 +640,100 @@ describe("formatDiff example rendering (for human judgment)", () => {
     assert.match(text, /Service C/);
     // eslint-disable-next-line no-console
     console.log("\n--- formatDiff(rebind) example ---\n" + text + "--- end ---\n");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// appState default noise
+//
+// The CLI omits persisted appState keys it was never given; the web editor
+// always writes the full set. Without this suppression the first UI commit
+// after any CLI push reports eleven appState "changes" nobody made, which
+// buries the real element diff an agent is trying to read.
+// ---------------------------------------------------------------------------
+
+describe("diffScenes appState defaults", () => {
+  const withAppState = (appState: Record<string, unknown>): SceneDocument => ({
+    elements: [],
+    appState,
+    files: {},
+  });
+
+  test("absent → upstream default is not a change", () => {
+    const diff = diffScenes(
+      withAppState({}),
+      withAppState({ ...APP_STATE_DEFAULTS }),
+    );
+    assert.deepEqual(diff.appState, []);
+    assert.ok(isEmptyDiff(diff));
+  });
+
+  test("suppression is symmetric (default → absent)", () => {
+    const diff = diffScenes(
+      withAppState({ ...APP_STATE_DEFAULTS }),
+      withAppState({}),
+    );
+    assert.deepEqual(diff.appState, []);
+  });
+
+  test("absent → non-default is still reported", () => {
+    const diff = diffScenes(
+      withAppState({}),
+      withAppState({ viewBackgroundColor: "#000000", gridSize: 40 }),
+    );
+    assert.deepEqual(
+      diff.appState.map((d) => d.key).sort(),
+      ["gridSize", "viewBackgroundColor"],
+    );
+  });
+
+  test("scene name is never suppressed (upstream default is null)", () => {
+    // Regression: `name` must not join APP_STATE_DEFAULTS — a rename is real.
+    assert.ok(!Object.prototype.hasOwnProperty.call(APP_STATE_DEFAULTS, "name"));
+    const diff = diffScenes(
+      withAppState({}),
+      withAppState({ name: "Ingest Pipeline" }),
+    );
+    assert.deepEqual(diff.appState, [
+      { key: "name", from: undefined, to: "Ingest Pipeline" },
+    ]);
+  });
+
+  test("an explicit change away from a default is still reported", () => {
+    const diff = diffScenes(
+      withAppState({ theme: "light" }),
+      withAppState({ theme: "dark" }),
+    );
+    assert.deepEqual(diff.appState, [
+      { key: "theme", from: "light", to: "dark" },
+    ]);
+  });
+
+  test("table agrees with upstream restoreAppState", async () => {
+    // Same approach as the sceneHash agreement test: load the real browser
+    // bundle through the fixture-generation shim rather than trusting a
+    // hand-copied table to stay correct across upgrades.
+    const { spawnSync } = await import("node:child_process");
+    const register = join(HERE, "..", "scripts", "register.mjs");
+    const script = `
+      import { restoreAppState } from "@excalidraw/excalidraw";
+      const keys = ${JSON.stringify(Object.keys(APP_STATE_DEFAULTS))};
+      const restored = restoreAppState({}, null);
+      const out = {};
+      for (const k of keys) out[k] = restored[k];
+      process.stdout.write(JSON.stringify(out));
+    `;
+    const result = spawnSync(
+      process.execPath,
+      ["--import", register, "--input-type=module", "-e", script],
+      { encoding: "utf8", cwd: join(HERE, ".."), maxBuffer: 10 * 1024 * 1024 },
+    );
+    if (result.status !== 0) {
+      assert.fail(
+        `could not load upstream restoreAppState for agreement check:\n` +
+          `status=${result.status}\nstderr=${result.stderr}`,
+      );
+    }
+    assert.deepEqual(JSON.parse(result.stdout), { ...APP_STATE_DEFAULTS });
   });
 });

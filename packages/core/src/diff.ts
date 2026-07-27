@@ -514,6 +514,47 @@ function detectReorders(
 // appState diff
 // ---------------------------------------------------------------------------
 
+/**
+ * What upstream fills in for a persisted appState key that is absent.
+ *
+ * Mirrors `restoreAppState({}, null)` from `@excalidraw/excalidraw@0.18.1`;
+ * the package is a browser/React bundle and cannot be a runtime dep here (see
+ * `hash.ts` for the same trade-off). A test asserts agreement with the real
+ * export, loaded through the fixture-generation shim.
+ *
+ * These exist so the diff can stay quiet about a key that was merely absent
+ * before and is now explicitly at its default. The CLI omits these keys
+ * entirely while the web editor always writes them, so the first UI commit
+ * after any CLI push would otherwise report eleven "changes" nobody made.
+ * `name` is deliberately absent from this table — its upstream default is
+ * `null`, so a real scene name is a real change and must still be reported.
+ */
+export const APP_STATE_DEFAULTS: Readonly<Record<string, unknown>> =
+  Object.freeze({
+    viewBackgroundColor: "#ffffff",
+    gridSize: 20,
+    gridStep: 5,
+    gridModeEnabled: false,
+    exportBackground: true,
+    exportWithDarkMode: false,
+    exportScale: 1,
+    exportEmbedScene: false,
+    frameRendering: { enabled: true, clip: true, name: true, outline: true },
+    theme: "light",
+  });
+
+/**
+ * True when `value` is exactly what upstream would have supplied for a key
+ * that was not persisted at all — i.e. absent and this value mean the same
+ * scene.
+ */
+function isImpliedDefault(key: string, value: unknown): boolean {
+  return (
+    Object.prototype.hasOwnProperty.call(APP_STATE_DEFAULTS, key) &&
+    deepEqual(APP_STATE_DEFAULTS[key], value)
+  );
+}
+
 function diffAppState(
   a: SceneDocument["appState"],
   b: SceneDocument["appState"],
@@ -525,9 +566,12 @@ function diffAppState(
   for (const key of [...keys].sort()) {
     const from = left[key];
     const to = right[key];
-    if (!deepEqual(from, to)) {
-      deltas.push({ key, from, to });
-    }
+    if (deepEqual(from, to)) continue;
+    // Absent ↔ default is a change in representation, not in the scene.
+    // Symmetric: CLI pushes drop these keys, the editor writes them back.
+    if (from === undefined && isImpliedDefault(key, to)) continue;
+    if (to === undefined && isImpliedDefault(key, from)) continue;
+    deltas.push({ key, from, to });
   }
   return deltas;
 }

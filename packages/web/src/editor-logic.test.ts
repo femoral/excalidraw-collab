@@ -9,6 +9,7 @@ import {
   coalescerSchedule,
   collectFileIds,
   createDebouncedCoalescer,
+  draftFingerprint,
   filesNeedingUpload,
   formatFileUploadError,
   formatLockBadge,
@@ -478,5 +479,76 @@ describe("remote update toast", () => {
       ),
       true,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Draft autosave feedback loop (regression)
+//
+// Excalidraw emits onChange for re-renders, not just edits. A save flips the
+// save indicator, that re-render produces another onChange, and without a
+// dedupe the coalescer saves forever — which also wedged flushNow(), so
+// handleCommit awaited it and never issued its POST.
+// ---------------------------------------------------------------------------
+
+describe("draft autosave does not feed itself", () => {
+  const snap = (nonces: number[], appState: unknown = {}) => ({
+    elements: nonces.map((versionNonce, i) => ({
+      id: `el-${i}`,
+      versionNonce,
+    })),
+    appState,
+    files: {},
+  });
+
+  test("fingerprint is stable across re-renders and moves on a real edit", () => {
+    assert.equal(draftFingerprint(snap([1, 2])), draftFingerprint(snap([1, 2])));
+    // An edit bumps versionNonce.
+    assert.notEqual(draftFingerprint(snap([1, 2])), draftFingerprint(snap([1, 9])));
+    // A reorder keeps the nonces but changes their order.
+    assert.notEqual(draftFingerprint(snap([1, 2])), draftFingerprint(snap([2, 1])));
+    // A deletion changes the count.
+    assert.notEqual(draftFingerprint(snap([1, 2])), draftFingerprint(snap([1])));
+  });
+
+  test("persisted appState changes are still saved", () => {
+    assert.notEqual(
+      draftFingerprint(snap([1], { viewBackgroundColor: "#fff" })),
+      draftFingerprint(snap([1], { viewBackgroundColor: "#000" })),
+    );
+  });
+
+  test("volatile appState churn does not look like an edit", () => {
+    // cursorButton/selection are not in the persisted whitelist.
+    assert.equal(
+      draftFingerprint(snap([1], { cursorButton: "up", selectedElementIds: {} })),
+      draftFingerprint(
+        snap([1], { cursorButton: "down", selectedElementIds: { "el-0": true } }),
+      ),
+    );
+  });
+
+  test("flushNow terminates even while pushes keep arriving", async () => {
+    let saves = 0;
+    let coalescer: ReturnType<typeof createDebouncedCoalescer<number>>;
+    coalescer = createDebouncedCoalescer<number>({
+      delayMs: 2000,
+      save: async () => {
+        saves++;
+      },
+      onStatus: (status) => {
+        // Model the save-indicator re-render feeding onChange back in.
+        if (status === "saving" || status === "saved") {
+          queueMicrotask(() => coalescer.push(saves));
+        }
+      },
+    });
+
+    coalescer.push(0);
+    await coalescer.flushNow();
+
+    // Bounded: without the cap this never returns (observed ~1k saves/sec).
+    assert.ok(saves <= 3, `expected a bounded drain, got ${saves} saves`);
+    coalescer.dispose();
   });
 });

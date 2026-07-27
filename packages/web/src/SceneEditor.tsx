@@ -42,6 +42,7 @@ import {
   buildDraftPayload,
   createDebouncedCoalescer,
   DRAFT_AUTOSAVE_MS,
+  draftFingerprint,
   filesNeedingUpload,
   formatFileUploadError,
   formatLockBadge,
@@ -219,6 +220,8 @@ export function SceneEditor({
   const uploadedFilesRef = useRef(new Set<string>());
   const latestSnapshotRef = useRef<EditorSnapshot | null>(null);
   const hydratingRef = useRef(true);
+  /** Fingerprint of the last snapshot queued for save — suppresses no-op PUTs. */
+  const savedFingerprintRef = useRef<string | null>(null);
   /** Skip one onChange after remote updateScene so draft autosave does not fire. */
   const applyingRemoteRef = useRef(false);
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
@@ -255,6 +258,7 @@ export function SceneEditor({
     uploadedFilesRef.current = new Set();
     loadedDocRef.current = null;
     applyingRemoteRef.current = false;
+    savedFingerprintRef.current = null;
 
     void (async () => {
       try {
@@ -584,10 +588,12 @@ export function SceneEditor({
 
       const snapshot = snapshotFromEditor(elements, appState, files);
       latestSnapshotRef.current = snapshot;
+      const fingerprint = draftFingerprint(snapshot);
 
       // First onChange after mount is hydration — establish baseline only.
       if (hydratingRef.current) {
         hydratingRef.current = false;
+        savedFingerprintRef.current = fingerprint;
         return;
       }
 
@@ -595,8 +601,17 @@ export function SceneEditor({
       // that as a local dirty burst (it is already on the server as head).
       if (applyingRemoteRef.current) {
         applyingRemoteRef.current = false;
+        savedFingerprintRef.current = fingerprint;
         return;
       }
+
+      // Nothing the draft persists actually moved. Excalidraw emits onChange
+      // for re-renders and selection/pointer churn too, and a save flips the
+      // save indicator — so pushing these would let autosave feed itself.
+      if (fingerprint === savedFingerprintRef.current) {
+        return;
+      }
+      savedFingerprintRef.current = fingerprint;
 
       coalescerRef.current?.push(snapshot);
     },

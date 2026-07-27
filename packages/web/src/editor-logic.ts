@@ -7,7 +7,7 @@
  * browser harness. The React component stays thin around these.
  */
 
-import { pickAppState } from "@excalidraw-collab/core";
+import { pickAppState, sceneHash } from "@excalidraw-collab/core";
 import type { BinaryFilePayload } from "./api.ts";
 
 /** Default debounce for draft autosave (PLAN.md §10). */
@@ -276,17 +276,28 @@ export function createDebouncedCoalescer<T>(options: {
       }
       // When inflight, endFlush will re-trigger.
     },
-    /** Flush now (e.g. before commit). Waits out any in-flight save first. */
-    async flushNow() {
+    /**
+     * Flush now (e.g. before commit). Waits out any in-flight save first.
+     *
+     * Both loops are bounded. A caller that keeps producing edits while we
+     * drain — an editor whose own save-status re-render feeds back into
+     * `push` — would otherwise spin here forever, and a commit that awaits
+     * this would never issue its POST. Draining the latest snapshot is a
+     * best-effort courtesy; the commit body is built from live editor state
+     * anyway, so giving up after a few passes loses nothing.
+     */
+    async flushNow(maxPasses = 3) {
       clearTimer();
-      while (state.inflight && !disposed) {
+      for (let i = 0; i < maxPasses && state.inflight && !disposed; i++) {
         await new Promise<void>((resolve) => {
           setTimeoutFn(() => resolve(), 10);
         });
       }
-      while (state.pending !== null && !disposed) {
+      for (let i = 0; i < maxPasses && state.pending !== null && !disposed; i++) {
         await flush();
       }
+      // A pass may have scheduled an immediate follow-up; commit does not wait.
+      clearTimer();
     },
     getState(): CoalescerSnapshot<T> {
       return state;
@@ -371,6 +382,31 @@ export function buildDraftPayload(
     fileIds: collectFileIds(snapshot.files),
     basedOnVersion,
   };
+}
+
+/**
+ * Stable identity of everything a draft PUT would persist: element versions,
+ * whitelisted appState, and referenced file ids.
+ *
+ * Excalidraw fires `onChange` for reasons that do not touch the persisted
+ * document (re-renders, pointer/selection churn). Since a save flips the save
+ * indicator, and that re-render can itself produce an `onChange`, pushing every
+ * `onChange` unconditionally lets draft autosave feed itself an endless stream
+ * of identical PUTs. Callers compare this fingerprint and skip the push when it
+ * is unchanged, which breaks that cycle at the source.
+ *
+ * `sceneHash` mirrors upstream `hashElementsVersion` (djb2 over `versionNonce`,
+ * order-sensitive), so any real edit — including a reorder — changes it. The
+ * element count is included so hash collisions cannot silently drop a save.
+ */
+export function draftFingerprint(snapshot: EditorSnapshot): string {
+  const elements = snapshot.elements as readonly {
+    versionNonce: number;
+  }[];
+  // pickAppState walks a fixed key list, so its output order is deterministic.
+  const appState = JSON.stringify(pickAppState(snapshot.appState));
+  const fileIds = collectFileIds(snapshot.files).sort().join(",");
+  return `${elements.length}:${sceneHash(elements)}:${appState}:${fileIds}`;
 }
 
 /**
