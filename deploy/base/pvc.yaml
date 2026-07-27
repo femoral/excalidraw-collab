@@ -1,0 +1,16 @@
+# Persistent volume for DATA_DIR (SQLite in WAL mode + content-addressed files).
+# storageClassName is intentionally unset so the cluster default applies;
+# pin a class in an overlay when needed.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: excalidraw-collab-data
+spec:
+  accessModes:
+    # RWO is required: SQLite cannot be safely shared across pods.
+    - ReadWriteOnce
+  resources:
+    requests:
+      # Scenes store gzipped JSON plus content-addressed binary files
+      # (images). 10Gi covers a typical self-hosted library; grow via overlay.
+      storage: 10Gi

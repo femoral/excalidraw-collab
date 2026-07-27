@@ -1,0 +1,28 @@
+# Overlay-only Ingress. The base stays free of hostnames and TLS details.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: excalidraw-collab
+  annotations:
+    # Adjust for your ingress controller (nginx shown as a common default).
+    # kubernetes.io/ingress.class is legacy; prefer spec.ingressClassName below.
+    nginx.ingress.kubernetes.io/proxy-body-size: "12m"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: excalidraw.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: excalidraw-collab
+                port:
+                  name: http
+  # TLS is environment-specific; uncomment and supply a cert-manager or
+  # pre-created TLS Secret in a real overlay:
+  # tls:
+  #   - hosts:
+  #       - excalidraw.example.com
+  #     secretName: excalidraw-collab-tls

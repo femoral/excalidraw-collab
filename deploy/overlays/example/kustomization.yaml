@@ -1,0 +1,33 @@
+# Example overlay: pin an immutable image SHA and expose a hostname via Ingress.
+#
+# Copy this directory for a real environment (staging, prod, …), then:
+#   1. Set images[].newTag to the short commit SHA from GHCR (preferred over latest)
+#   2. Edit ingress.yaml host (and TLS if needed)
+#   3. Optionally patch storageClassName / PVC size / resources
+#   4. Create the bootstrap Secret in the target namespace (see deploy/README.md)
+#   5. kubectl apply -k deploy/overlays/example
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: excalidraw-collab
+
+resources:
+  - ../../base
+  - ingress.yaml
+
+# Pin the published multi-arch image by short SHA (issue #32 tags).
+# Format: ghcr.io/femoral/excalidraw-collab:<7-char-git-sha>
+# Example value below is illustrative only — replace before apply.
+images:
+  - name: ghcr.io/femoral/excalidraw-collab
+    newTag: "a1b2c3d"
+
+# Optional: pin a StorageClass when the cluster default is wrong for RWO.
+# patches:
+#   - target:
+#       kind: PersistentVolumeClaim
+#       name: excalidraw-collab-data
+#     patch: |-
+#       - op: add
+#         path: /spec/storageClassName
+#         value: standard

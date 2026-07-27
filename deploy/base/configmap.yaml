@@ -1,0 +1,19 @@
+# Non-secret runtime configuration. Host-specific values (storage class,
+# hostname, secret material) belong in overlays — not here.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: excalidraw-collab
+data:
+  # Server listens on this port inside the container; Service maps 80 → 3000.
+  PORT: "3000"
+  # SQLite DB + content-addressed files live under DATA_DIR (mounted PVC).
+  DATA_DIR: "/data"
+  # Playwright/Chromium worker for PNG/SVG export, merge, and skeleton.
+  # Set to "off" in an overlay if you want a lighter memory profile (render
+  # endpoints then return 501).
+  RENDER_WORKER: "on"
+  LOG_LEVEL: "info"
+  # Single-container image serves the built SPA from STATIC_ROOT.
+  SERVE_STATIC: "true"
+  STATIC_ROOT: "/app/public"

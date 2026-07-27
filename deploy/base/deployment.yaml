@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: excalidraw-collab
+spec:
+  # Single replica: one SQLite writer and one RWO volume attachment.
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # SQLite on a ReadWriteOnce volume means two pods must never run at
+      # once (double-mount / concurrent writers would corrupt the DB).
+      # maxSurge: 0 forbids creating a replacement pod while the old one
+      # still exists; maxUnavailable: 1 allows the sole replica to go down
+      # so the replacement can start (replicas must remain 1).
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: excalidraw-collab
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: excalidraw-collab
+    spec:
+      # pwuser in the image is uid/gid 1000. fsGroup makes the PVC group-owned
+      # so the process can write after the entrypoint drops privileges.
+      securityContext:
+        fsGroup: 1000
+      # Entrypoint starts as root long enough to chown DATA_DIR, then setprivs
+      # to pwuser and execs Node (PID 1 receives SIGTERM). Give Chromium time
+      # to wind down on render-worker shutdown.
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: excalidraw-collab
+          # Tag is rewritten by kustomize `images:` (see kustomization.yaml).
+          image: ghcr.io/femoral/excalidraw-collab:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: excalidraw-collab
+          env:
+            # Secret is created out-of-band; manifests never embed a value.
+            #   kubectl create secret generic excalidraw-collab-bootstrap \
+            #     --from-literal=BOOTSTRAP_TOKEN='…'
+            - name: BOOTSTRAP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: excalidraw-collab-bootstrap
+                  key: BOOTSTRAP_TOKEN
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          # Resource sizing is driven by Chromium (Playwright), not Node.
+          # Basis (with RENDER_WORKER=on):
+          #   - Node/Fastify idle: ~50–100 MiB
+          #   - Headless Chromium when active: ~400–800 MiB RSS for a typical
+          #     scene render (PLAN.md notes Chromium as the memory floor;
+          #     browser launches lazily on first render and idles out ~10 min)
+          #   - Image itself ships ~400 MB of browser binaries on disk
+          # Requests keep a cold pod schedulable; limits leave headroom for a
+          # large scene / simultaneous export. With RENDER_WORKER=off you can
+          # patch these down substantially in an overlay.
+          resources:
+            requests:
+              cpu: 250m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          # Migrations run before listen(); /healthz answers ~0.5s once up.
+          # startupProbe absorbs slow first-boot PVC + migration on cold disks
+          # so liveness does not kill the pod mid-init (up to ~60s).
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 2
+            timeoutSeconds: 3
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: excalidraw-collab-data

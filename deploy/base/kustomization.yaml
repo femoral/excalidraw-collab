@@ -1,0 +1,30 @@
+# Kustomize base for excalidraw-collab.
+# Apply: kubectl apply -k deploy/base
+# (requires the bootstrap Secret to exist — see README.md)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - configmap.yaml
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+
+# Controllers (Flux, Argo CD image updater, etc.) should bump newTag here
+# or in an overlay. Image reference format is documented in deploy/README.md.
+#
+# Expected registry path (issue #32):
+#   ghcr.io/femoral/excalidraw-collab:<tag>
+# where <tag> is one of:
+#   - latest          (main branch tip; convenience only)
+#   - <short-sha>     (immutable GitOps pin; first 7 hex chars of the commit)
+#   - v<semver>       (release tags matching v*)
+images:
+  - name: ghcr.io/femoral/excalidraw-collab
+    newTag: latest
+
+labels:
+  - pairs:
+      app.kubernetes.io/name: excalidraw-collab
+      app.kubernetes.io/part-of: excalidraw-collab
+    includeSelectors: true
