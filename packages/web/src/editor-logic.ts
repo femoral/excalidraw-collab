@@ -666,3 +666,50 @@ export function shouldShowRemoteUpdateToast(
   if (opts.selfName && event.author === opts.selfName) return false;
   return true;
 }
+
+/**
+ * Whether a multiplexed/per-scene event should update open-scene chrome
+ * (head version label). Self-authored commits already advance chrome on
+ * successful push — suppress the echo.
+ */
+export function shouldUpdateChromeHead(
+  event: { headVersion: number; author?: string },
+  opts: { selfName: string | null },
+): boolean {
+  if (!Number.isInteger(event.headVersion) || event.headVersion < 0) {
+    return false;
+  }
+  if (opts.selfName && event.author && event.author === opts.selfName) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Whether a lock event should update the open-scene lock badge.
+ * Suppress self-authored claim/release echoes (local handlers already set state).
+ */
+export function shouldApplyRemoteLock(
+  event: { actor?: string; kind?: string },
+  opts: { selfName: string | null },
+): boolean {
+  if (opts.selfName && event.actor && event.actor === opts.selfName) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Ms until lock TTL fires (client-side badge clear with no server event).
+ * Returns null when free / unparseable; 0 when already expired.
+ */
+export function editorLockExpiryDelayMs(
+  lock: EditorLock,
+  nowMs: number = Date.now(),
+): number | null {
+  if (!lock?.expiresAt) return null;
+  const expires = Date.parse(lock.expiresAt);
+  if (Number.isNaN(expires)) return null;
+  const delay = expires - nowMs;
+  return delay > 0 ? delay : 0;
+}

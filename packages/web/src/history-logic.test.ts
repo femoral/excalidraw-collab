@@ -6,6 +6,7 @@ import type {
   VersionInfo,
 } from "./api.ts";
 import {
+  appendRemoteVersion,
   buildRestorePayload,
   classifyUpdatePriority,
   COLLAPSE_THRESHOLD,
@@ -22,10 +23,12 @@ import {
   resolveDiffRange,
   restoreCreatesForwardCommit,
   selectionRole,
+  shouldAppendRemoteVersion,
   toggleVersionSelection,
   totalChangeCount,
   TOP_CHANGES_CAP,
   versionEditorPath,
+  versionInfoFromSceneEvent,
 } from "./history-logic.ts";
 
 function version(
@@ -493,5 +496,70 @@ describe("parseVersionQuery + read-only", () => {
   test("versionEditorPath", () => {
     assert.equal(versionEditorPath("arch", 3), "/s/arch?v=3");
     assert.equal(versionEditorPath("a/b", 1), "/s/a%2Fb?v=1");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Live history append / self-authored suppression (issue #37)
+// ---------------------------------------------------------------------------
+
+describe("live history refresh", () => {
+  test("shouldAppendRemoteVersion suppresses self and non-advances", () => {
+    assert.equal(
+      shouldAppendRemoteVersion(
+        { author: "me", headVersion: 4 },
+        { selfName: "me", currentHead: 3 },
+      ),
+      false,
+    );
+    assert.equal(
+      shouldAppendRemoteVersion(
+        { author: "agent", headVersion: 4 },
+        { selfName: "me", currentHead: 3 },
+      ),
+      true,
+    );
+    assert.equal(
+      shouldAppendRemoteVersion(
+        { author: "agent", headVersion: 3 },
+        { selfName: "me", currentHead: 3 },
+      ),
+      false,
+    );
+  });
+
+  test("appendRemoteVersion prepends without disturbing existing order", () => {
+    const existing = [version(2), version(1)];
+    const incoming = version(3, { author: "agent", message: "new" });
+    const result = appendRemoteVersion(existing, incoming);
+    assert.equal(result.added, true);
+    assert.deepEqual(
+      result.versions.map((v) => v.version),
+      [3, 2, 1],
+    );
+    assert.equal(result.headVersion, 3);
+    assert.equal(result.total, 3);
+
+    // Idempotent.
+    const again = appendRemoteVersion(result.versions, incoming);
+    assert.equal(again.added, false);
+    assert.equal(again.versions.length, 3);
+  });
+
+  test("versionInfoFromSceneEvent maps wire fields", () => {
+    const info = versionInfoFromSceneEvent({
+      version: 7,
+      parentVersion: 6,
+      author: "a",
+      message: "m",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      elementCount: 4,
+      sceneHash: "h",
+      thumbnailFileId: "abc",
+      headVersion: 7,
+    });
+    assert.equal(info.version, 7);
+    assert.equal(info.thumbnailFileId, "abc");
+    assert.equal(info.author, "a");
   });
 });

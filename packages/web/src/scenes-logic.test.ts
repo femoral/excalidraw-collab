@@ -1,15 +1,19 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { SceneInfo } from "./api.ts";
+import type { GlobalSceneEvent, SceneInfo } from "./api.ts";
 import {
+  applyGlobalEventsToList,
+  applyGlobalEventToScene,
   buildCreatePayload,
   buildRenamePayload,
   formatUpdatedAt,
   headAuthorLabel,
   isLockActive,
   isValidSlug,
+  lockExpiryDelayMs,
   reduceSceneList,
   sceneListOnUnauthorized,
+  shouldApplyGlobalEvent,
   sortScenesByUpdatedAt,
   versionCount,
   type SceneListStatus,
@@ -183,4 +187,153 @@ test("401 path: unauthorized resets to idle (no half-list, no error banner)", ()
     kind: "error",
     message: "network down",
   });
+});
+
+// ---------------------------------------------------------------------------
+// Live refresh / self-authored suppression (issue #37)
+// ---------------------------------------------------------------------------
+
+function versionEvent(
+  overrides: Partial<GlobalSceneEvent> = {},
+): GlobalSceneEvent {
+  return {
+    seq: 1,
+    sceneId: "id-1",
+    slug: "arch",
+    kind: "version",
+    headVersion: 3,
+    version: 3,
+    parentVersion: 2,
+    author: "agent",
+    message: "pushed",
+    createdAt: "2026-06-01T12:00:00.000Z",
+    elementCount: 9,
+    sceneHash: "h3",
+    thumbnailFileId: null,
+    lock: null,
+    ...overrides,
+  };
+}
+
+function lockEvent(
+  overrides: Partial<GlobalSceneEvent> = {},
+): GlobalSceneEvent {
+  return {
+    seq: 2,
+    sceneId: "id-1",
+    slug: "arch",
+    kind: "lock",
+    headVersion: 2,
+    lock: { holder: "agent", expiresAt: "2026-06-01T13:00:00.000Z" },
+    actor: "agent",
+    ...overrides,
+  };
+}
+
+test("shouldApplyGlobalEvent suppresses self-authored version and lock", () => {
+  assert.equal(
+    shouldApplyGlobalEvent(versionEvent({ author: "me" }), "me"),
+    false,
+  );
+  assert.equal(
+    shouldApplyGlobalEvent(versionEvent({ author: "agent" }), "me"),
+    true,
+  );
+  assert.equal(
+    shouldApplyGlobalEvent(lockEvent({ actor: "me" }), "me"),
+    false,
+  );
+  assert.equal(
+    shouldApplyGlobalEvent(lockEvent({ actor: "agent" }), "me"),
+    true,
+  );
+  // No self identity → never suppress.
+  assert.equal(shouldApplyGlobalEvent(versionEvent({ author: "x" }), null), true);
+});
+
+test("applyGlobalEventToScene patches head metadata and lock", () => {
+  const base = scene({ headVersion: 2, elementCount: 3, headAuthor: "admin" });
+  const now = Date.parse("2026-06-01T12:00:00.000Z");
+  const patched = applyGlobalEventToScene(
+    base,
+    versionEvent({
+      headVersion: 4,
+      elementCount: 12,
+      author: "agent",
+      createdAt: "2026-06-01T12:30:00.000Z",
+      lock: { holder: "agent", expiresAt: "2026-06-01T13:00:00.000Z" },
+    }),
+    now,
+  );
+  assert.equal(patched.headVersion, 4);
+  assert.equal(patched.elementCount, 12);
+  assert.equal(patched.headAuthor, "agent");
+  assert.equal(patched.updatedAt, "2026-06-01T12:30:00.000Z");
+  assert.equal(patched.lock?.holder, "agent");
+
+  const unlocked = applyGlobalEventToScene(
+    patched,
+    lockEvent({ lock: null, actor: "agent" }),
+    now,
+  );
+  assert.equal(unlocked.lock, null);
+  assert.equal(unlocked.headVersion, 4, "lock event must not clobber head");
+});
+
+test("applyGlobalEventsToList skips self and updates others", () => {
+  const scenes = [
+    scene({ id: "id-1", slug: "arch", headVersion: 1 }),
+    scene({
+      id: "id-2",
+      slug: "flow",
+      headVersion: 1,
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    }),
+  ];
+  const { scenes: next, changed } = applyGlobalEventsToList(
+    scenes,
+    [
+      versionEvent({
+        slug: "arch",
+        sceneId: "id-1",
+        author: "me",
+        headVersion: 9,
+      }),
+      versionEvent({
+        seq: 3,
+        slug: "flow",
+        sceneId: "id-2",
+        author: "agent",
+        headVersion: 5,
+        elementCount: 20,
+        createdAt: "2026-06-02T00:00:00.000Z",
+      }),
+    ],
+    "me",
+  );
+  assert.equal(changed, true);
+  const arch = next.find((s) => s.slug === "arch")!;
+  const flow = next.find((s) => s.slug === "flow")!;
+  assert.equal(arch.headVersion, 1, "self-authored arch must stay");
+  assert.equal(flow.headVersion, 5);
+  assert.equal(flow.elementCount, 20);
+});
+
+test("lockExpiryDelayMs reports remaining TTL", () => {
+  const now = Date.parse("2026-06-01T12:00:00.000Z");
+  assert.equal(lockExpiryDelayMs(null, now), null);
+  assert.equal(
+    lockExpiryDelayMs(
+      { holder: "a", expiresAt: "2026-06-01T12:00:30.000Z" },
+      now,
+    ),
+    30_000,
+  );
+  assert.equal(
+    lockExpiryDelayMs(
+      { holder: "a", expiresAt: "2026-06-01T11:00:00.000Z" },
+      now,
+    ),
+    0,
+  );
 });

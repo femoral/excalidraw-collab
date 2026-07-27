@@ -137,6 +137,37 @@ export type VersionInfo = {
  */
 export type SceneEventResponse = VersionInfo & {
   headVersion: number;
+  /** Current advisory lock after the event (null = free / expired). */
+  lock?: LockInfo | null;
+};
+
+/**
+ * One multiplexed event from `GET /api/events?since=N` (issue #37).
+ * `since` is a global sequence cursor, not a per-scene version number.
+ */
+export type GlobalSceneEvent = {
+  seq: number;
+  sceneId: string;
+  slug: string;
+  kind: "version" | "lock";
+  headVersion: number;
+  version?: number;
+  parentVersion?: number | null;
+  author?: string;
+  message?: string;
+  createdAt?: string;
+  elementCount?: number;
+  sceneHash?: string;
+  thumbnailFileId?: string | null;
+  lock: LockInfo | null;
+  /** Identity that caused a lock change (`kind === "lock"`). */
+  actor?: string;
+};
+
+/** 200 body for multiplexed long-poll. */
+export type MultiplexedEventsResponse = {
+  cursor: number;
+  events: GlobalSceneEvent[];
 };
 
 export type VersionsPage = {
@@ -659,6 +690,23 @@ export function createApiClient(options: ApiClientOptions) {
       const body = await request<SceneEventResponse | undefined>(
         `/api/scenes/${encodeURIComponent(slug)}/events` +
           `?since=${encodeURIComponent(String(since))}`,
+        { signal: opts?.signal },
+      );
+      if (body === undefined || body === null) return null;
+      return body;
+    },
+
+    /**
+     * Multiplexed long-poll across all scenes (issue #37).
+     * `since` is the global event sequence cursor from a prior response.
+     * Returns the batch + new cursor, or `null` on 204 timeout.
+     */
+    async getEvents(
+      since: number,
+      opts?: { signal?: AbortSignal },
+    ): Promise<MultiplexedEventsResponse | null> {
+      const body = await request<MultiplexedEventsResponse | undefined>(
+        `/api/events?since=${encodeURIComponent(String(since))}`,
         { signal: opts?.signal },
       );
       if (body === undefined || body === null) return null;
