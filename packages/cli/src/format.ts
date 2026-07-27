@@ -15,6 +15,12 @@ export type CommandResult = {
    * rendering of `data` is used.
    */
   human?: string;
+  /**
+   * Optional non-fatal diagnostic written to stderr on success (e.g. advisory
+   * lock held by someone else during push). Never mixed into the JSON data
+   * channel — agents that care read `data.lockWarning` (or similar) instead.
+   */
+  warning?: string;
 };
 
 /** Format a list of row objects as a simple aligned table. */

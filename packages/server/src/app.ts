@@ -18,6 +18,7 @@ import {
 import { registerDiffRoutes, SceneDiffService } from "./diff.js";
 import { registerDraftRoutes } from "./drafts.js";
 import { FileStore, registerFileRoutes } from "./files.js";
+import { registerLockRoutes } from "./locks.js";
 import { registerSceneRoutes } from "./scenes.js";
 import { registerTokenRoutes } from "./tokens.js";
 import { registerVersionRoutes } from "./versions.js";
@@ -136,6 +137,7 @@ export async function buildApp(
     await registerTokenRoutes(app, deps.db);
     await registerSceneRoutes(app, deps.db);
     await registerDraftRoutes(app, { db: deps.db });
+    await registerLockRoutes(app, deps.db);
     if (fileStore) {
       await registerFileRoutes(app, {
         db: deps.db,

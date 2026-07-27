@@ -1,8 +1,11 @@
 /**
- * `excalicli push SLUG [-f file] -m "message" [--force]`
+ * `excalicli push SLUG [-f file] -m "message" [--force] [--respect-lock]`
  *
  * Sends the recorded pulled version as `parentVersion` so conflicts are
  * detected without the user tracking version numbers by hand.
+ *
+ * Advisory locks: when someone else holds the turn, push **warns** and still
+ * succeeds. Pass `--respect-lock` to refuse with exit 5 (LOCK_HELD) instead.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -19,6 +22,7 @@ import type { CommandResult } from "./format.js";
 import type { SceneInfo } from "./ls.js";
 import type { SceneDocument } from "./pull.js";
 import { getPulledVersion, setPulledVersion } from "./state.js";
+import type { WhoamiData } from "./whoami.js";
 
 export type PushVersionResponse = {
   version: number;
@@ -45,6 +49,7 @@ function parsePushArgs(args: string[]): {
   file?: string;
   message: string;
   force: boolean;
+  respectLock: boolean;
 } {
   let values: {
     f?: string;
@@ -52,6 +57,7 @@ function parsePushArgs(args: string[]): {
     m?: string;
     message?: string;
     force?: boolean;
+    "respect-lock"?: boolean;
   };
   let positionals: string[];
   try {
@@ -63,6 +69,7 @@ function parsePushArgs(args: string[]): {
         m: { type: "string", short: "m" },
         message: { type: "string" },
         force: { type: "boolean", default: false },
+        "respect-lock": { type: "boolean", default: false },
         help: { type: "boolean", short: "h", default: false },
       },
       allowPositionals: true,
@@ -74,6 +81,7 @@ function parsePushArgs(args: string[]): {
       m?: string;
       message?: string;
       force?: boolean;
+      "respect-lock"?: boolean;
     };
     positionals = parsed.positionals;
   } catch (err) {
@@ -82,13 +90,13 @@ function parsePushArgs(args: string[]): {
 
   if (positionals.length === 0) {
     throw new UsageError(
-      'push requires SLUG\n\nUsage: excalicli push SLUG [-f file] -m "message" [--force]',
+      'push requires SLUG\n\nUsage: excalicli push SLUG [-f file] -m "message" [--force] [--respect-lock]',
     );
   }
   if (positionals.length > 1) {
     throw new UsageError(
       `unexpected arguments: ${positionals.slice(1).join(" ")}\n\n` +
-        'Usage: excalicli push SLUG [-f file] -m "message" [--force]',
+        'Usage: excalicli push SLUG [-f file] -m "message" [--force] [--respect-lock]',
     );
   }
 
@@ -100,14 +108,27 @@ function parsePushArgs(args: string[]): {
   const message = (values.message ?? values.m)?.trim() ?? "";
   if (message.length === 0) {
     throw new UsageError(
-      'push requires -m / --message\n\nUsage: excalicli push SLUG [-f file] -m "message" [--force]',
+      'push requires -m / --message\n\nUsage: excalicli push SLUG [-f file] -m "message" [--force] [--respect-lock]',
     );
   }
 
   const file = values.file ?? values.f;
   const force = values.force === true;
+  const respectLock = values["respect-lock"] === true;
 
-  return { slug, file, message, force };
+  return { slug, file, message, force, respectLock };
+}
+
+/** Active advisory lock (null when free or expired). */
+function activeLock(
+  lock: SceneInfo["lock"],
+  nowMs: number = Date.now(),
+): SceneInfo["lock"] {
+  if (lock === null) return null;
+  if (!lock.expiresAt) return lock;
+  const expires = Date.parse(lock.expiresAt);
+  if (Number.isNaN(expires)) return lock;
+  return expires > nowMs ? lock : null;
 }
 
 function defaultFilePath(slug: string): string {
@@ -199,8 +220,51 @@ async function resolveParentVersion(
 
 async function runPush(ctx: CommandContext): Promise<CommandResult> {
   requireAuth(ctx);
-  const { slug, file, message, force } = parsePushArgs(ctx.args);
+  const { slug, file, message, force, respectLock } = parsePushArgs(ctx.args);
   const server = ctx.config.server!;
+
+  // Advisory lock check (never enforced by the server). Warn, or refuse with
+  // exit 5 when --respect-lock is set and someone else holds the turn.
+  let lockWarning: string | undefined;
+  let lockHeldBy: string | null = null;
+  const meta = await apiFetch<SceneInfo>({
+    path: `/api/scenes/${encodeURIComponent(slug)}`,
+    method: "GET",
+    config: ctx.config,
+  });
+  const held = activeLock(meta.lock);
+  if (held) {
+    const me = await apiFetch<WhoamiData>({
+      path: "/api/whoami",
+      method: "GET",
+      config: ctx.config,
+    });
+    if (held.holder !== me.name) {
+      lockHeldBy = held.holder;
+      const msg =
+        `warning: turn held by ${held.holder}` +
+        (held.expiresAt ? ` until ${held.expiresAt}` : "") +
+        ` — push is still allowed (advisory lock)`;
+      if (respectLock) {
+        throw new CliError(
+          `Turn held by ${held.holder}` +
+            (held.expiresAt ? ` until ${held.expiresAt}` : "") +
+            `.\n` +
+            `Refusing push because --respect-lock was set.\n` +
+            `Release with: excalicli turn release ${slug}\n` +
+            `Or omit --respect-lock to push anyway.`,
+          {
+            code: "LOCK_HELD",
+            details: {
+              holder: held.holder,
+              expiresAt: held.expiresAt,
+            },
+          },
+        );
+      }
+      lockWarning = msg;
+    }
+  }
 
   const parentVersion = await resolveParentVersion(ctx, slug, force);
 
@@ -267,10 +331,13 @@ async function runPush(ctx: CommandContext): Promise<CommandResult> {
     sceneHash: result.sceneHash,
     path: filePath,
     force,
+    respectLock,
+    lockHeldBy,
   };
 
   return {
     data,
+    warning: lockWarning,
     human:
       `Pushed ${slug} v${result.version}` +
       (force ? " (force)" : "") +
@@ -284,11 +351,13 @@ export const pushCommand: Command = {
   description:
     "Upload a .excalidraw file as a new version (uses last pulled version as parent)",
   usage:
-    'excalicli push SLUG [-f file] -m "message" [--force] [--json]\n\n' +
-    "  -f file     Input path (default: SLUG.excalidraw)\n" +
-    "  -m message  Commit message (required)\n" +
-    "  --force     Overwrite head even if parentVersion is stale\n" +
+    'excalicli push SLUG [-f file] -m "message" [--force] [--respect-lock] [--json]\n\n' +
+    "  -f file          Input path (default: SLUG.excalidraw)\n" +
+    "  -m message       Commit message (required)\n" +
+    "  --force          Overwrite head even if parentVersion is stale\n" +
+    "  --respect-lock   Exit 5 if someone else holds the advisory turn lock\n" +
     "parentVersion comes from .excalidraw-collab/state.json (set by pull/push).\n" +
-    "A fresh scene (head 0) or --force can push without a prior pull.",
+    "A fresh scene (head 0) or --force can push without a prior pull.\n" +
+    "Without --respect-lock, a held lock only warns on stderr.",
   run: runPush,
 };

@@ -532,3 +532,59 @@ export function postCommitState(newHeadVersion: number): {
     uploadedFileIdsKeep: true,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Advisory turn lock display (issue #23)
+// ---------------------------------------------------------------------------
+
+export type EditorLock = {
+  holder: string;
+  expiresAt: string;
+} | null;
+
+/**
+ * Whether the advisory lock should show as held. Expired locks are inactive
+ * so a crashed agent never wedges the editor badge.
+ */
+export function isEditorLockActive(
+  lock: EditorLock,
+  nowMs: number = Date.now(),
+): boolean {
+  if (lock === null) return false;
+  if (!lock.expiresAt) return true;
+  const expires = Date.parse(lock.expiresAt);
+  if (Number.isNaN(expires)) return true;
+  return expires > nowMs;
+}
+
+/**
+ * Badge / menu copy for an active lock.
+ * e.g. "🤖 claude-code holds the turn"
+ */
+export function formatLockBadge(lock: NonNullable<EditorLock>): string {
+  return `🤖 ${lock.holder} holds the turn`;
+}
+
+/**
+ * MainMenu label: "Release turn" when we hold it (or any active lock —
+ * anyone may release), "Claim turn" when free. When another identity holds
+ * it we still offer "Release turn" so a human can free a crashed agent.
+ */
+export function turnMenuLabel(
+  lock: EditorLock,
+  selfName: string | null,
+  nowMs: number = Date.now(),
+): "Claim turn" | "Release turn" {
+  if (!isEditorLockActive(lock, nowMs)) return "Claim turn";
+  if (selfName && lock && lock.holder === selfName) return "Release turn";
+  // Active lock held by someone else — release is the recovery action.
+  return "Release turn";
+}
+
+/** True when the menu action should claim rather than release. */
+export function turnMenuShouldClaim(
+  lock: EditorLock,
+  nowMs: number = Date.now(),
+): boolean {
+  return !isEditorLockActive(lock, nowMs);
+}

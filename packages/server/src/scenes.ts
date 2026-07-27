@@ -34,16 +34,38 @@ export type SceneInfo = {
   headAuthor: string | null;
 };
 
-function toLock(
+/**
+ * Wire lock from a scene row. Expired locks are treated as free so list/get
+ * never present a stale claim as active (advisory locks must not wedge).
+ */
+export function toLock(
   row: SceneRow | SceneListRow,
+  nowMs: number = Date.now(),
 ): SceneInfo["lock"] {
   if (row.lock_holder === null || row.lock_holder === undefined) {
     return null;
+  }
+  if (row.lock_expires_at) {
+    const expires = Date.parse(row.lock_expires_at);
+    if (!Number.isNaN(expires) && expires <= nowMs) {
+      return null;
+    }
   }
   return {
     holder: row.lock_holder,
     expiresAt: row.lock_expires_at ?? "",
   };
+}
+
+/**
+ * Whether a raw DB lock is still active (not missing, not past TTL).
+ * Shared by scene listing and the lock claim route.
+ */
+export function isSceneLockActive(
+  row: Pick<SceneRow, "lock_holder" | "lock_expires_at">,
+  nowMs: number = Date.now(),
+): boolean {
+  return toLock(row as SceneRow, nowMs) !== null;
 }
 
 export function toSceneInfo(row: SceneListRow): SceneInfo {
