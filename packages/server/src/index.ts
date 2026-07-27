@@ -4,6 +4,15 @@
  */
 export { buildApp, type BuildAppDeps, type ReadinessCheck } from "./app.js";
 export {
+  ADMIN_TOKEN_NAME,
+  authorFromIdentity,
+  generateTokenSecret,
+  isAdminIdentity,
+  seedBootstrapToken,
+  tokenHashesEqual,
+  type RequestIdentity,
+} from "./auth.js";
+export {
   loadConfig,
   ConfigError,
   type Config,
@@ -38,3 +47,4 @@ export {
   type NewToken,
   type OpenDatabaseOptions,
 } from "./db.js";
+export type { TokenCreated, TokenInfo } from "./tokens.js";
