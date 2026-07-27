@@ -16,13 +16,16 @@ import type {
 import { loadPlaywright } from "./playwright-loader.js";
 import {
   RENDER_MSG,
-  type PageRenderRequest,
+  type PageExportRequest,
+  type PageMergeRequest,
   type PageRenderResponse,
   type PageSkeletonRequest,
   type PageSkeletonResponse,
 } from "./protocol.js";
 import {
   RenderError,
+  type MergeRequest,
+  type MergeResult,
   type RenderRequest,
   type RenderResult,
   type RenderWorker,
@@ -381,7 +384,7 @@ export function createRenderWorker(
 
   /**
    * Post a message into the page and wait for a matching response by id.
-   * Shared by export and skeleton conversion — both use the same READY page.
+   * Shared by export, skeleton conversion, and merge — same READY page pool.
    */
   async function postToPage<TMsg extends { id: string }, TRes extends { id: string; type: string }>(
     page: Page,
@@ -492,9 +495,10 @@ export function createRenderWorker(
     request: RenderRequest,
   ): Promise<RenderResult> {
     const id = `r-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    const payload: PageRenderRequest = {
+    const payload: PageExportRequest = {
       type: RENDER_MSG.REQUEST,
       id,
+      op: "export",
       format: request.format,
       scene: {
         elements: request.scene.elements,
@@ -504,7 +508,7 @@ export function createRenderWorker(
       options: request.options,
     };
 
-    const response = await postToPage<PageRenderRequest, PageRenderResponse>(
+    const response = await postToPage<PageExportRequest, PageRenderResponse>(
       page,
       payload,
       RENDER_MSG.RESPONSE,
@@ -513,6 +517,12 @@ export function createRenderWorker(
       throw new RenderError(
         "RENDER_FAILED",
         response.error || "render failed in page",
+      );
+    }
+    if (!("data" in response) || typeof response.data !== "string") {
+      throw new RenderError(
+        "RENDER_FAILED",
+        "export response missing data payload",
       );
     }
     if (request.format === "png") {
@@ -553,6 +563,40 @@ export function createRenderWorker(
           ? `skeleton[${response.index}]: `
           : "";
       throw new RenderError("RENDER_FAILED", `${prefix}${detail}`);
+    }
+    return { elements: response.elements };
+  }
+
+  async function runMergeOnPage(
+    page: Page,
+    request: MergeRequest,
+  ): Promise<MergeResult> {
+    const id = `m-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const payload: PageMergeRequest = {
+      type: RENDER_MSG.REQUEST,
+      id,
+      op: "merge",
+      local: { elements: request.local.elements },
+      remote: { elements: request.remote.elements },
+      appState: request.appState,
+    };
+
+    const response = await postToPage<PageMergeRequest, PageRenderResponse>(
+      page,
+      payload,
+      RENDER_MSG.RESPONSE,
+    );
+    if (!response.ok) {
+      throw new RenderError(
+        "RENDER_FAILED",
+        response.error || "merge failed in page",
+      );
+    }
+    if (!("elements" in response) || !Array.isArray(response.elements)) {
+      throw new RenderError(
+        "RENDER_FAILED",
+        "merge response missing elements array",
+      );
     }
     return { elements: response.elements };
   }
@@ -612,6 +656,22 @@ export function createRenderWorker(
     return withPage((page) => runSkeletonOnPage(page, request));
   }
 
+  async function merge(request: MergeRequest): Promise<MergeResult> {
+    if (!request.local || !Array.isArray(request.local.elements)) {
+      throw new RenderError(
+        "INVALID_REQUEST",
+        "merge local.elements must be an array",
+      );
+    }
+    if (!request.remote || !Array.isArray(request.remote.elements)) {
+      throw new RenderError(
+        "INVALID_REQUEST",
+        "merge remote.elements must be an array",
+      );
+    }
+    return withPage((page) => runMergeOnPage(page, request));
+  }
+
   async function close(): Promise<void> {
     closed = true;
     await tearDownBrowser();
@@ -620,6 +680,7 @@ export function createRenderWorker(
   return {
     render,
     convertSkeleton,
+    merge,
     close,
     get isRunning() {
       return browser !== null && browser.isConnected();

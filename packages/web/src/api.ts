@@ -71,6 +71,11 @@ export type CommitSceneResponse = {
   elementCount: number;
   sceneHash: string;
   headVersion: number;
+  /** Present when the server ran a merge (`?merge=true`). */
+  merged?: boolean;
+  mergeParents?: { local: number; remote: number };
+  /** Diff of remote head → merge result. */
+  diff?: SceneDiffResponse;
 };
 
 /** Excalidraw BinaryFileData-shaped payload for /api/files and scene push. */
@@ -452,13 +457,20 @@ export function createApiClient(options: ApiClientOptions) {
     /**
      * Push a committed turn. Author is taken from the token server-side.
      * On 409 the ApiError.details carries the conflict diff.
+     * Pass `merge: true` to request server-side reconcileElements on a stale
+     * parent (requires RENDER_WORKER=on).
      */
     async commitScene(
       slug: string,
       body: CommitSceneBody,
+      opts?: { force?: boolean; merge?: boolean },
     ): Promise<CommitSceneResponse> {
+      const params = new URLSearchParams();
+      if (opts?.force) params.set("force", "true");
+      if (opts?.merge) params.set("merge", "true");
+      const qs = params.toString() ? `?${params.toString()}` : "";
       return request<CommitSceneResponse>(
-        `/api/scenes/${encodeURIComponent(slug)}/scene`,
+        `/api/scenes/${encodeURIComponent(slug)}/scene${qs}`,
         { method: "POST", body },
       );
     },
@@ -597,15 +609,9 @@ export function createApiClient(options: ApiClientOptions) {
     },
 
     /**
-     * SEAM (issue #29 — server-side merge, landing in parallel):
-     * `POST /api/scenes/:slug/scene?merge=true` with the local working copy.
-     * The server is expected to reconcile local elements with head via
-     * upstream `reconcileElements` and commit a new version.
-     *
-     * Do **not** implement client-side merge here. If the endpoint is not
-     * present yet the call fails with a clear 4xx/5xx from the server; the
-     * toast surfaces that message. When #29 ships, this method is the only
-     * client change needed (path + body already match the documented shape).
+     * Server-side merge via `POST /api/scenes/:slug/scene?merge=true`.
+     * The server runs upstream `reconcileElements` in the render worker
+     * and commits the result. Never implement client-side merge here.
      */
     async mergeScene(
       slug: string,

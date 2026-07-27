@@ -31,6 +31,14 @@ export {
   type ErrorEnvelope,
 } from "./errors.js";
 export {
+  collectReferencedFileIds,
+  formatMergeCommitMessage,
+  MERGE_WORKER_DISABLED_MESSAGE,
+  parseMergeQuery,
+  type MergePushExtras,
+  type SceneMergeService,
+} from "./merge.js";
+export {
   Database,
   openDatabase,
   gzipJson,

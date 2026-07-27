@@ -12,6 +12,7 @@ import {
   filesNeedingUpload,
   formatFileUploadError,
   formatLockBadge,
+  formatRemoteUpdateToast,
   getEditorUnsavedFlag,
   hasUnsavedChanges,
   initialCoalescerState,
@@ -22,6 +23,7 @@ import {
   selectInitialSource,
   setEditorUnsavedFlag,
   shouldShowLockControls,
+  shouldShowRemoteUpdateToast,
   turnMenuLabel,
   turnMenuShouldClaim,
   validateCommitMessage,
@@ -439,5 +441,42 @@ describe("isEditorLockActive / formatLockBadge / turnMenu", () => {
     // must not appear at all.
     assert.equal(shouldShowLockControls(true), false);
     assert.equal(shouldShowLockControls(false), true);
+  });
+});
+
+describe("remote update toast", () => {
+  test("formatRemoteUpdateToast includes author version and message", () => {
+    assert.equal(
+      formatRemoteUpdateToast({
+        version: 12,
+        author: "agent",
+        message: "added queue",
+      }),
+      'agent pushed v12: “added queue”',
+    );
+  });
+
+  test("shouldShowRemoteUpdateToast ignores self and stale heads", () => {
+    assert.equal(
+      shouldShowRemoteUpdateToast(
+        { headVersion: 5, author: "agent" },
+        { localHead: 5, selfName: "admin" },
+      ),
+      false,
+    );
+    assert.equal(
+      shouldShowRemoteUpdateToast(
+        { headVersion: 6, author: "admin" },
+        { localHead: 5, selfName: "admin" },
+      ),
+      false,
+    );
+    assert.equal(
+      shouldShowRemoteUpdateToast(
+        { headVersion: 6, author: "agent" },
+        { localHead: 5, selfName: "admin" },
+      ),
+      true,
+    );
   });
 });

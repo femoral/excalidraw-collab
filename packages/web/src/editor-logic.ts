@@ -598,3 +598,35 @@ export function turnMenuShouldClaim(
 export function shouldShowLockControls(readOnly: boolean): boolean {
   return !readOnly;
 }
+
+// ---------------------------------------------------------------------------
+// Remote head toast (issue #29 — "Merge into mine")
+// ---------------------------------------------------------------------------
+
+export type RemoteUpdateToast = {
+  version: number;
+  author: string;
+  message: string;
+};
+
+/** Banner copy when someone else pushed while the editor is open. */
+export function formatRemoteUpdateToast(event: RemoteUpdateToast): string {
+  const msg =
+    event.message && event.message.length > 0
+      ? event.message
+      : "(no message)";
+  return `${event.author} pushed v${event.version}: “${msg}”`;
+}
+
+/**
+ * Whether a long-poll event should surface a remote-update toast.
+ * Ignore our own commits (author === self) and events at or behind local head.
+ */
+export function shouldShowRemoteUpdateToast(
+  event: { headVersion: number; author: string },
+  opts: { localHead: number; selfName: string | null },
+): boolean {
+  if (event.headVersion <= opts.localHead) return false;
+  if (opts.selfName && event.author === opts.selfName) return false;
+  return true;
+}

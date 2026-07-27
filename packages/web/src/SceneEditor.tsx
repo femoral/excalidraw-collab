@@ -821,8 +821,8 @@ export function SceneEditor({
   }
 
   /**
-   * SEAM (issue #29): wire Merge to POST /scene?merge=true with the local
-   * working copy. Server reconciles with head; we do not fake a client merge.
+   * Merge into mine: POST /scene?merge=true with the local working copy.
+   * Server reconciles via upstream reconcileElements; never a client-side merge.
    */
   async function handleRemoteMerge() {
     if (remoteToast.kind !== "visible" && remoteToast.kind !== "error") return;
@@ -863,7 +863,6 @@ export function SceneEditor({
         { includeFiles: true },
       );
 
-      // SEAM: issue #29 — do not replace with client-side reconcileElements.
       const result = await api.mergeScene(slug, body);
 
       await applyRemoteDocument({
@@ -886,8 +885,8 @@ export function SceneEditor({
       const message =
         err instanceof ApiError
           ? err.message ||
-            (err.status === 404 || err.status === 501
-              ? "Server-side merge is not available yet (issue #29)."
+            (err.status === 501
+              ? "Server-side merge requires RENDER_WORKER=on on the server."
               : err.message)
           : err instanceof Error
             ? err.message

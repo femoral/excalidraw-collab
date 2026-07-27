@@ -2,14 +2,17 @@
  * Version push/pull routes — the core of the turn model.
  *
  *   GET  /api/scenes/:slug/scene[?v=]
- *   POST /api/scenes/:slug/scene[?force=true]
+ *   POST /api/scenes/:slug/scene[?force=true][&merge=true]
  *   GET  /api/scenes/:slug/versions
  *
  * Optimistic concurrency: a push declares `parentVersion`. When it equals
  * head the push becomes head+1 in one SQLite transaction; otherwise 409.
+ * With `?merge=true` on a stale parent the server runs upstream
+ * `reconcileElements` in the render worker and commits the result.
  * `author` is always taken from the bearer token identity.
  */
 import {
+  diffScenes,
   normalizeScene,
   sceneHash,
   SceneValidationError,
@@ -33,6 +36,22 @@ import {
   decodeDataURL,
   type FileStore,
 } from "./files.js";
+import {
+  collectReferencedFileIds,
+  formatMergeCommitMessage,
+  MERGE_WORKER_DISABLED_MESSAGE,
+  MERGE_WORKER_NOT_INSTALLED_MESSAGE,
+  parseMergeQuery,
+  type MergePushExtras,
+  type SceneMergeService,
+} from "./merge.js";
+
+/** Duck-type RenderError NOT_INSTALLED without importing render.ts (cycle). */
+function isRenderNotInstalledError(err: unknown): boolean {
+  if (err === null || typeof err !== "object") return false;
+  const e = err as { name?: string; code?: string };
+  return e.name === "RenderError" && e.code === "NOT_INSTALLED";
+}
 
 /** Default page size for version history. */
 export const VERSIONS_DEFAULT_LIMIT = 50;
@@ -61,6 +80,11 @@ export type PushVersionResponse = {
   elementCount: number;
   sceneHash: string;
   headVersion: number;
+  /** Present when the push ran a server-side merge. */
+  merged?: boolean;
+  mergeParents?: { local: number; remote: number };
+  /** Diff of remote head → merge result (what the merge decided). */
+  diff?: SceneDiff;
 };
 
 /**
@@ -336,6 +360,8 @@ const pushBodySchema = {
  * When `diffs` is provided, 409 conflict responses include the structured
  * parent→head diff from that service (shared cache with GET /diff).
  * When `events` is provided, successful commits notify long-poll waiters.
+ * When `merge` is provided, `?merge=true` on a stale parent runs upstream
+ * reconcileElements via that service; without it, merge fails with 501.
  */
 export async function registerVersionRoutes(
   app: FastifyInstance,
@@ -346,9 +372,15 @@ export async function registerVersionRoutes(
     diffs?: SceneDiffService;
     /** Notified after a successful commit (long-poll `GET /events`). */
     events?: SceneEventHub;
+    /**
+     * Server-side merge (render worker). When absent, `?merge=true` on a
+     * stale parent returns 501 — never a hand-rolled fallback.
+     */
+    merge?: SceneMergeService | null;
   },
 ): Promise<void> {
   const { db, store, diffs, events } = deps;
+  const mergeService = deps.merge ?? null;
   const authPreHandler = createAuthPreHandler(db);
 
   await app.register(
@@ -400,11 +432,11 @@ export async function registerVersionRoutes(
       });
 
       // -----------------------------------------------------------------
-      // POST /scenes/:slug/scene[?force=true]
+      // POST /scenes/:slug/scene[?force=true][&merge=true]
       // -----------------------------------------------------------------
       api.post<{
         Params: { slug: string };
-        Querystring: { force?: string };
+        Querystring: { force?: string; merge?: string };
         Body: PushBody;
       }>(
         "/scenes/:slug/scene",
@@ -458,6 +490,17 @@ export async function registerVersionRoutes(
             );
           }
 
+          const force = parseForceQuery(request.query.force);
+          const wantMerge = parseMergeQuery(request.query.merge);
+
+          if (force && wantMerge) {
+            throw new AppError(
+              ErrorCode.VALIDATION,
+              "force and merge are mutually exclusive — choose one resolution strategy",
+              400,
+            );
+          }
+
           // Normalize before store — never hand-author element internals.
           let doc: SceneDocument;
           try {
@@ -478,6 +521,215 @@ export async function registerVersionRoutes(
             throw err;
           }
 
+          // Author from token only — body.author is structurally ignored.
+          const author = authorFromIdentity(identity);
+          const head = scene.head_version;
+
+          // ------------------------------------------------------------------
+          // Merge path: stale parent + ?merge=true → reconcile in render worker
+          // ------------------------------------------------------------------
+          if (wantMerge && parentVersion !== head) {
+            if (!mergeService) {
+              throw new AppError(
+                ErrorCode.NOT_IMPLEMENTED,
+                MERGE_WORKER_DISABLED_MESSAGE,
+                501,
+                { reason: "disabled" },
+              );
+            }
+
+            if (head < 1) {
+              // No remote content to merge with — treat as a normal first push
+              // would, but parent is stale against an empty head (impossible
+              // if parent > 0 and head is 0). Fall through to normal conflict.
+              throw new AppError(
+                ErrorCode.CONFLICT,
+                `parentVersion ${parentVersion} does not match head ${head}`,
+                409,
+                {
+                  code: "conflict",
+                  head,
+                  parentVersion,
+                  diff: {
+                    from: parentVersion,
+                    to: head,
+                    summary: {
+                      added: 0,
+                      deleted: 0,
+                      updated: 0,
+                      reordered: 0,
+                    },
+                    elements: [],
+                    appState: [],
+                  },
+                } satisfies ConflictDetails,
+              );
+            }
+
+            const remoteRow = db.getVersion(scene.id, head);
+            if (!remoteRow) {
+              throw new AppError(
+                ErrorCode.INTERNAL,
+                `head version ${head} missing for scene ${slug}`,
+                500,
+              );
+            }
+            const remoteDoc = versionToDocument(store, remoteRow);
+
+            let mergedElements: unknown[];
+            try {
+              const merged = await mergeService.merge({
+                localElements: doc.elements,
+                remoteElements: remoteDoc.elements,
+                // Empty appState → pure version/versionNonce rules (no
+                // "currently editing" local bias from a browser session).
+                appState: {},
+              });
+              mergedElements = merged.elements;
+            } catch (err) {
+              if (err instanceof AppError) throw err;
+              if (isRenderNotInstalledError(err)) {
+                const cause = err instanceof Error ? err.message : undefined;
+                throw new AppError(
+                  ErrorCode.NOT_IMPLEMENTED,
+                  MERGE_WORKER_NOT_INSTALLED_MESSAGE,
+                  501,
+                  {
+                    reason: "not_installed",
+                    ...(cause ? { cause } : {}),
+                  },
+                );
+              }
+              const msg =
+                err instanceof Error ? err.message : "merge failed in render worker";
+              throw new AppError(
+                ErrorCode.INTERNAL,
+                `server-side merge failed: ${msg}`,
+                500,
+              );
+            }
+
+            // Re-normalize the merged scene (appState stays local/"mine").
+            let mergedDoc: SceneDocument;
+            try {
+              mergedDoc = normalizeScene({
+                elements: mergedElements,
+                appState: doc.appState,
+                files: {
+                  ...remoteDoc.files,
+                  ...doc.files,
+                },
+              });
+            } catch (err) {
+              if (err instanceof SceneValidationError) {
+                throw new AppError(
+                  ErrorCode.VALIDATION,
+                  `merged scene failed validation: ${err.message}`,
+                  400,
+                  { problems: err.problems },
+                );
+              }
+              throw err;
+            }
+
+            // Store any new client files; remote files already content-addressed.
+            storeSceneFiles(store, doc.files);
+            const fileIds = collectReferencedFileIds(mergedDoc.elements);
+
+            const commitMessage = formatMergeCommitMessage(
+              message,
+              parentVersion,
+              head,
+            );
+            const elementsBlob = gzipJson(mergedDoc.elements);
+            const appStateBlob = gzipJson(mergedDoc.appState);
+            const elementCount = mergedDoc.elements.length;
+            const hash = String(sceneHash(mergedDoc.elements));
+
+            // force: true so commit accepts the stale parent; parent_version
+            // column still records the client's declared parent.
+            const result = db.commitVersion({
+              sceneId: scene.id,
+              parentVersion,
+              force: true,
+              author,
+              message: commitMessage,
+              elements: elementsBlob,
+              app_state: appStateBlob,
+              file_ids: fileIds,
+              element_count: elementCount,
+              scene_hash: hash,
+            });
+
+            if (!result.ok) {
+              if (result.reason === "not_found") {
+                throw new AppError(
+                  ErrorCode.NOT_FOUND,
+                  `scene not found: ${slug}`,
+                  404,
+                );
+              }
+              // Race: head moved again between read and commit.
+              throw new AppError(
+                ErrorCode.CONFLICT,
+                `merge raced with another commit (head is now ${result.head}); retry`,
+                409,
+                {
+                  code: "conflict",
+                  head: result.head,
+                  parentVersion: result.parentVersion,
+                  diff: diffs
+                    ? diffs.conflictDiff(
+                        scene.id,
+                        result.parentVersion,
+                        result.head,
+                      )
+                    : {
+                        from: result.parentVersion,
+                        to: result.head,
+                        summary: {
+                          added: 0,
+                          deleted: 0,
+                          updated: 0,
+                          reordered: 0,
+                        },
+                        elements: [],
+                        appState: [],
+                      },
+                } satisfies ConflictDetails,
+              );
+            }
+
+            // What the merge decided: remote head → committed merge result.
+            const mergeDiff = diffScenes(
+              {
+                elements: remoteDoc.elements as SceneDocument["elements"],
+                appState: remoteDoc.appState,
+                files: remoteDoc.files ?? {},
+              },
+              {
+                elements: mergedDoc.elements,
+                appState: mergedDoc.appState,
+                files: mergedDoc.files ?? {},
+              },
+              { from: head, to: result.version.version },
+            );
+
+            events?.publish(scene.id, result.version.version);
+
+            const body: PushVersionResponse & MergePushExtras = {
+              ...toPushResponse(result.version),
+              merged: true,
+              mergeParents: { local: parentVersion, remote: head },
+              diff: mergeDiff,
+            };
+            return reply.status(201).send(body);
+          }
+
+          // ------------------------------------------------------------------
+          // Normal / force path (merge=true with matching parent falls here)
+          // ------------------------------------------------------------------
+
           // Content-addressed file store (SHA-1 verify each claimed id).
           const fileIds = storeSceneFiles(store, doc.files);
 
@@ -485,10 +737,6 @@ export async function registerVersionRoutes(
           const appStateBlob = gzipJson(doc.appState);
           const elementCount = doc.elements.length;
           const hash = String(sceneHash(doc.elements));
-
-          // Author from token only — body.author is structurally ignored.
-          const author = authorFromIdentity(identity);
-          const force = parseForceQuery(request.query.force);
 
           const result = db.commitVersion({
             sceneId: scene.id,

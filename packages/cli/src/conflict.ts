@@ -49,6 +49,7 @@ export function resolutionCommands(
   return [
     `excalicli pull ${slug}`,
     `excalicli push ${slug} -m ${m}`,
+    `excalicli push ${slug} -m ${m} --merge`,
     `excalicli push ${slug} -m ${m} --force`,
   ];
 }
@@ -160,8 +161,10 @@ export function formatConflictMessage(
     `  1. ${cmds[0]}                  # refresh local file + state to head`,
     `  2. # re-apply your edits to the file`,
     `  3. ${cmds[1]}   # retry`,
-    `  # or take the server head as yours:`,
+    `  # or server-side merge (upstream reconcileElements; needs RENDER_WORKER=on):`,
     `  ${cmds[2]}`,
+    `  # or take the server head as yours:`,
+    `  ${cmds[3]}`,
     "",
   ];
   return lines.join("\n");
