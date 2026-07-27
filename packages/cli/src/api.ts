@@ -201,17 +201,19 @@ export async function apiFetchText(options: ApiFetchOptions): Promise<string> {
   return text;
 }
 
-/** Result of a successful binary (image) fetch. */
+/** Result of a successful binary (image / backup archive) fetch. */
 export type ApiBinaryResult = {
   bytes: Uint8Array;
   contentType: string | null;
   status: number;
+  /** Selected response headers (lowercase names) for callers that need them. */
+  headers: Record<string, string>;
 };
 
 /**
- * Fetch a binary body (PNG/SVG render endpoints). On non-OK responses, still
- * parses a JSON error envelope when present so {@link CliError} carries the
- * server code and `details.reason` for render-unavailable cases.
+ * Fetch a binary body (PNG/SVG render endpoints, backup archive). On non-OK
+ * responses, still parses a JSON error envelope when present so
+ * {@link CliError} carries the server code and `details.reason`.
  */
 export async function apiFetchBinary(
   options: ApiFetchOptions,
@@ -229,7 +231,7 @@ export async function apiFetchBinary(
 
   const url = resolveUrl(reqPath, server);
   const headers = buildHeaders(init, token, {
-    accept: "image/png, image/svg+xml, application/json",
+    accept: "image/png, image/svg+xml, application/gzip, application/json",
   });
 
   let response: Response;
@@ -265,9 +267,14 @@ export async function apiFetchBinary(
   }
 
   const buffer = new Uint8Array(await response.arrayBuffer());
+  const headerMap: Record<string, string> = {};
+  response.headers.forEach((value, key) => {
+    headerMap[key.toLowerCase()] = value;
+  });
   return {
     bytes: buffer,
     contentType: response.headers.get("content-type"),
     status: response.status,
+    headers: headerMap,
   };
 }
