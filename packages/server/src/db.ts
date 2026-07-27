@@ -130,6 +130,20 @@ export type NewVersion = {
   scene_hash?: string;
 };
 
+/**
+ * Result of {@link Database.commitVersion}.
+ * Conflict means the push was rejected and no version number was consumed.
+ */
+export type CommitVersionResult =
+  | { ok: true; version: VersionRow; head: number }
+  | {
+      ok: false;
+      reason: "conflict";
+      head: number;
+      parentVersion: number;
+    }
+  | { ok: false; reason: "not_found" };
+
 export type UpsertDraft = {
   scene_id: string;
   elements: Buffer | Uint8Array;
@@ -678,6 +692,119 @@ export class Database {
     return this.getVersion(input.scene_id, input.version)!;
   }
 
+  /**
+   * Optimistic-concurrency commit: insert version `head+1` and bump
+   * `scenes.head_version` / `updated_at` in a **single transaction**.
+   *
+   * Uses `BEGIN IMMEDIATE` so the head check and write cannot race with
+   * another writer on the same connection pool / process. When
+   * `force` is false and `parentVersion !== head`, returns a conflict
+   * without inserting (rejected pushes never consume a version number).
+   *
+   * Entirely synchronous — callers must not await between logical steps
+   * of a push; this method is the only place that touches head + insert.
+   */
+  commitVersion(input: {
+    sceneId: string;
+    parentVersion: number;
+    force?: boolean;
+    author: string;
+    message: string;
+    elements: Buffer | Uint8Array;
+    app_state: Buffer | Uint8Array;
+    file_ids?: string[] | string;
+    element_count?: number;
+    scene_hash?: string;
+  }): CommitVersionResult {
+    this.raw.exec("BEGIN IMMEDIATE");
+    try {
+      const sceneRow = this.raw
+        .prepare(
+          `SELECT head_version, deleted_at FROM scenes WHERE id = ?`,
+        )
+        .get(input.sceneId) as
+        | { head_version: number; deleted_at: string | null }
+        | undefined;
+
+      if (!sceneRow || sceneRow.deleted_at != null) {
+        this.raw.exec("ROLLBACK");
+        return { ok: false, reason: "not_found" };
+      }
+
+      const head = Number(sceneRow.head_version);
+      const force = input.force === true;
+      if (!force && input.parentVersion !== head) {
+        this.raw.exec("ROLLBACK");
+        return {
+          ok: false,
+          reason: "conflict",
+          head,
+          parentVersion: input.parentVersion,
+        };
+      }
+
+      const newVersion = head + 1;
+      const created_at = nowIso();
+      const file_ids = encodeFileIds(input.file_ids);
+      const element_count = input.element_count ?? 0;
+      const scene_hash = input.scene_hash ?? "";
+      const elements = asBuffer(input.elements);
+      const app_state = asBuffer(input.app_state);
+
+      this.raw
+        .prepare(
+          `INSERT INTO versions (
+            scene_id, version, parent_version, author, message, created_at,
+            elements, app_state, file_ids, element_count, scene_hash
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          input.sceneId,
+          newVersion,
+          input.parentVersion,
+          input.author,
+          input.message,
+          created_at,
+          elements,
+          app_state,
+          file_ids,
+          element_count,
+          scene_hash,
+        );
+
+      // Same transaction: head and updated_at move with the insert.
+      this.raw
+        .prepare(
+          `UPDATE scenes SET head_version = ?, updated_at = ? WHERE id = ?`,
+        )
+        .run(newVersion, created_at, input.sceneId);
+
+      this.raw.exec("COMMIT");
+
+      const version = this.getVersion(input.sceneId, newVersion)!;
+      return { ok: true, version, head: newVersion };
+    } catch (err) {
+      try {
+        this.raw.exec("ROLLBACK");
+      } catch {
+        // ignore rollback errors
+      }
+      // PK (scene_id, version) collision under a race: surface as conflict
+      // so a rejected push still never leaves a gap on a successful path.
+      const message = err instanceof Error ? err.message : String(err);
+      if (/UNIQUE constraint failed/i.test(message)) {
+        const scene = this.getSceneById(input.sceneId);
+        return {
+          ok: false,
+          reason: "conflict",
+          head: scene?.head_version ?? input.parentVersion,
+          parentVersion: input.parentVersion,
+        };
+      }
+      throw err;
+    }
+  }
+
   getVersion(sceneId: string, version: number): VersionRow | undefined {
     const row = this.raw
       .prepare(
@@ -694,6 +821,41 @@ export class Database {
       )
       .all(sceneId) as Array<Record<string, unknown>>;
     return rows.map(mapVersion);
+  }
+
+  /**
+   * Paginated version history for a scene (newest first by default).
+   * Metadata only — blobs are not decoded here.
+   */
+  listVersionsPage(
+    sceneId: string,
+    options: {
+      limit: number;
+      offset: number;
+      /** Default `"desc"` (newest first) for history UIs / `excalicli log`. */
+      order?: "asc" | "desc";
+    },
+  ): { versions: VersionRow[]; total: number } {
+    const limit = Math.max(0, Math.trunc(options.limit));
+    const offset = Math.max(0, Math.trunc(options.offset));
+    const order = options.order === "asc" ? "ASC" : "DESC";
+
+    const totalRow = this.raw
+      .prepare(`SELECT COUNT(*) AS n FROM versions WHERE scene_id = ?`)
+      .get(sceneId) as { n: number };
+    const total = Number(totalRow.n);
+
+    // ORDER BY is fixed to ASC/DESC literals only (never user string concat).
+    const sql =
+      order === "ASC"
+        ? `SELECT * FROM versions WHERE scene_id = ? ORDER BY version ASC LIMIT ? OFFSET ?`
+        : `SELECT * FROM versions WHERE scene_id = ? ORDER BY version DESC LIMIT ? OFFSET ?`;
+
+    const rows = this.raw
+      .prepare(sql)
+      .all(sceneId, limit, offset) as Array<Record<string, unknown>>;
+
+    return { versions: rows.map(mapVersion), total };
   }
 
   /**

@@ -47,10 +47,25 @@ export {
   type SchemaMigrationRow,
   type NewScene,
   type NewVersion,
+  type CommitVersionResult,
   type UpsertDraft,
   type NewToken,
   type OpenDatabaseOptions,
 } from "./db.js";
+export {
+  emptySceneDocument,
+  rehydrateSceneFiles,
+  resolveVersionRef,
+  storeSceneFiles,
+  toPushResponse,
+  toVersionInfo,
+  versionToDocument,
+  VERSIONS_DEFAULT_LIMIT,
+  VERSIONS_MAX_LIMIT,
+  type ConflictDetails,
+  type PushVersionResponse,
+  type VersionInfo,
+} from "./versions.js";
 export {
   FileStore,
   gcUnreferencedFiles,
