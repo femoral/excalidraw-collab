@@ -27,7 +27,16 @@ export type Config = {
   serveStatic: boolean;
   /** Directory of the built web app (used only when serveStatic is true). */
   staticRoot: string;
+  /**
+   * Maximum accepted binary-file upload size in bytes (content-addressed
+   * store). Applies to both JSON `BinaryFileData` (decoded payload size) and
+   * raw-byte uploads. Default 10 MiB.
+   */
+  maxFileBytes: number;
 };
+
+/** Default max upload size for content-addressed files (10 MiB). */
+export const DEFAULT_MAX_FILE_BYTES = 10 * 1024 * 1024;
 
 const LOG_LEVELS = new Set<LogLevel>([
   "fatal",
@@ -98,6 +107,23 @@ function parseRenderWorker(raw: string): RenderWorkerMode {
   );
 }
 
+function parseMaxFileBytes(raw: string): number {
+  if (!/^\d+$/.test(raw.trim())) {
+    throw new ConfigError(
+      "MAX_FILE_BYTES",
+      `expected a positive integer (bytes), got ${JSON.stringify(raw)}`,
+    );
+  }
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1) {
+    throw new ConfigError(
+      "MAX_FILE_BYTES",
+      `expected a positive integer (bytes), got ${JSON.stringify(raw)}`,
+    );
+  }
+  return n;
+}
+
 /**
  * Load and validate config from an env-like record.
  * Fails fast with {@link ConfigError} naming the offending variable.
@@ -139,6 +165,11 @@ export function loadConfig(
     throw new ConfigError("STATIC_ROOT", "path must not contain null bytes");
   }
 
+  const maxFileBytes =
+    env.MAX_FILE_BYTES !== undefined && env.MAX_FILE_BYTES !== ""
+      ? parseMaxFileBytes(env.MAX_FILE_BYTES)
+      : DEFAULT_MAX_FILE_BYTES;
+
   return {
     port,
     dataDir,
@@ -147,5 +178,6 @@ export function loadConfig(
     logLevel,
     serveStatic,
     staticRoot,
+    maxFileBytes,
   };
 }

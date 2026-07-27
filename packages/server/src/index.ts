@@ -15,6 +15,7 @@ export {
 export {
   loadConfig,
   ConfigError,
+  DEFAULT_MAX_FILE_BYTES,
   type Config,
   type LogLevel,
   type RenderWorkerMode,
@@ -50,6 +51,27 @@ export {
   type NewToken,
   type OpenDatabaseOptions,
 } from "./db.js";
+export {
+  FileStore,
+  gcUnreferencedFiles,
+  hashFileContent,
+  decodeDataURL,
+  claimedFileIdMismatchError,
+  registerFileRoutes,
+  FILES_SUBDIR,
+  SIDECAR_SUFFIX,
+  FILE_ID_HEX_RE,
+  FILE_ID_REASON_HASH_MISMATCH,
+  FILE_ID_REASON_NON_SECURE_NANOID,
+  IMMUTABLE_CACHE_CONTROL,
+  type FileSidecar,
+  type StoredFile,
+  type PutFileResult,
+  type GcOptions,
+  type GcResult,
+  type FileIdMismatchReason,
+  type FileIdMismatchDetails,
+} from "./files.js";
 export type { TokenCreated, TokenInfo } from "./tokens.js";
 export type { SceneInfo } from "./scenes.js";
 export {
