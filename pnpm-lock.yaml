@@ -19,6 +19,10 @@ importers:
         version: 5.9.3
 
   packages/cli:
+    dependencies:
+      '@excalidraw-collab/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       '@excalidraw-collab/server':
         specifier: workspace:*
