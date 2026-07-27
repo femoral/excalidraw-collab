@@ -1,6 +1,6 @@
 /**
  * @excalidraw-collab/core — pure TypeScript types, scene normalization,
- * validation, scene digest, and (future) diff engine.
+ * validation, the element diff engine, and the scene digest.
  * Zero runtime dependencies.
  */
 
@@ -64,3 +64,10 @@ export {
   DEFAULT_DIGEST_MAX_ELEMENTS,
 } from "./digest.js";
 export type { DigestOptions, FormatDigestOptions } from "./digest.js";
+
+export {
+  diffScenes,
+  formatDiff,
+  isEmptyDiff,
+  type DiffScenesOptions,
+} from "./diff.js";
