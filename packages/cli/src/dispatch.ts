@@ -71,6 +71,12 @@ function writeSuccess(
   result: CommandResult,
   json: boolean,
 ): void {
+  if (result.warning) {
+    const msg = result.warning.endsWith("\n")
+      ? result.warning
+      : `${result.warning}\n`;
+    io.stderr.write(msg);
+  }
   if (json) {
     io.stdout.write(formatJson(result.data));
   } else {

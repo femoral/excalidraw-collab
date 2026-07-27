@@ -93,10 +93,19 @@ export type { TokenCreated, TokenInfo } from "./tokens.js";
 export type { SceneInfo } from "./scenes.js";
 export {
   allocateSlug,
+  isSceneLockActive,
   isValidSlug,
   slugifyName,
+  toLock,
   SLUG_MAX_LENGTH,
 } from "./scenes.js";
+export {
+  DEFAULT_LOCK_TTL_SECONDS,
+  MAX_LOCK_TTL_SECONDS,
+  registerLockRoutes,
+  type ClaimLockBody,
+  type LockInfo,
+} from "./locks.js";
 export {
   DiffCache,
   DEFAULT_DIFF_CACHE_MAX,

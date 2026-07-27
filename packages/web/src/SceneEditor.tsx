@@ -20,7 +20,12 @@ import {
   type MouseEvent,
   type ReactElement,
 } from "react";
-import { ApiError, type ApiClient, type BinaryFilePayload } from "./api.ts";
+import {
+  ApiError,
+  type ApiClient,
+  type BinaryFilePayload,
+  type LockInfo,
+} from "./api.ts";
 import {
   arrayBufferToDataURL,
   buildCommitPayload,
@@ -29,14 +34,19 @@ import {
   DRAFT_AUTOSAVE_MS,
   filesNeedingUpload,
   formatFileUploadError,
+  formatLockBadge,
   getEditorUnsavedFlag,
   hasUnsavedChanges,
+  isEditorLockActive,
   postCommitState,
   saveIndicatorLabel,
   selectInitialSource,
   setEditorUnsavedFlag,
+  turnMenuLabel,
+  turnMenuShouldClaim,
   UNSAVED_LEAVE_MESSAGE,
   validateCommitMessage,
+  type EditorLock,
   type EditorSnapshot,
   type SaveIndicator,
 } from "./editor-logic.ts";
@@ -97,18 +107,6 @@ function snapshotFromEditor(
   return { elements, appState, files: fileMap };
 }
 
-/**
- * SEAM for issue #23 — advisory turn lock API lands there.
- * Menu items are wired; behaviour is intentionally a no-op with a clear note.
- */
-function claimOrReleaseTurnSeam(): void {
-  // TODO(#23): call POST/DELETE /api/scenes/:slug/lock once the locking API lands.
-  // Do not fake lock state in the UI before then.
-  console.info(
-    "[excalidraw-collab] Claim/release turn is a seam for #23 (locking API).",
-  );
-}
-
 export function SceneEditor({
   slug,
   api,
@@ -124,6 +122,11 @@ export function SceneEditor({
   const [commitMessage, setCommitMessage] = useState("");
   const [commitError, setCommitError] = useState<string | null>(null);
   const [commitBusy, setCommitBusy] = useState(false);
+
+  /** Advisory turn lock (null = free / expired). */
+  const [lock, setLock] = useState<EditorLock>(null);
+  const [selfName, setSelfName] = useState<string | null>(null);
+  const [lockBusy, setLockBusy] = useState(false);
 
   const headVersionRef = useRef(0);
   const uploadedFilesRef = useRef(new Set<string>());
@@ -147,16 +150,23 @@ export function SceneEditor({
     setSaveError(null);
     setFileError(null);
     setBanner(null);
+    setLock(null);
     uploadedFilesRef.current = new Set();
 
     void (async () => {
       try {
-        const [meta, sceneDoc, draft] = await Promise.all([
+        const [meta, sceneDoc, draft, who] = await Promise.all([
           api.getSceneMeta(slug),
           api.getSceneDocument(slug),
           api.getDraft(slug),
+          api.whoami().catch(() => null),
         ]);
         if (cancelled) return;
+
+        if (who) setSelfName(who.name);
+        setLock(
+          meta.lock && isEditorLockActive(meta.lock) ? meta.lock : null,
+        );
 
         const selection = selectInitialSource(
           draft
@@ -445,6 +455,20 @@ export function SceneEditor({
       setBanner(null);
       setCommitOpen(false);
       setCommitMessage("");
+      // Successful push by the lock holder auto-releases server-side.
+      if (selfName && lock && lock.holder === selfName) {
+        setLock(null);
+      } else {
+        // Refresh meta so we notice holder release / expiry after our push.
+        try {
+          const meta = await api.getSceneMeta(slug);
+          setLock(
+            meta.lock && isEditorLockActive(meta.lock) ? meta.lock : null,
+          );
+        } catch {
+          // non-fatal
+        }
+      }
       setBanner(
         `Committed v${result.version} as ${result.author}: “${result.message}”`,
       );
@@ -462,6 +486,65 @@ export function SceneEditor({
       }
     } finally {
       setCommitBusy(false);
+    }
+  }
+
+  // ----- advisory turn lock -------------------------------------------------
+
+  async function handleClaimOrReleaseTurn() {
+    if (lockBusy) return;
+    setLockBusy(true);
+    try {
+      if (turnMenuShouldClaim(lock)) {
+        const claimed = await api.claimLock(slug);
+        setLock(claimed);
+        setBanner(`You hold the turn as ${claimed.holder}.`);
+      } else {
+        await api.releaseLock(slug);
+        setLock(null);
+        setBanner("Turn released.");
+      }
+    } catch (err) {
+      if (err instanceof ApiError && err.isUnauthorized) return;
+      if (err instanceof ApiError && err.code === "LOCK_HELD") {
+        const details = err.details as LockInfo | undefined;
+        if (details?.holder) {
+          setLock({
+            holder: details.holder,
+            expiresAt: details.expiresAt ?? "",
+          });
+          setBanner(
+            `${details.holder} already holds the turn` +
+              (details.expiresAt ? ` until ${details.expiresAt}` : "") +
+              ". You can still draw and commit — locks are advisory.",
+          );
+        } else {
+          setBanner(err.message);
+        }
+        return;
+      }
+      setBanner(
+        err instanceof Error ? err.message : "Could not update turn lock.",
+      );
+    } finally {
+      setLockBusy(false);
+    }
+  }
+
+  async function handleReleaseFromBadge() {
+    if (lockBusy) return;
+    setLockBusy(true);
+    try {
+      await api.releaseLock(slug);
+      setLock(null);
+      setBanner("Turn released.");
+    } catch (err) {
+      if (err instanceof ApiError && err.isUnauthorized) return;
+      setBanner(
+        err instanceof Error ? err.message : "Could not release turn.",
+      );
+    } finally {
+      setLockBusy(false);
     }
   }
 
@@ -492,6 +575,8 @@ export function SceneEditor({
   }
 
   const indicatorText = saveIndicatorLabel(saveIndicator);
+  const lockActive = isEditorLockActive(lock);
+  const menuTurnLabel = turnMenuLabel(lock, selfName);
 
   return (
     <div className="editor-shell">
@@ -519,6 +604,28 @@ export function SceneEditor({
                 <span className="editor-save-dot" aria-hidden="true" />
               ) : null}
               {indicatorText}
+            </span>
+          ) : null}
+          {lockActive && lock ? (
+            <span
+              className="editor-lock-badge"
+              title={
+                lock.expiresAt
+                  ? `Expires ${lock.expiresAt}`
+                  : "Advisory turn lock"
+              }
+            >
+              <span className="editor-lock-badge-text">
+                {formatLockBadge(lock)}
+              </span>
+              <button
+                type="button"
+                className="editor-lock-release"
+                disabled={lockBusy}
+                onClick={() => void handleReleaseFromBadge()}
+              >
+                Release
+              </button>
             </span>
           ) : null}
         </div>
@@ -621,16 +728,12 @@ export function SceneEditor({
             >
               Version history
             </MainMenu.Item>
-            {/* SEAM #23: advisory turn lock — wire when locking API lands. */}
             <MainMenu.Item
               onSelect={() => {
-                claimOrReleaseTurnSeam();
-                setBanner(
-                  "Turn claim/release lands with the locking API (#23). This menu item is intentionally a seam.",
-                );
+                void handleClaimOrReleaseTurn();
               }}
             >
-              Claim / release turn
+              {menuTurnLabel}
             </MainMenu.Item>
             <MainMenu.Separator />
             <MainMenu.DefaultItems.ChangeCanvasBackground />

@@ -660,16 +660,39 @@ export class Database {
     return this.getSceneById(id);
   }
 
+  /**
+   * Set or clear the advisory turn lock on a scene.
+   * Pass nulls to release. Does not check expiry — callers decide whether
+   * an existing lock is still active before claiming.
+   */
   setSceneLock(
     id: string,
     lockHolder: string | null,
     lockExpiresAt: string | null,
-  ): void {
+  ): SceneRow | undefined {
     this.raw
       .prepare(
-        `UPDATE scenes SET lock_holder = ?, lock_expires_at = ? WHERE id = ?`,
+        `UPDATE scenes SET lock_holder = ?, lock_expires_at = ?
+         WHERE id = ? AND deleted_at IS NULL`,
       )
       .run(lockHolder, lockExpiresAt, id);
+    return this.getSceneById(id);
+  }
+
+  /**
+   * Clear the lock only when the current holder matches `holder`.
+   * Used so a successful push by the lock holder auto-releases without
+   * clobbering a different holder's claim. Returns true when a row changed.
+   */
+  clearSceneLockIfHolder(id: string, holder: string): boolean {
+    const result = this.raw
+      .prepare(
+        `UPDATE scenes
+         SET lock_holder = NULL, lock_expires_at = NULL
+         WHERE id = ? AND lock_holder = ? AND deleted_at IS NULL`,
+      )
+      .run(id, holder) as { changes: number };
+    return Number(result.changes) > 0;
   }
 
   /**
@@ -825,6 +848,17 @@ export class Database {
       this.raw
         .prepare(`DELETE FROM drafts WHERE scene_id = ?`)
         .run(input.sceneId);
+
+      // Advisory turn lock: holder releases on their own successful push.
+      // Anyone else's push leaves the lock alone (still advisory, still
+      // polite). Compare holder to author (token name) — not client input.
+      this.raw
+        .prepare(
+          `UPDATE scenes
+           SET lock_holder = NULL, lock_expires_at = NULL
+           WHERE id = ? AND lock_holder = ?`,
+        )
+        .run(input.sceneId, input.author);
 
       this.raw.exec("COMMIT");
 

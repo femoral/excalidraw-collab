@@ -89,6 +89,19 @@ export type FileUploadResponse = {
   created: number;
 };
 
+/** Advisory turn lock (POST /lock response and SceneInfo.lock). */
+export type LockInfo = {
+  holder: string;
+  expiresAt: string;
+};
+
+/** Identity of the current bearer token (GET /api/whoami). */
+export type WhoamiInfo = {
+  id: string;
+  name: string;
+  isAdmin: boolean;
+};
+
 export type ServerErrorBody = {
   error: {
     code: string;
@@ -414,6 +427,33 @@ export function createApiClient(options: ApiClientOptions) {
       return request<{ bytes: ArrayBuffer; mimeType: string }>(
         `/api/files/${encodeURIComponent(fileId)}`,
         { binary: true },
+      );
+    },
+
+    /** Current token identity (author name for locks and history). */
+    async whoami(): Promise<WhoamiInfo> {
+      return request<WhoamiInfo>("/api/whoami");
+    },
+
+    /**
+     * Claim (or refresh) the advisory turn lock. Holder is the token identity.
+     * On LOCK_HELD the ApiError carries `{ holder, expiresAt }` in details.
+     */
+    async claimLock(
+      slug: string,
+      body: { ttl?: number } = {},
+    ): Promise<LockInfo> {
+      return request<LockInfo>(
+        `/api/scenes/${encodeURIComponent(slug)}/lock`,
+        { method: "POST", body },
+      );
+    },
+
+    /** Release the advisory turn lock. Any identity may release. */
+    async releaseLock(slug: string): Promise<void> {
+      await request<void>(
+        `/api/scenes/${encodeURIComponent(slug)}/lock`,
+        { method: "DELETE" },
       );
     },
   };

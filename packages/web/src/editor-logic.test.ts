@@ -11,14 +11,18 @@ import {
   createDebouncedCoalescer,
   filesNeedingUpload,
   formatFileUploadError,
+  formatLockBadge,
   getEditorUnsavedFlag,
   hasUnsavedChanges,
   initialCoalescerState,
   isDraftNewerThanHead,
+  isEditorLockActive,
   postCommitState,
   saveIndicatorLabel,
   selectInitialSource,
   setEditorUnsavedFlag,
+  turnMenuLabel,
+  turnMenuShouldClaim,
   validateCommitMessage,
   FILE_ID_REASON_HASH_MISMATCH,
   FILE_ID_REASON_NON_SECURE_NANOID,
@@ -365,5 +369,67 @@ describe("arrayBufferToDataURL / postCommitState", () => {
     assert.equal(s.headVersion, 7);
     assert.equal(s.saveIndicator, "idle");
     assert.equal(hasUnsavedChanges(s.saveIndicator), false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Advisory turn lock display
+// ---------------------------------------------------------------------------
+
+describe("isEditorLockActive / formatLockBadge / turnMenu", () => {
+  const now = Date.parse("2026-06-01T12:00:00.000Z");
+
+  test("null and expired locks are inactive", () => {
+    assert.equal(isEditorLockActive(null, now), false);
+    assert.equal(
+      isEditorLockActive(
+        { holder: "bot", expiresAt: "2026-06-01T11:00:00.000Z" },
+        now,
+      ),
+      false,
+    );
+    assert.equal(
+      isEditorLockActive(
+        { holder: "bot", expiresAt: "2026-06-01T13:00:00.000Z" },
+        now,
+      ),
+      true,
+    );
+  });
+
+  test("badge copy", () => {
+    assert.equal(
+      formatLockBadge({ holder: "claude-code", expiresAt: "x" }),
+      "🤖 claude-code holds the turn",
+    );
+  });
+
+  test("menu claim vs release", () => {
+    assert.equal(turnMenuShouldClaim(null, now), true);
+    assert.equal(turnMenuLabel(null, "admin", now), "Claim turn");
+    assert.equal(
+      turnMenuLabel(
+        { holder: "admin", expiresAt: "2026-06-01T13:00:00.000Z" },
+        "admin",
+        now,
+      ),
+      "Release turn",
+    );
+    // Someone else holds it — recovery action is still Release.
+    assert.equal(
+      turnMenuLabel(
+        { holder: "claude-code", expiresAt: "2026-06-01T13:00:00.000Z" },
+        "admin",
+        now,
+      ),
+      "Release turn",
+    );
+    assert.equal(
+      turnMenuShouldClaim(
+        { holder: "claude-code", expiresAt: "2026-06-01T13:00:00.000Z" },
+        now,
+      ),
+      false,
+    );
   });
 });

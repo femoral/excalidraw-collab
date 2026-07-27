@@ -6,6 +6,7 @@ import { lsCommand } from "./ls.js";
 import { newCommand } from "./new.js";
 import { pullCommand } from "./pull.js";
 import { pushCommand } from "./push.js";
+import { turnCommand } from "./turn.js";
 import { whoamiCommand } from "./whoami.js";
 import { tokenCommand } from "./token.js";
 
@@ -81,3 +82,4 @@ registerCommand(lsCommand);
 registerCommand(newCommand);
 registerCommand(pullCommand);
 registerCommand(pushCommand);
+registerCommand(turnCommand);
