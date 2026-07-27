@@ -177,6 +177,36 @@ After any successful push, local state advances to the new head automatically.
 
 ---
 
+## Waiting for the human
+
+After you finish a turn, hand the canvas back and **block** until the human
+acts — do not busy-poll `diff` or leave a streaming `watch` running forever.
+
+```sh
+excalicli push SLUG -m "agent turn done"
+excalicli turn release SLUG          # free the advisory lock if you held it
+# Park until the first new commit (or use --for-turn to wait for the lock):
+excalicli watch SLUG --once --timeout 900
+# exit 0 → something landed; exit 6 TIMEOUT → human walked away
+excalicli pull SLUG
+excalicli diff SLUG --since-last-pull
+excalicli describe SLUG
+# … edit, then push again
+```
+
+Useful variants:
+
+| Flag | Effect |
+|---|---|
+| `--once` | Exit 0 after the first matching event (one diff / one JSONL line) |
+| `--timeout SECONDS` | Exit **6** (`TIMEOUT`) after N seconds of silence; under `--json` emits `{"timeout":true,"slug":…}` |
+| `--events commit,turn` | Also wake on lock claim/release/TTL expiry (default is `commit` only) |
+| `--for-turn` | Block until the lock is free or held by this token, then exit 0 |
+
+Default flagless `watch` still streams until Ctrl-C — same as before.
+
+---
+
 ## `describe` vs `export --format png`
 
 | Need | Command | Requires render worker? |
@@ -249,6 +279,7 @@ prefer full documents when editing a human's existing scene.
 | **2** | USAGE | Bad CLI args, missing login, or push without a prior pull when head is already greater than 0 |
 | **4** | CONFLICT | Push rejected; read the conflict diff in the message / `--json` body |
 | **5** | LOCK_HELD | `turn claim` denied, or `push --respect-lock` while another holder is active |
+| **6** | TIMEOUT | `watch --timeout` elapsed with no matching event |
 
 Always check `$?` (or your runtime's exit status). Prefer `--json` when you will
 branch on outcomes — failures still put one JSON object on **stdout** and a
@@ -263,6 +294,8 @@ excalicli log SLUG                 # version history (newest first)
 excalicli log SLUG -n 20
 excalicli diff SLUG --from head~1 --to head
 excalicli watch SLUG               # long-poll; prints each new diff (JSONL with --json)
+excalicli watch SLUG --once --timeout 900   # block until one event or timeout (exit 6)
+excalicli watch SLUG --for-turn    # block until lock free or held by me
 excalicli pull --all -o ./scenes/  # every scene head as plain .excalidraw files
 excalicli backup -o backup.tar.gz  # admin: full portable archive
 excalicli restore backup.tar.gz    # admin: restore (see --on-collision)

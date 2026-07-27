@@ -144,6 +144,7 @@ export {
   type ClaimLockBody,
   type LockInfo,
 } from "./locks.js";
+export { LockExpiryScheduler } from "./lock-expiry.js";
 export {
   DiffCache,
   DEFAULT_DIFF_CACHE_MAX,

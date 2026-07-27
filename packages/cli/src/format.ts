@@ -26,6 +26,12 @@ export type CommandResult = {
    * `watch`). The dispatcher must not emit a second JSON value / table.
    */
   streamed?: boolean;
+  /**
+   * Process exit code when the command completed without throwing.
+   * Defaults to 0 (OK). Used by streaming waits that end on timeout
+   * (`watch --timeout` → 6) after writing their own JSONL trailer.
+   */
+  exitCode?: number;
 };
 
 /** Format a list of row objects as a simple aligned table. */

@@ -24,6 +24,7 @@ import {
   SceneEventHub,
 } from "./events.js";
 import { FileStore, registerFileRoutes } from "./files.js";
+import { LockExpiryScheduler } from "./lock-expiry.js";
 import { registerLockRoutes } from "./locks.js";
 import type { SceneMergeService } from "./merge.js";
 import {
@@ -204,7 +205,15 @@ export async function buildApp(
     // both GET /api/events (multiplexed) and GET /api/scenes/:slug/events.
     const events = deps.events ?? new SceneEventHub();
     app.decorate("events", events);
-    await registerLockRoutes(app, deps.db, events);
+    // TTL expiry publishes lock-free events so turn waiters wake without
+    // client-side polling (issue #39). Arms any locks already in the DB.
+    const lockExpiry = new LockExpiryScheduler(deps.db, events);
+    lockExpiry.armAllActive();
+    app.decorate("lockExpiry", lockExpiry);
+    app.addHook("onClose", async () => {
+      lockExpiry.close();
+    });
+    await registerLockRoutes(app, deps.db, events, lockExpiry);
     await registerSkeletonRoutes(app, {
       db: deps.db,
       converter: deps.skeletonConverter ?? null,
@@ -237,6 +246,7 @@ export async function buildApp(
         diffs,
         events,
         merge: deps.merge,
+        lockExpiry,
       });
       await registerDiffRoutes(app, {
         db: deps.db,

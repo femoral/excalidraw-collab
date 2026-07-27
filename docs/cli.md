@@ -35,6 +35,7 @@ Machine-readable command list: `excalicli --json` (no subcommand).
 | 2 | USAGE | Bad arguments, missing auth/config, or missing prior pull |
 | 4 | CONFLICT | Optimistic-concurrency push rejected (409); diff is in the response |
 | 5 | LOCK_HELD | Advisory turn lock held by someone else (`turn claim`, or `push --respect-lock`) |
+| 6 | TIMEOUT | `watch --timeout` elapsed with no matching event |
 
 ## Commands
 
@@ -236,14 +237,20 @@ excalicli version [--json]
 
 ### `watch`
 
-Long-poll for new versions and print each diff (JSONL under --json)
+Long-poll for new versions (and optional turn events); --once/--timeout for agent waits
 
 ```
-excalicli watch SLUG [--since N] [--json]
+excalicli watch SLUG [--since N] [--once] [--timeout SECONDS] [--events commit,turn] [--for-turn] [--json]
 
-  --since N   Start after version N (default: last pulled, else current head)
-  --json      Emit one JSON object per line (JSONL) as versions arrive
-Blocks until interrupted. Each new commit prints the from→to diff.
+  --since N              Start after version N (default: last pulled, else current head)
+  --once                 Exit 0 after the first matching event (prints one diff/JSONL line)
+  --timeout SECONDS      Give up after N seconds with no event (exit 6 TIMEOUT)
+  --events commit,turn   What wakes the watcher (default: commit). turn = lock claim/release/expiry
+  --for-turn             Block until the lock is free or held by this token, then exit 0
+  --json                 Emit one JSON object per line (JSONL) as events arrive
+
+Default (no flags): stream forever until Ctrl-C — same as historical watch.
+Agent hand-back: push → turn release → watch --once --timeout 900 → pull → diff.
 ```
 
 ### `whoami`
