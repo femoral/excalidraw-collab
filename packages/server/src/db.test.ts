@@ -45,7 +45,7 @@ function testConfig(overrides: Partial<Config> = {}): Config {
 }
 
 describe("Database migrations", () => {
-  test("fresh DATA_DIR creates full schema via migrations 001–004", () => {
+  test("fresh DATA_DIR creates full schema via migrations 001–005", () => {
     const dataDir = tempDataDir();
     const db = openDatabase(dataDir);
     try {
@@ -60,7 +60,7 @@ describe("Database migrations", () => {
       ]);
 
       const migrations = db.listMigrations();
-      assert.equal(migrations.length, 4);
+      assert.equal(migrations.length, 5);
       assert.equal(migrations[0]!.id, 1);
       assert.equal(migrations[0]!.name, "001_initial_schema");
       assert.equal(migrations[1]!.id, 2);
@@ -69,6 +69,8 @@ describe("Database migrations", () => {
       assert.equal(migrations[2]!.name, "003_scenes_soft_delete");
       assert.equal(migrations[3]!.id, 4);
       assert.equal(migrations[3]!.name, "004_drafts_based_on_version");
+      assert.equal(migrations[4]!.id, 5);
+      assert.equal(migrations[4]!.name, "005_version_thumbnail_file_id");
       assert.equal(typeof migrations[0]!.applied_at, "string");
 
       // File-backed path is under DATA_DIR.
@@ -82,7 +84,7 @@ describe("Database migrations", () => {
     const dataDir = tempDataDir();
     const db1 = openDatabase(dataDir);
     const first = db1.listMigrations();
-    assert.equal(first.length, 4);
+    assert.equal(first.length, 5);
     db1.close();
 
     // Re-open same directory — migrate runs again.
@@ -90,7 +92,7 @@ describe("Database migrations", () => {
     try {
       db2.migrateAgain();
       const second = db2.listMigrations();
-      assert.equal(second.length, 4);
+      assert.equal(second.length, 5);
       assert.equal(second[0]!.id, first[0]!.id);
       assert.equal(second[0]!.name, first[0]!.name);
       assert.equal(second[0]!.applied_at, first[0]!.applied_at);
@@ -100,6 +102,8 @@ describe("Database migrations", () => {
       assert.equal(second[2]!.applied_at, first[2]!.applied_at);
       assert.equal(second[3]!.id, first[3]!.id);
       assert.equal(second[3]!.applied_at, first[3]!.applied_at);
+      assert.equal(second[4]!.id, first[4]!.id);
+      assert.equal(second[4]!.applied_at, first[4]!.applied_at);
 
       // Schema still intact; insert still works.
       db2.insertScene({

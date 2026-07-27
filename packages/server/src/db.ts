@@ -50,6 +50,11 @@ export type SceneListRow = SceneRow & {
   element_count: number;
   /** Author of the head version, or null when there is no head version yet. */
   head_author: string | null;
+  /**
+   * Content-addressed file id of the head version's client-uploaded thumbnail
+   * PNG, or null when none was stored (agent push / pre-thumbnail commits).
+   */
+  thumbnail_file_id: string | null;
 };
 
 export type VersionRow = {
@@ -67,6 +72,11 @@ export type VersionRow = {
   file_ids: string;
   element_count: number;
   scene_hash: string;
+  /**
+   * Content-addressed PNG thumbnail for this version (scene-list preview).
+   * Null when the client did not upload one (CLI/agent commits).
+   */
+  thumbnail_file_id: string | null;
 };
 
 export type DraftRow = {
@@ -137,6 +147,8 @@ export type NewVersion = {
   file_ids?: string[] | string;
   element_count?: number;
   scene_hash?: string;
+  /** Optional content-addressed thumbnail PNG id (must already exist in file store). */
+  thumbnail_file_id?: string | null;
 };
 
 /**
@@ -334,6 +346,17 @@ const MIGRATIONS: readonly Migration[] = [
       -- /draft can report staleness explicitly (based_on_version < head).
       -- Drafts remain one row per scene and are never versioned.
       ALTER TABLE drafts ADD COLUMN based_on_version INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
+  {
+    id: 5,
+    name: "005_version_thumbnail_file_id",
+    sql: `
+      -- Optional client-uploaded PNG thumbnail for a version (content-addressed
+      -- under data/files/). Scene list prefers this over the render worker so a
+      -- human commit never needs Chromium. Null for agent/CLI pushes and for
+      -- versions created before this column existed.
+      ALTER TABLE versions ADD COLUMN thumbnail_file_id TEXT;
     `,
   },
 ];
@@ -593,15 +616,16 @@ export class Database {
   }
 
   /**
-   * Live scenes ordered by recency, with head-version element_count and
-   * author joined. Soft-deleted scenes are omitted.
+   * Live scenes ordered by recency, with head-version element_count,
+   * author, and thumbnail joined. Soft-deleted scenes are omitted.
    */
   listScenes(): SceneListRow[] {
     const rows = this.raw
       .prepare(
         `SELECT s.*,
                 COALESCE(v.element_count, 0) AS element_count,
-                v.author AS head_author
+                v.author AS head_author,
+                v.thumbnail_file_id AS thumbnail_file_id
          FROM scenes s
          LEFT JOIN versions v
            ON v.scene_id = s.id AND v.version = s.head_version
@@ -613,14 +637,16 @@ export class Database {
   }
 
   /**
-   * Live scene by slug with head element_count and author. Soft-deleted → undefined.
+   * Live scene by slug with head element_count, author, and thumbnail.
+   * Soft-deleted → undefined.
    */
   getSceneListRowBySlug(slug: string): SceneListRow | undefined {
     const row = this.raw
       .prepare(
         `SELECT s.*,
                 COALESCE(v.element_count, 0) AS element_count,
-                v.author AS head_author
+                v.author AS head_author,
+                v.thumbnail_file_id AS thumbnail_file_id
          FROM scenes s
          LEFT JOIN versions v
            ON v.scene_id = s.id AND v.version = s.head_version
@@ -731,13 +757,18 @@ export class Database {
     const scene_hash = input.scene_hash ?? "";
     const elements = asBuffer(input.elements);
     const app_state = asBuffer(input.app_state);
+    const thumbnail_file_id =
+      input.thumbnail_file_id === undefined || input.thumbnail_file_id === ""
+        ? null
+        : input.thumbnail_file_id;
 
     this.raw
       .prepare(
         `INSERT INTO versions (
           scene_id, version, parent_version, author, message, created_at,
-          elements, app_state, file_ids, element_count, scene_hash
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          elements, app_state, file_ids, element_count, scene_hash,
+          thumbnail_file_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.scene_id,
@@ -751,6 +782,7 @@ export class Database {
         file_ids,
         element_count,
         scene_hash,
+        thumbnail_file_id,
       );
 
     return this.getVersion(input.scene_id, input.version)!;
@@ -779,6 +811,7 @@ export class Database {
     file_ids?: string[] | string;
     element_count?: number;
     scene_hash?: string;
+    thumbnail_file_id?: string | null;
   }): CommitVersionResult {
     this.raw.exec("BEGIN IMMEDIATE");
     try {
@@ -814,13 +847,18 @@ export class Database {
       const scene_hash = input.scene_hash ?? "";
       const elements = asBuffer(input.elements);
       const app_state = asBuffer(input.app_state);
+      const thumbnail_file_id =
+        input.thumbnail_file_id === undefined || input.thumbnail_file_id === ""
+          ? null
+          : input.thumbnail_file_id;
 
       this.raw
         .prepare(
           `INSERT INTO versions (
             scene_id, version, parent_version, author, message, created_at,
-            elements, app_state, file_ids, element_count, scene_hash
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            elements, app_state, file_ids, element_count, scene_hash,
+            thumbnail_file_id
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           input.sceneId,
@@ -834,6 +872,7 @@ export class Database {
           file_ids,
           element_count,
           scene_hash,
+          thumbnail_file_id,
         );
 
       // Same transaction: head and updated_at move with the insert.
@@ -940,14 +979,15 @@ export class Database {
   }
 
   /**
-   * Union of every content-addressed file id referenced by any version row.
+   * Union of every content-addressed file id referenced by any version row
+   * (scene images in `file_ids` plus client-uploaded `thumbnail_file_id`).
    * Used by the file-store GC helper (unreferenced + older-than-N-days).
    * Drafts are intentionally excluded — only committed history anchors files.
    */
   listReferencedFileIds(): string[] {
     const rows = this.raw
-      .prepare(`SELECT file_ids FROM versions`)
-      .all() as Array<{ file_ids: string }>;
+      .prepare(`SELECT file_ids, thumbnail_file_id FROM versions`)
+      .all() as Array<{ file_ids: string; thumbnail_file_id: string | null }>;
 
     const ids = new Set<string>();
     for (const row of rows) {
@@ -955,13 +995,20 @@ export class Database {
       try {
         parsed = JSON.parse(row.file_ids ?? "[]");
       } catch {
-        continue;
+        parsed = [];
       }
-      if (!Array.isArray(parsed)) continue;
-      for (const id of parsed) {
-        if (typeof id === "string" && id.length > 0) {
-          ids.add(id);
+      if (Array.isArray(parsed)) {
+        for (const id of parsed) {
+          if (typeof id === "string" && id.length > 0) {
+            ids.add(id);
+          }
         }
+      }
+      if (
+        typeof row.thumbnail_file_id === "string" &&
+        row.thumbnail_file_id.length > 0
+      ) {
+        ids.add(row.thumbnail_file_id);
       }
     }
     return [...ids];
@@ -1220,14 +1267,23 @@ function mapSceneList(row: Record<string, unknown>): SceneListRow {
     row.head_author === null || row.head_author === undefined
       ? null
       : String(row.head_author);
+  const thumb =
+    row.thumbnail_file_id === null || row.thumbnail_file_id === undefined
+      ? null
+      : String(row.thumbnail_file_id);
   return {
     ...mapScene(row),
     element_count: Number(row.element_count ?? 0),
     head_author: headAuthor,
+    thumbnail_file_id: thumb && thumb.length > 0 ? thumb : null,
   };
 }
 
 function mapVersion(row: Record<string, unknown>): VersionRow {
+  const thumb =
+    row.thumbnail_file_id === null || row.thumbnail_file_id === undefined
+      ? null
+      : String(row.thumbnail_file_id);
   return {
     scene_id: String(row.scene_id),
     version: Number(row.version),
@@ -1243,6 +1299,7 @@ function mapVersion(row: Record<string, unknown>): VersionRow {
     file_ids: String(row.file_ids ?? "[]"),
     element_count: Number(row.element_count ?? 0),
     scene_hash: String(row.scene_hash ?? ""),
+    thumbnail_file_id: thumb && thumb.length > 0 ? thumb : null,
   };
 }
 

@@ -237,7 +237,7 @@ describe("POST /api/scenes", () => {
 });
 
 describe("GET /api/scenes", () => {
-  test("listing shape includes name, slug, head, updatedAt, lock, elementCount, headAuthor", async () => {
+  test("listing shape includes name, slug, head, updatedAt, lock, elementCount, headAuthor, thumbnailFileId", async () => {
     const dataDir = tempDataDir();
     const token = "bootstrap-scenes-token-list";
     const { app, db } = await buildScenesApp({
@@ -254,9 +254,11 @@ describe("GET /api/scenes", () => {
     assert.equal(create.statusCode, 201);
     const created = create.json() as SceneInfo;
     assert.equal(created.headAuthor, null);
+    assert.equal(created.thumbnailFileId, null);
 
     // Attach a head version so elementCount is non-zero.
     const emptyApp = gzipJson({});
+    const thumbId = "b".repeat(40);
     db.insertVersion({
       scene_id: created.id,
       version: 1,
@@ -266,6 +268,7 @@ describe("GET /api/scenes", () => {
       elements: gzipJson([{ id: "e1" }, { id: "e2" }]),
       app_state: emptyApp,
       element_count: 2,
+      thumbnail_file_id: thumbId,
     });
     db.updateSceneHead(created.id, 1);
     db.setSceneLock(created.id, "admin", "2099-01-01T00:00:00.000Z");
@@ -289,6 +292,7 @@ describe("GET /api/scenes", () => {
     });
     assert.equal(item.elementCount, 2);
     assert.equal(item.headAuthor, "admin");
+    assert.equal(item.thumbnailFileId, thumbId);
   });
 });
 

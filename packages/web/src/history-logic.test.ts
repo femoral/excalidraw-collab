@@ -40,6 +40,7 @@ function version(
     createdAt: `2026-01-${String(n).padStart(2, "0")}T12:00:00.000Z`,
     elementCount: n * 10,
     sceneHash: `hash-${n}`,
+    thumbnailFileId: null,
     ...overrides,
   };
 }

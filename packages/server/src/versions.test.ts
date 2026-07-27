@@ -173,6 +173,7 @@ async function pushScene(
     files?: unknown;
     message: string;
     author?: string;
+    thumbnailFileId?: string | null;
   },
   opts: { force?: boolean; slug?: string } = {},
 ) {
@@ -898,5 +899,148 @@ describe("commitVersion atomicity", () => {
     assert.equal(v.version, 1);
     // updated_at should match the version's created_at (same transaction clock).
     assert.equal(scene.updated_at, v.created_at);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Client-uploaded version thumbnails (issue #30)
+// ---------------------------------------------------------------------------
+
+describe("thumbnailFileId on commit", () => {
+  test("push with pre-uploaded PNG stores thumbnail and surfaces it on list", async () => {
+    const dataDir = tempDataDir();
+    const token = "versions-token-thumb";
+    const { app, db, store } = await buildVersionsApp({
+      dataDir,
+      bootstrapToken: token,
+    });
+    await createScene(app, token);
+
+    // Upload a small PNG into the content-addressed store first.
+    const upload = await app.inject({
+      method: "POST",
+      url: "/api/files",
+      headers: {
+        ...bearer(token),
+        "content-type": "image/png",
+      },
+      payload: PNG_BYTES,
+    });
+    assert.equal(upload.statusCode, 201, upload.body);
+    const uploaded = upload.json() as { fileId: string };
+    assert.equal(uploaded.fileId, PNG_FILE_ID);
+    assert.ok(store.exists(PNG_FILE_ID));
+
+    const res = await pushScene(app, token, {
+      parentVersion: 0,
+      elements: [rect("a")],
+      message: "human commit with thumb",
+      thumbnailFileId: PNG_FILE_ID,
+    });
+    assert.equal(res.statusCode, 201, res.body);
+    const body = res.json() as PushVersionResponse;
+    assert.equal(body.thumbnailFileId, PNG_FILE_ID);
+
+    const version = db.getVersion(db.getSceneBySlug("arch")!.id, 1)!;
+    assert.equal(version.thumbnail_file_id, PNG_FILE_ID);
+
+    // Scene list exposes head thumbnail without invoking the render worker.
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/scenes",
+      headers: bearer(token),
+    });
+    assert.equal(list.statusCode, 200);
+    const scenes = (list.json() as { scenes: Array<{ thumbnailFileId: string | null }> })
+      .scenes;
+    assert.equal(scenes.length, 1);
+    assert.equal(scenes[0]!.thumbnailFileId, PNG_FILE_ID);
+
+    const meta = await app.inject({
+      method: "GET",
+      url: "/api/scenes/arch",
+      headers: bearer(token),
+    });
+    assert.equal(meta.statusCode, 200);
+    assert.equal(
+      (meta.json() as { thumbnailFileId: string | null }).thumbnailFileId,
+      PNG_FILE_ID,
+    );
+
+    // Thumbnail is anchored for GC (not only scene image file_ids).
+    const refs = db.listReferencedFileIds();
+    assert.ok(refs.includes(PNG_FILE_ID));
+  });
+
+  test("push without thumbnailFileId leaves null (agent path)", async () => {
+    const dataDir = tempDataDir();
+    const token = "versions-token-no-thumb";
+    const { app, db } = await buildVersionsApp({
+      dataDir,
+      bootstrapToken: token,
+    });
+    await createScene(app, token);
+
+    const res = await pushScene(app, token, {
+      parentVersion: 0,
+      elements: [rect("a")],
+      message: "agent push",
+    });
+    assert.equal(res.statusCode, 201, res.body);
+    const body = res.json() as PushVersionResponse;
+    assert.equal(body.thumbnailFileId, null);
+
+    const version = db.getVersion(db.getSceneBySlug("arch")!.id, 1)!;
+    assert.equal(version.thumbnail_file_id, null);
+
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/scenes",
+      headers: bearer(token),
+    });
+    const scenes = (list.json() as { scenes: Array<{ thumbnailFileId: string | null }> })
+      .scenes;
+    assert.equal(scenes[0]!.thumbnailFileId, null);
+  });
+
+  test("unknown thumbnailFileId is 400 (must upload first)", async () => {
+    const dataDir = tempDataDir();
+    const token = "versions-token-thumb-missing";
+    const { app } = await buildVersionsApp({
+      dataDir,
+      bootstrapToken: token,
+    });
+    await createScene(app, token);
+
+    const res = await pushScene(app, token, {
+      parentVersion: 0,
+      elements: [rect("a")],
+      message: "bad thumb",
+      thumbnailFileId: "a".repeat(40),
+    });
+    assert.equal(res.statusCode, 400, res.body);
+    const err = res.json() as ErrorEnvelope;
+    assert.equal(err.error.code, ErrorCode.VALIDATION);
+    assert.match(err.error.message, /not found in file store/i);
+  });
+
+  test("malformed thumbnailFileId is 400", async () => {
+    const dataDir = tempDataDir();
+    const token = "versions-token-thumb-bad";
+    const { app } = await buildVersionsApp({
+      dataDir,
+      bootstrapToken: token,
+    });
+    await createScene(app, token);
+
+    const res = await pushScene(app, token, {
+      parentVersion: 0,
+      elements: [rect("a")],
+      message: "bad id",
+      thumbnailFileId: "not-a-hash",
+    });
+    assert.equal(res.statusCode, 400, res.body);
+    const err = res.json() as ErrorEnvelope;
+    assert.equal(err.error.code, ErrorCode.VALIDATION);
   });
 });

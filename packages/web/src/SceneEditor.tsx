@@ -8,7 +8,12 @@
  * so they never land on the human undo stack.
  */
 
-import { CaptureUpdateAction, Excalidraw, MainMenu } from "@excalidraw/excalidraw";
+import {
+  CaptureUpdateAction,
+  Excalidraw,
+  exportToBlob,
+  MainMenu,
+} from "@excalidraw/excalidraw";
 import type {
   AppState,
   BinaryFiles,
@@ -100,6 +105,15 @@ import {
   type WhatChangedPanelState,
   type ToastState,
 } from "./what-changed-logic.ts";
+import {
+  attachThumbnailForCommit,
+  buildThumbnailExportAppState,
+  shouldGenerateThumbnail,
+  THUMBNAIL_EXPORT,
+  thumbnailFileIdForCommit,
+  withThumbnailFileId,
+} from "./thumbnail-logic.ts";
+import { filterExportElements } from "./render-logic.ts";
 
 export type SceneEditorProps = {
   slug: string;
@@ -972,14 +986,51 @@ export function SceneEditor({
         }
       }
 
+      // Client-side thumbnail: browser exportToBlob → content-addressed store.
+      // Soft-fails so a commit never blocks on preview generation (issue #30).
+      const thumbResult = await attachThumbnailForCommit({
+        shouldGenerate: shouldGenerateThumbnail(snapshot.elements),
+        exportPng: async () => {
+          const elements = filterExportElements(
+            snapshot.elements,
+          ) as Parameters<typeof exportToBlob>[0]["elements"];
+          const appState = buildThumbnailExportAppState(
+            snapshot.appState as Record<string, unknown> | undefined,
+          ) as Parameters<typeof exportToBlob>[0]["appState"];
+          const files = Object.fromEntries(
+            Object.entries(snapshot.files).filter(
+              (entry): entry is [string, BinaryFilePayload] =>
+                entry[1] != null && typeof entry[1].dataURL === "string",
+            ),
+          ) as Parameters<typeof exportToBlob>[0]["files"];
+          if (typeof document !== "undefined" && document.fonts?.ready) {
+            await document.fonts.ready;
+          }
+          return exportToBlob({
+            elements,
+            appState,
+            files,
+            exportPadding: THUMBNAIL_EXPORT.padding,
+            mimeType: THUMBNAIL_EXPORT.mimeType,
+          });
+        },
+        uploadPng: async (bytes) => {
+          const uploaded = await api.uploadRawFile(bytes, "image/png");
+          return { fileId: uploaded.fileId };
+        },
+      });
+
       // Include files so the version's file_ids list is complete; server
       // content-addresses them (dedup if already uploaded). Binaries never
       // live in elements — only fileId references.
-      const body = buildCommitPayload(
-        snapshot,
-        headVersionRef.current,
-        validated.message,
-        { includeFiles: true },
+      const body = withThumbnailFileId(
+        buildCommitPayload(
+          snapshot,
+          headVersionRef.current,
+          validated.message,
+          { includeFiles: true },
+        ),
+        thumbnailFileIdForCommit(thumbResult),
       );
 
       const result = await api.commitScene(slug, body);

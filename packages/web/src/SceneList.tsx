@@ -18,6 +18,10 @@ import {
   versionCount,
   type SceneListStatus,
 } from "./scenes-logic.ts";
+import {
+  loadSceneThumbnail,
+  type ThumbnailDisplay,
+} from "./thumbnail-logic.ts";
 
 export type SceneListProps = {
   api: ApiClient;
@@ -31,8 +35,8 @@ export type SceneListProps = {
 };
 
 /**
- * Scene home: list, create, rename, delete. Thumbnail slot is reserved for
- * wave 5 (#30) with a neutral placeholder matching final card dimensions.
+ * Scene home: list, create, rename, delete. Cards show head thumbnails when
+ * available (uploaded on commit, else render worker, else placeholder).
  */
 export function SceneList({
   api,
@@ -240,6 +244,7 @@ export function SceneList({
             <li key={item.id}>
               <SceneCard
                 scene={item}
+                api={api}
                 onOpen={(e) =>
                   onNavigate(`/s/${encodeURIComponent(item.slug)}`, e)
                 }
@@ -405,11 +410,13 @@ export function SceneList({
 
 function SceneCard({
   scene,
+  api,
   onOpen,
   onRename,
   onDelete,
 }: {
   scene: SceneInfo;
+  api: ApiClient;
   onOpen: (event?: MouseEvent<HTMLAnchorElement>) => void;
   onRename: () => void;
   onDelete: () => void;
@@ -419,6 +426,50 @@ function SceneCard({
   const versions = versionCount(scene);
   const author = headAuthorLabel(scene);
   const updated = formatUpdatedAt(scene.updatedAt);
+  const [thumb, setThumb] = useState<ThumbnailDisplay>({ kind: "placeholder" });
+
+  useEffect(() => {
+    let cancelled = false;
+    let activeUrl: string | null = null;
+    setThumb({ kind: "placeholder" });
+
+    void (async () => {
+      const display = await loadSceneThumbnail(
+        {
+          slug: scene.slug,
+          headVersion: scene.headVersion,
+          thumbnailFileId: scene.thumbnailFileId,
+        },
+        {
+          getFileBytes: (fileId) => api.getFileBytes(fileId),
+          getRenderPng: (slug, version) => api.getSceneRenderPng(slug, version),
+          createObjectUrl: (bytes, mimeType) => {
+            const blob = new Blob([new Uint8Array(bytes)], {
+              type: mimeType,
+            });
+            return URL.createObjectURL(blob);
+          },
+        },
+      );
+      if (cancelled) {
+        if (display.kind === "image") {
+          URL.revokeObjectURL(display.objectUrl);
+        }
+        return;
+      }
+      if (display.kind === "image") {
+        activeUrl = display.objectUrl;
+      }
+      setThumb(display);
+    })();
+
+    return () => {
+      cancelled = true;
+      if (activeUrl) {
+        URL.revokeObjectURL(activeUrl);
+      }
+    };
+  }, [api, scene.slug, scene.headVersion, scene.thumbnailFileId]);
 
   return (
     <article className="scene-card">
@@ -428,11 +479,19 @@ function SceneCard({
         onClick={(e) => onOpen(e)}
         aria-label={`Open ${scene.name}`}
       >
-        {/* Thumbnail slot — populated in wave 5 (#30). Fixed aspect so layout
-            does not reflow when real previews arrive. */}
-        <div className="scene-thumb-placeholder" aria-hidden="true">
-          <span className="scene-thumb-glyph">◇</span>
-        </div>
+        {thumb.kind === "image" ? (
+          <img
+            className="scene-thumb-image"
+            src={thumb.objectUrl}
+            alt=""
+            loading="lazy"
+            decoding="async"
+          />
+        ) : (
+          <div className="scene-thumb-placeholder" aria-hidden="true">
+            <span className="scene-thumb-glyph">◇</span>
+          </div>
+        )}
       </a>
 
       <div className="scene-card-body">

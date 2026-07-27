@@ -584,7 +584,7 @@ code {
   box-shadow: inset var(--focus-ring);
 }
 
-/* Fixed aspect ratio placeholder — wave 5 (#30) fills this without reflow. */
+/* Fixed aspect ratio — uploaded / render / placeholder share dimensions. */
 .scene-thumb-placeholder {
   aspect-ratio: var(--thumb-aspect);
   width: 100%;
@@ -593,6 +593,15 @@ code {
   display: flex;
   align-items: center;
   justify-content: center;
+  border-bottom: 1px solid var(--border);
+}
+
+.scene-thumb-image {
+  aspect-ratio: var(--thumb-aspect);
+  width: 100%;
+  display: block;
+  object-fit: cover;
+  background: #f7f7fa;
   border-bottom: 1px solid var(--border);
 }
 

@@ -20,6 +20,12 @@ export type SceneInfo = {
   } | null;
   elementCount: number;
   headAuthor: string | null;
+  /**
+   * Content-addressed file id of the head version's uploaded thumbnail PNG.
+   * Null when none was uploaded (agent/CLI commits) — list falls back to
+   * render worker, then placeholder.
+   */
+  thumbnailFileId: string | null;
 };
 
 export type SceneListResponse = {
@@ -60,6 +66,11 @@ export type CommitSceneBody = {
   appState?: Record<string, unknown>;
   files?: Record<string, BinaryFilePayload>;
   message: string;
+  /**
+   * Optional content-addressed PNG already uploaded via POST /api/files.
+   * Populated by the editor after exportToBlob on commit.
+   */
+  thumbnailFileId?: string;
 };
 
 export type CommitSceneResponse = {
@@ -71,6 +82,7 @@ export type CommitSceneResponse = {
   elementCount: number;
   sceneHash: string;
   headVersion: number;
+  thumbnailFileId: string | null;
 };
 
 /** Excalidraw BinaryFileData-shaped payload for /api/files and scene push. */
@@ -111,6 +123,7 @@ export type VersionInfo = {
   createdAt: string;
   elementCount: number;
   sceneHash: string;
+  thumbnailFileId: string | null;
 };
 
 /**
@@ -251,6 +264,11 @@ export type ApiClientOptions = {
 export type RequestOptions = {
   method?: string;
   body?: unknown;
+  /**
+   * When true, `body` is sent as-is (ArrayBuffer / Uint8Array / Blob) without
+   * JSON stringification. Caller must set Content-Type (e.g. image/png).
+   */
+  rawBody?: boolean;
   /** When true, skip attaching Authorization (unused today; reserved). */
   skipAuth?: boolean;
   /** Override Accept / Content-Type for non-JSON bodies. */
@@ -321,15 +339,19 @@ export function createApiClient(options: ApiClientOptions) {
       }
     }
 
-    let body: string | undefined;
+    let body: BodyInit | undefined;
     if (init.body !== undefined) {
-      if (!headers.has("Content-Type")) {
-        headers.set("Content-Type", "application/json");
+      if (init.rawBody) {
+        body = init.body as BodyInit;
+      } else {
+        if (!headers.has("Content-Type")) {
+          headers.set("Content-Type", "application/json");
+        }
+        body =
+          typeof init.body === "string"
+            ? init.body
+            : JSON.stringify(init.body);
       }
-      body =
-        typeof init.body === "string"
-          ? init.body
-          : JSON.stringify(init.body);
     }
 
     const response = await fetchImpl(buildApiUrl(baseUrl, path), {
@@ -509,12 +531,47 @@ export function createApiClient(options: ApiClientOptions) {
       });
     },
 
+    /**
+     * Upload raw image bytes (e.g. thumbnail PNG from exportToBlob).
+     * Server content-hashes the body — no client-side SHA-1 claim required,
+     * so this works even when SubtleCrypto is unavailable.
+     */
+    async uploadRawFile(
+      bytes: ArrayBuffer | Uint8Array,
+      mimeType: string,
+    ): Promise<FileUploadResponse> {
+      return request<FileUploadResponse>("/api/files", {
+        method: "POST",
+        rawBody: true,
+        headers: { "Content-Type": mimeType },
+        body: bytes,
+      });
+    },
+
     /** Fetch raw file bytes for rehydration into Excalidraw BinaryFiles. */
     async getFileBytes(
       fileId: string,
     ): Promise<{ bytes: ArrayBuffer; mimeType: string }> {
       return request<{ bytes: ArrayBuffer; mimeType: string }>(
         `/api/files/${encodeURIComponent(fileId)}`,
+        { binary: true },
+      );
+    },
+
+    /**
+     * Worker-rendered PNG for a scene version (fallback when no uploaded
+     * thumbnail). Rejects with ApiError 501 when the render worker is off.
+     */
+    async getSceneRenderPng(
+      slug: string,
+      version?: number,
+    ): Promise<{ bytes: ArrayBuffer; mimeType: string }> {
+      const qs =
+        version === undefined
+          ? ""
+          : `?v=${encodeURIComponent(String(version))}`;
+      return request<{ bytes: ArrayBuffer; mimeType: string }>(
+        `/api/scenes/${encodeURIComponent(slug)}/render.png${qs}`,
         { binary: true },
       );
     },

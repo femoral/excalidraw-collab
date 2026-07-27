@@ -18,6 +18,7 @@ function scene(overrides: Partial<SceneInfo> = {}): SceneInfo {
     lock: null,
     elementCount: 3,
     headAuthor: "admin",
+    thumbnailFileId: null,
     ...overrides,
   };
 }
@@ -217,6 +218,7 @@ test("commitScene POSTs parentVersion + message", async () => {
           elementCount: 1,
           sceneHash: "h",
           headVersion: 3,
+          thumbnailFileId: null,
         }),
         { status: 201, headers: { "content-type": "application/json" } },
       );
@@ -229,6 +231,7 @@ test("commitScene POSTs parentVersion + message", async () => {
     message: "done",
   });
   assert.equal(result.version, 3);
+  assert.equal(result.thumbnailFileId, null);
   assert.deepEqual(body, {
     parentVersion: 2,
     elements: [],
@@ -254,6 +257,7 @@ test("listVersions GETs paginated history", async () => {
               createdAt: "2026-01-02T00:00:00.000Z",
               elementCount: 4,
               sceneHash: "h2",
+              thumbnailFileId: null,
             },
           ],
           total: 2,
