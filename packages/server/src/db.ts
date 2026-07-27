@@ -11,7 +11,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
-import { DatabaseSync } from "node:sqlite";
+import { backup as sqliteBackup, DatabaseSync } from "node:sqlite";
 
 /** Filename of the SQLite database under `DATA_DIR`. */
 export const DB_FILENAME = "db.sqlite";
@@ -634,6 +634,59 @@ export class Database {
       )
       .all() as Array<Record<string, unknown>>;
     return rows.map(mapSceneList);
+  }
+
+  /**
+   * Every scene row including soft-deleted, ordered by slug.
+   * Used by backup so history of deleted scenes is not silently dropped.
+   */
+  listAllScenes(): SceneRow[] {
+    const rows = this.raw
+      .prepare(`SELECT * FROM scenes ORDER BY slug ASC`)
+      .all() as Array<Record<string, unknown>>;
+    return rows.map(mapScene);
+  }
+
+  /**
+   * Consistent file-level snapshot via the SQLite backup API
+   * (`sqlite3_backup_*`). Never copy a live WAL-mode DB file by hand.
+   *
+   * @returns Number of pages transferred (as reported by `sqlite.backup`).
+   */
+  async backupTo(destPath: string): Promise<number> {
+    if (this.closed) {
+      throw new Error("database is closed");
+    }
+    // Checkpoint first so the backup file is self-contained (no -wal/-shm).
+    try {
+      this.raw.exec(`PRAGMA wal_checkpoint(PASSIVE)`);
+    } catch {
+      // :memory: or busy writers — backup API still produces a consistent file.
+    }
+    return sqliteBackup(this.raw, destPath);
+  }
+
+  /**
+   * Open a read-only DatabaseSync at `dbPath` (e.g. a just-written backup file)
+   * and run `fn` against a temporary {@link Database} wrapper. The wrapper is
+   * closed when `fn` returns. Migrations are **not** re-applied — the file is
+   * assumed to already be at the current schema (it came from this process).
+   */
+  static withReadonlyFile<T>(
+    dbPath: string,
+    dataDir: string,
+    fn: (db: Database) => T,
+  ): T {
+    const raw = new DatabaseSync(dbPath, {
+      readOnly: true,
+      enableForeignKeyConstraints: true,
+    });
+    const db = new Database(dataDir, dbPath, raw);
+    try {
+      return fn(db);
+    } finally {
+      db.close();
+    }
   }
 
   /**

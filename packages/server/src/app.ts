@@ -7,6 +7,7 @@ import Fastify, {
 } from "fastify";
 import fastifyStatic from "@fastify/static";
 import { registerWhoamiRoute, seedBootstrapToken } from "./auth.js";
+import { registerBackupRoutes } from "./backup.js";
 import { type Config, loadConfig } from "./config.js";
 import type { Database } from "./db.js";
 import {
@@ -215,6 +216,11 @@ export async function buildApp(
         db: deps.db,
         store: fileStore,
         config,
+      });
+      // Admin backup/restore (SQLite backup API + portable tar.gz).
+      await registerBackupRoutes(app, {
+        db: deps.db,
+        store: fileStore,
       });
       // One DiffService for GET /diff and 409 conflict bodies so both share
       // the same bounded immutable cache.

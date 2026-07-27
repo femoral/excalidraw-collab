@@ -63,6 +63,28 @@ export {
   type OpenDatabaseOptions,
 } from "./db.js";
 export {
+  BACKUP_FORMAT,
+  BACKUP_FORMAT_VERSION,
+  BACKUP_README,
+  COLLISION_POLICIES,
+  RESTORE_BODY_LIMIT,
+  buildBackupArchive,
+  registerBackupRoutes,
+  restoreBackupArchive,
+  type BackupManifest,
+  type CollisionPolicy,
+  type RestoreReport,
+  type SceneMetaJson,
+  type VersionJson,
+} from "./backup.js";
+export {
+  packTar,
+  packTarGz,
+  unpackTar,
+  unpackTarGz,
+  type TarEntry,
+} from "./tar.js";
+export {
   emptySceneDocument,
   rehydrateSceneFiles,
   resolveVersionRef,
