@@ -19,6 +19,8 @@
 export {
   PLAYWRIGHT_NOT_INSTALLED_MESSAGE,
   RenderError,
+  type MergeRequest,
+  type MergeResult,
   type RenderFormat,
   type RenderOptions,
   type RenderRequest,
@@ -30,7 +32,13 @@ export {
   type SkeletonConvertResult,
 } from "./types.js";
 
-export { RENDER_MSG } from "./protocol.js";
+export {
+  RENDER_MSG,
+  type PageExportRequest,
+  type PageMergeRequest,
+  type PageRenderRequest,
+  type PageRenderResponse,
+} from "./protocol.js";
 
 export {
   isPlaywrightModuleNotFound,

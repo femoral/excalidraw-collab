@@ -13,11 +13,26 @@ import { createAuthPreHandler } from "./auth.js";
 import type { Database } from "./db.js";
 import { AppError, ErrorCode } from "./errors.js";
 
+/** Duck-type RenderError NOT_INSTALLED without importing render.ts. */
+function isRenderNotInstalledError(err: unknown): boolean {
+  if (err === null || typeof err !== "object") return false;
+  const e = err as { name?: string; code?: string };
+  return e.name === "RenderError" && e.code === "NOT_INSTALLED";
+}
+
 /** Message when the render worker is disabled or not wired. */
 export const SKELETON_WORKER_DISABLED_MESSAGE =
-  "Skeleton conversion requires the render worker. Set RENDER_WORKER=on " +
-  "and ensure the web app is served (SERVE_STATIC=on) so Chromium can load " +
-  "/render. Install browsers with: pnpm exec playwright install chromium";
+  "Skeleton conversion is not available: RENDER_WORKER=off. " +
+  "Set RENDER_WORKER=on and ensure the web app is served (SERVE_STATIC=on) " +
+  "so Chromium can load /render. Install browsers with: " +
+  "pnpm exec playwright install chromium";
+
+/** Message when Playwright was not installed (optionalDependency skipped). */
+export const SKELETON_WORKER_NOT_INSTALLED_MESSAGE =
+  "Skeleton conversion is not available: Playwright is not installed. " +
+  "This deployment was built without render support (optional dependency skipped — " +
+  "e.g. pnpm install --no-optional). Install optional dependencies or rebuild with " +
+  "Playwright, then set RENDER_WORKER=on.";
 
 /** Upstream skeleton element types we accept. */
 export const SKELETON_TYPES = new Set([
@@ -297,6 +312,7 @@ export async function registerSkeletonRoutes(
           ErrorCode.NOT_IMPLEMENTED,
           SKELETON_WORKER_DISABLED_MESSAGE,
           501,
+          { reason: "disabled" },
         );
       }
 
@@ -315,6 +331,18 @@ export async function registerSkeletonRoutes(
         return { elements: result.elements };
       } catch (err) {
         if (err instanceof AppError) throw err;
+        if (isRenderNotInstalledError(err)) {
+          const cause = err instanceof Error ? err.message : undefined;
+          throw new AppError(
+            ErrorCode.NOT_IMPLEMENTED,
+            SKELETON_WORKER_NOT_INSTALLED_MESSAGE,
+            501,
+            {
+              reason: "not_installed",
+              ...(cause ? { cause } : {}),
+            },
+          );
+        }
         const message =
           err instanceof Error ? err.message : "skeleton conversion failed";
         // Surface worker-reported skeleton[i]: reason when present.

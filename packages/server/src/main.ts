@@ -2,10 +2,26 @@
 // Filter node:sqlite experimental warnings before the db module loads it.
 import "./sqlite-warning.js";
 
+import { openRenderWorker, type RenderWorker } from "@excalidraw-collab/render";
 import { buildApp } from "./app.js";
 import { ConfigError, loadConfig } from "./config.js";
 import { openDatabase, type Database } from "./db.js";
+import type { SceneMergeService } from "./merge.js";
+import type { SceneRenderWorker } from "./render.js";
 import type { SkeletonConverterHolder } from "./skeleton.js";
+
+function mergeServiceFromWorker(worker: RenderWorker): SceneMergeService {
+  return {
+    async merge(input) {
+      const result = await worker.merge({
+        local: { elements: input.localElements },
+        remote: { elements: input.remoteElements },
+        appState: input.appState ?? {},
+      });
+      return { elements: result.elements };
+    },
+  };
+}
 
 async function main(): Promise<void> {
   let config;
@@ -27,23 +43,52 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Late-bound: filled after listen when RENDER_WORKER=on so Chromium can
-  // hit this process's /render route (requires SERVE_STATIC).
+  // Late-bound skeleton converter: filled after listen when RENDER_WORKER=on
+  // so Chromium can hit this process's /render route (requires SERVE_STATIC).
   const skeletonHolder: SkeletonConverterHolder = { current: null };
+
+  // Optional render worker for merge + skeleton + export. Browser launch is
+  // lazy (first real request), so opening before listen is safe as long as
+  // the first call happens after the HTTP port is bound.
+  let renderWorker: RenderWorker | null = null;
+  let merge: SceneMergeService | null = null;
+  if (config.renderWorker === "on") {
+    const baseUrl = `http://127.0.0.1:${config.port}`;
+    try {
+      renderWorker = await openRenderWorker(
+        { baseUrl },
+        { RENDER_WORKER: "on" },
+      );
+      if (renderWorker) {
+        merge = mergeServiceFromWorker(renderWorker);
+      }
+    } catch (err) {
+      console.error(
+        "failed to open render worker; merge/skeleton/render will return 501:",
+        err,
+      );
+      renderWorker = null;
+      merge = null;
+    }
+  }
 
   const app = await buildApp({
     config,
     db,
     readinessCheck: () => db.isHealthy(),
     skeletonConverter: skeletonHolder,
+    // Share one worker across render routes, merge, and skeleton — do not
+    // let createRenderService open a second Chromium.
+    renderWorker: (renderWorker as SceneRenderWorker | null) ?? null,
+    renderBaseUrl: `http://127.0.0.1:${config.port}`,
+    merge,
   });
-
-  let renderWorker: { close(): Promise<void> } | null = null;
 
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info(`received ${signal}, shutting down`);
     try {
       skeletonHolder.current = null;
+      await app.close();
       if (renderWorker) {
         try {
           await renderWorker.close();
@@ -52,7 +97,6 @@ async function main(): Promise<void> {
         }
         renderWorker = null;
       }
-      await app.close();
       db.close();
       process.exit(0);
     } catch (err) {
@@ -75,35 +119,28 @@ async function main(): Promise<void> {
 
   await app.listen({ port: config.port, host: "0.0.0.0" });
   app.log.info(
-    { port: config.port, dataDir: config.dataDir, dbPath: db.dbPath },
+    {
+      port: config.port,
+      dataDir: config.dataDir,
+      dbPath: db.dbPath,
+      renderWorker: config.renderWorker,
+      mergeEnabled: merge !== null,
+    },
     "server listening",
   );
 
-  if (config.renderWorker === "on") {
-    try {
-      // Dynamic import keeps Playwright out of the process when off.
-      const { createRenderWorker } = await import("@excalidraw-collab/render");
-      const addr = app.server.address();
-      const port =
-        addr && typeof addr === "object" ? addr.port : config.port;
-      // Chromium loads our own /render SPA route (SERVE_STATIC must be on
-      // in production, or STATIC_ROOT must point at packages/web/dist).
-      const baseUrl = `http://127.0.0.1:${port}`;
-      const worker = await createRenderWorker({ baseUrl });
-      renderWorker = worker;
-      skeletonHolder.current = {
-        convert: (request) => worker.convertSkeleton(request),
-      };
-      app.log.info(
-        { baseUrl, renderWorker: "on" },
-        "render worker ready for skeleton conversion",
-      );
-    } catch (err) {
-      app.log.error(
-        { err },
-        "failed to start render worker; skeleton conversion will return 501",
-      );
-    }
+  // Bind skeleton conversion once the /render route is reachable.
+  if (renderWorker) {
+    skeletonHolder.current = {
+      convert: (request) => renderWorker!.convertSkeleton(request),
+    };
+    app.log.info(
+      {
+        baseUrl: `http://127.0.0.1:${config.port}`,
+        renderWorker: "on",
+      },
+      "render worker ready for export, skeleton conversion, and merge",
+    );
   }
 }
 

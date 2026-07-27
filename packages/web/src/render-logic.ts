@@ -1,9 +1,10 @@
 /**
  * Pure helpers for the headless `/render` page.
  *
- * The page accepts either:
- *   - a scene document + export options → `exportToBlob` / `exportToSvg`
- *   - a skeleton element list → `convertToExcalidrawElements`
+ * The page accepts three request kinds:
+ *   - scene document + export options → `exportToBlob` / `exportToSvg`
+ *   - local + remote elements → `restoreElements` + `reconcileElements` (merge)
+ *   - skeleton element list → `convertToExcalidrawElements`
  *
  * Message types are namespaced so they never collide with Excalidraw's own
  * postMessage traffic. Keep string values in lockstep with packages/render.
@@ -37,21 +38,47 @@ export type RenderScenePayload = {
   files?: Record<string, unknown> | null;
 };
 
-export type RenderRequestMessage = {
+/** PNG/SVG export request (default when `op` is omitted). */
+export type RenderExportRequestMessage = {
   type: typeof RENDER_MSG.REQUEST;
   id: string;
+  op?: "export";
   format: RenderFormat;
   scene: RenderScenePayload;
   options?: RenderExportOptions;
 };
 
-export type RenderResponseOk = {
+/**
+ * Merge request: restoreElements + reconcileElements(local, remote, appState).
+ * Never invent conflict rules here — only call upstream public APIs.
+ */
+export type RenderMergeRequestMessage = {
+  type: typeof RENDER_MSG.REQUEST;
+  id: string;
+  op: "merge";
+  local: { elements: readonly unknown[] };
+  remote: { elements: readonly unknown[] };
+  appState?: Record<string, unknown>;
+};
+
+export type RenderRequestMessage =
+  | RenderExportRequestMessage
+  | RenderMergeRequestMessage;
+
+export type RenderExportResponseOk = {
   type: typeof RENDER_MSG.RESPONSE;
   id: string;
   ok: true;
   mimeType: string;
   /** PNG: base64; SVG: full SVG markup string. */
   data: string;
+};
+
+export type RenderMergeResponseOk = {
+  type: typeof RENDER_MSG.RESPONSE;
+  id: string;
+  ok: true;
+  elements: unknown[];
 };
 
 export type RenderResponseErr = {
@@ -61,7 +88,10 @@ export type RenderResponseErr = {
   error: string;
 };
 
-export type RenderResponseMessage = RenderResponseOk | RenderResponseErr;
+export type RenderResponseMessage =
+  | RenderExportResponseOk
+  | RenderMergeResponseOk
+  | RenderResponseErr;
 
 export type SkeletonRequestMessage = {
   type: typeof RENDER_MSG.SKELETON_REQUEST;
@@ -149,16 +179,46 @@ export function filterExportElements(
   });
 }
 
-export function isRenderRequest(data: unknown): data is RenderRequestMessage {
+function isElementsArray(value: unknown): value is readonly unknown[] {
+  return Array.isArray(value);
+}
+
+export function isExportRequest(
+  data: unknown,
+): data is RenderExportRequestMessage {
   if (data === null || typeof data !== "object") return false;
   const m = data as Record<string, unknown>;
   if (m.type !== RENDER_MSG.REQUEST) return false;
   if (typeof m.id !== "string" || m.id.length === 0) return false;
+  // Merge requests are not export requests.
+  if (m.op === "merge") return false;
   if (m.format !== "png" && m.format !== "svg") return false;
   if (m.scene === null || typeof m.scene !== "object") return false;
   const scene = m.scene as Record<string, unknown>;
   if (!Array.isArray(scene.elements)) return false;
   return true;
+}
+
+export function isMergeRequest(
+  data: unknown,
+): data is RenderMergeRequestMessage {
+  if (data === null || typeof data !== "object") return false;
+  const m = data as Record<string, unknown>;
+  if (m.type !== RENDER_MSG.REQUEST) return false;
+  if (typeof m.id !== "string" || m.id.length === 0) return false;
+  if (m.op !== "merge") return false;
+  if (m.local === null || typeof m.local !== "object") return false;
+  if (m.remote === null || typeof m.remote !== "object") return false;
+  const local = m.local as Record<string, unknown>;
+  const remote = m.remote as Record<string, unknown>;
+  if (!isElementsArray(local.elements)) return false;
+  if (!isElementsArray(remote.elements)) return false;
+  return true;
+}
+
+/** Any structured render-page request (export or merge). */
+export function isRenderRequest(data: unknown): data is RenderRequestMessage {
+  return isExportRequest(data) || isMergeRequest(data);
 }
 
 export function isSkeletonRequest(
