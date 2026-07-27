@@ -1,6 +1,9 @@
 import type { CommandResult } from "./format.js";
 import { formatTable } from "./format.js";
 import type { ResolvedConfig } from "./config.js";
+import { loginCommand } from "./login.js";
+import { whoamiCommand } from "./whoami.js";
+import { tokenCommand } from "./token.js";
 
 /** Runtime context passed into every command. */
 export type CommandContext = {
@@ -43,8 +46,7 @@ export const CLI_VERSION = "0.0.0";
 
 /**
  * Stub command that exercises both human-table and `--json` output modes.
- * Later issues add login, token, ls, new, pull, push, diff, describe, log,
- * watch, lock, export — register them the same way; do not implement here.
+ * Later issues add ls, new, pull, push, diff, describe, log, watch, lock, export.
  */
 const versionCommand: Command = {
   name: "version",
@@ -63,3 +65,6 @@ const versionCommand: Command = {
 };
 
 registerCommand(versionCommand);
+registerCommand(loginCommand);
+registerCommand(whoamiCommand);
+registerCommand(tokenCommand);
