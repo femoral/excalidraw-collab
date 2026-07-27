@@ -594,6 +594,24 @@ describe("formatDiff", () => {
     assert.ok(!text.includes("undefined"));
     assert.ok(!text.includes("v0"));
   });
+
+  test("formatDiff renders absent appState keys as (unset), not undefined", () => {
+    const text = formatDiff({
+      from: 1,
+      to: 2,
+      summary: { added: 0, deleted: 0, updated: 0, reordered: 0 },
+      elements: [],
+      appState: [
+        { key: "gridModeEnabled", from: false, to: undefined },
+        { key: "gridSize", from: null, to: undefined },
+        { key: "viewBackgroundColor", from: undefined, to: "#000" },
+      ],
+    });
+    assert.match(text, /gridModeEnabled: false → \(unset\)/);
+    assert.match(text, /gridSize: null → \(unset\)/);
+    assert.match(text, /viewBackgroundColor: \(unset\) → "#000"/);
+    assert.ok(!text.includes("undefined"));
+  });
 });
 
 // ---------------------------------------------------------------------------

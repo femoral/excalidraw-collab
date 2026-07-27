@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  formatAppStateValue,
   formatConflictDiff,
   formatConflictMessage,
   resolutionCommands,
@@ -39,6 +40,31 @@ test("formatConflictDiff renders summary and describe lines", () => {
   assert.match(text, /~1/);
   assert.match(text, /Retry Queue/);
   assert.match(text, /viewBackgroundColor/);
+});
+
+test("formatAppStateValue renders absent keys as (unset), not undefined", () => {
+  assert.equal(formatAppStateValue(undefined), "(unset)");
+  assert.equal(formatAppStateValue(null), "null");
+  assert.equal(formatAppStateValue(false), "false");
+  assert.equal(formatAppStateValue("#fff"), '"#fff"');
+});
+
+test("formatConflictDiff renders absent appState keys as (unset)", () => {
+  const text = formatConflictDiff({
+    from: 1,
+    to: 2,
+    summary: { added: 0, deleted: 0, updated: 0, reordered: 0 },
+    elements: [],
+    appState: [
+      { key: "gridModeEnabled", from: false, to: undefined },
+      { key: "gridSize", from: null, to: undefined },
+      { key: "viewBackgroundColor", from: undefined, to: "#000" },
+    ],
+  });
+  assert.match(text, /gridModeEnabled: false → \(unset\)/);
+  assert.match(text, /gridSize: null → \(unset\)/);
+  assert.match(text, /viewBackgroundColor: \(unset\) → "#000"/);
+  assert.ok(!text.includes("undefined"));
 });
 
 test("formatConflictMessage names exact next commands", () => {

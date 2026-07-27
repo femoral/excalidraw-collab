@@ -161,8 +161,45 @@ test("push without -m exits usage with parseable --json", async () => {
   assert.equal(parsed.error.code, "USAGE");
 });
 
-test("push without prior pull exits usage suggesting pull", async () => {
+test("push without local state on head>0 without --force exits usage suggesting pull", async () => {
   const h = await startServer();
+
+  // Create scene and advance head to 1 so the missing-state case is ambiguous.
+  await run({
+    argv: ["new", "Arch", "--slug", "arch"],
+    env: h.env,
+    io: capture().io,
+    cwd: h.cwd,
+  });
+  // First push is allowed with no state (head 0).
+  const file = path.join(h.cwd, "arch.excalidraw");
+  fs.writeFileSync(
+    file,
+    `${JSON.stringify({
+      type: "excalidraw",
+      elements: [],
+      appState: { viewBackgroundColor: "#111111" },
+    })}\n`,
+  );
+  {
+    const c = capture();
+    const code = await run({
+      argv: ["push", "arch", "-m", "seed", "--json"],
+      env: h.env,
+      io: c.io,
+      cwd: h.cwd,
+    });
+    assert.equal(code, ExitCode.OK, c.stderr);
+    assert.equal(getPulledVersion(h.cwd, h.baseUrl, "arch"), 1);
+  }
+
+  // Wipe local state so the next push has no recorded parent.
+  fs.rmSync(path.join(h.cwd, ".excalidraw-collab"), {
+    recursive: true,
+    force: true,
+  });
+  assert.equal(getPulledVersion(h.cwd, h.baseUrl, "arch"), undefined);
+
   const c = capture();
   const code = await run({
     argv: ["push", "arch", "-m", "nope", "--json"],
@@ -176,6 +213,122 @@ test("push without prior pull exits usage suggesting pull", async () => {
   };
   assert.equal(parsed.error.code, "USAGE");
   assert.match(parsed.error.message, /excalicli pull arch/);
+  // Still no local state recorded on refusal.
+  assert.equal(getPulledVersion(h.cwd, h.baseUrl, "arch"), undefined);
+});
+
+test("new → push without prior pull succeeds on fresh head-0 scene", async () => {
+  const h = await startServer();
+
+  {
+    const c = capture();
+    const code = await run({
+      argv: ["--json", "new", "Round Trip", "--slug", "round-trip"],
+      env: h.env,
+      io: c.io,
+      cwd: h.cwd,
+    });
+    assert.equal(code, ExitCode.OK, c.stderr);
+    const created = JSON.parse(c.stdout) as { headVersion: number };
+    assert.equal(created.headVersion, 0);
+  }
+
+  // No local state, no pull.
+  assert.equal(getPulledVersion(h.cwd, h.baseUrl, "round-trip"), undefined);
+
+  const file = path.join(h.cwd, "scene.excalidraw");
+  fs.writeFileSync(
+    file,
+    `${JSON.stringify({
+      type: "excalidraw",
+      elements: [],
+      appState: { viewBackgroundColor: "#ff00aa" },
+    })}\n`,
+  );
+
+  const c = capture();
+  const code = await run({
+    argv: ["--json", "push", "round-trip", "-f", "scene.excalidraw", "-m", "initial"],
+    env: h.env,
+    io: c.io,
+    cwd: h.cwd,
+  });
+  assert.equal(code, ExitCode.OK, c.stderr);
+  const pushed = JSON.parse(c.stdout) as {
+    version: number;
+    parentVersion: number | null;
+    message: string;
+  };
+  assert.equal(pushed.version, 1);
+  assert.equal(pushed.parentVersion, 0);
+  assert.equal(pushed.message, "initial");
+  // Successful push records local state so the next push has a parent.
+  assert.equal(getPulledVersion(h.cwd, h.baseUrl, "round-trip"), 1);
+});
+
+test("push --force with no local state on head>0 succeeds and records state", async () => {
+  const h = await startServer();
+
+  await run({
+    argv: ["new", "Force Me", "--slug", "force-me"],
+    env: h.env,
+    io: capture().io,
+    cwd: h.cwd,
+  });
+
+  // Seed head=1 via a head-0 push (no prior pull).
+  const file = path.join(h.cwd, "force-me.excalidraw");
+  fs.writeFileSync(
+    file,
+    `${JSON.stringify({
+      type: "excalidraw",
+      elements: [],
+      appState: { viewBackgroundColor: "#aaaaaa" },
+    })}\n`,
+  );
+  {
+    const c = capture();
+    const code = await run({
+      argv: ["push", "force-me", "-m", "seed"],
+      env: h.env,
+      io: c.io,
+      cwd: h.cwd,
+    });
+    assert.equal(code, ExitCode.OK, c.stderr);
+  }
+  assert.equal(getPulledVersion(h.cwd, h.baseUrl, "force-me"), 1);
+
+  // Wipe local state; head remains 1.
+  fs.rmSync(path.join(h.cwd, ".excalidraw-collab"), {
+    recursive: true,
+    force: true,
+  });
+  assert.equal(getPulledVersion(h.cwd, h.baseUrl, "force-me"), undefined);
+
+  // Without --force this would exit 2; with --force it must succeed.
+  fs.writeFileSync(
+    file,
+    `${JSON.stringify({
+      type: "excalidraw",
+      elements: [],
+      appState: { viewBackgroundColor: "#bbbbbb" },
+    })}\n`,
+  );
+  const c = capture();
+  const code = await run({
+    argv: ["--json", "push", "force-me", "-m", "forced", "--force"],
+    env: h.env,
+    io: c.io,
+    cwd: h.cwd,
+  });
+  assert.equal(code, ExitCode.OK, c.stderr);
+  const pushed = JSON.parse(c.stdout) as {
+    version: number;
+    force: boolean;
+  };
+  assert.equal(pushed.version, 2);
+  assert.equal(pushed.force, true);
+  assert.equal(getPulledVersion(h.cwd, h.baseUrl, "force-me"), 2);
 });
 
 // ─── round trip ─────────────────────────────────────────────────────────────

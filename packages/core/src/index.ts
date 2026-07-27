@@ -68,6 +68,7 @@ export type { DigestOptions, FormatDigestOptions } from "./digest.js";
 export {
   diffScenes,
   formatDiff,
+  formatAppStateValue,
   isEmptyDiff,
   type DiffScenesOptions,
 } from "./diff.js";

@@ -700,12 +700,26 @@ export function formatDiff(diff: SceneDiff): string {
   if (diff.appState.length > 0) {
     lines.push("appState:");
     for (const p of diff.appState) {
-      lines.push(`  ${p.key}: ${JSON.stringify(p.from)} → ${JSON.stringify(p.to)}`);
+      lines.push(
+        `  ${p.key}: ${formatAppStateValue(p.from)} → ${formatAppStateValue(p.to)}`,
+      );
     }
   }
 
   // Trailing newline keeps shell `cat` and golden-file tests tidy.
   return lines.join("\n") + "\n";
+}
+
+/**
+ * Render one side of an appState delta. Absent keys arrive as JS `undefined`
+ * (`JSON.stringify(undefined)` is not a string — it becomes the bare word
+ * "undefined" when interpolated). Surface that as explicit "(unset)".
+ */
+export function formatAppStateValue(value: unknown): string {
+  if (value === undefined) {
+    return "(unset)";
+  }
+  return JSON.stringify(value);
 }
 
 function formatChangeLine(change: ElementChange): string {

@@ -16,6 +16,7 @@ import {
 import type { Command, CommandContext } from "./commands.js";
 import { CliError, UsageError } from "./errors.js";
 import type { CommandResult } from "./format.js";
+import type { SceneInfo } from "./ls.js";
 import type { SceneDocument } from "./pull.js";
 import { getPulledVersion, setPulledVersion } from "./state.js";
 
@@ -155,19 +156,53 @@ function readSceneFile(cwd: string, filePath: string): SceneDocument {
   return obj as SceneDocument;
 }
 
+/**
+ * Resolve parentVersion for a push.
+ *
+ * Prefer the recorded last-pulled version. When local state is missing:
+ * - head === 0 (never pushed): parentVersion 0 is unambiguous — allow push
+ * - --force: commit onto current head regardless of local state
+ * - otherwise: refuse (exit 2) — the agent must pull first so conflicts work
+ */
+async function resolveParentVersion(
+  ctx: CommandContext,
+  slug: string,
+  force: boolean,
+): Promise<number> {
+  const server = ctx.config.server!;
+  const recorded = getPulledVersion(ctx.cwd, server, slug);
+  if (recorded !== undefined) {
+    return recorded;
+  }
+
+  const meta = await apiFetch<SceneInfo>({
+    path: `/api/scenes/${encodeURIComponent(slug)}`,
+    method: "GET",
+    config: ctx.config,
+  });
+  const head = meta.headVersion;
+
+  if (head === 0) {
+    return 0;
+  }
+  if (force) {
+    // Force means "commit onto whatever head currently is".
+    return head;
+  }
+
+  throw new CliError(
+    `No local pulled version for scene "${slug}" on ${server}.\n` +
+      `Run: excalicli pull ${slug}`,
+    { code: "USAGE" },
+  );
+}
+
 async function runPush(ctx: CommandContext): Promise<CommandResult> {
   requireAuth(ctx);
   const { slug, file, message, force } = parsePushArgs(ctx.args);
   const server = ctx.config.server!;
 
-  const parentVersion = getPulledVersion(ctx.cwd, server, slug);
-  if (parentVersion === undefined) {
-    throw new CliError(
-      `No local pulled version for scene "${slug}" on ${server}.\n` +
-        `Run: excalicli pull ${slug}`,
-      { code: "USAGE" },
-    );
-  }
+  const parentVersion = await resolveParentVersion(ctx, slug, force);
 
   const filePath = file ?? defaultFilePath(slug);
   const scene = readSceneFile(ctx.cwd, filePath);
@@ -253,6 +288,7 @@ export const pushCommand: Command = {
     "  -f file     Input path (default: SLUG.excalidraw)\n" +
     "  -m message  Commit message (required)\n" +
     "  --force     Overwrite head even if parentVersion is stale\n" +
-    "parentVersion comes from .excalidraw-collab/state.json (set by pull).",
+    "parentVersion comes from .excalidraw-collab/state.json (set by pull/push).\n" +
+    "A fresh scene (head 0) or --force can push without a prior pull.",
   run: runPush,
 };
