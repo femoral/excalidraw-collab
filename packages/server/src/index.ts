@@ -8,9 +8,11 @@ export {
   authorFromIdentity,
   generateTokenSecret,
   isAdminIdentity,
+  registerWhoamiRoute,
   seedBootstrapToken,
   tokenHashesEqual,
   type RequestIdentity,
+  type WhoamiInfo,
 } from "./auth.js";
 export {
   loadConfig,

@@ -89,6 +89,61 @@ function writeFailure(
 }
 
 /**
+ * Peel global `--json` / `--help` / `-h` from argv and rebuild the remaining
+ * tokens so per-command options (e.g. `login --server URL --token T`) are not
+ * swallowed by the global parser. With `strict: false`, unknown flags are
+ * treated as booleans and their values become positionals — tokens let us
+ * reassemble the original shape for the subcommand.
+ */
+function peelGlobalArgs(argv: string[]): {
+  json: boolean;
+  help: boolean;
+  /** Argv with only global flags removed (command name + its args/options). */
+  rest: string[];
+} {
+  const parsed = parseArgs({
+    args: argv,
+    options: {
+      help: { type: "boolean", short: "h", default: false },
+      json: { type: "boolean", default: false },
+    },
+    allowPositionals: true,
+    strict: false,
+    tokens: true,
+  });
+
+  const rest: string[] = [];
+  for (const token of parsed.tokens ?? []) {
+    if (token.kind === "option") {
+      if (token.name === "json" || token.name === "help") {
+        continue;
+      }
+      // Unknown option: re-emit so the subcommand's parseArgs sees it.
+      if (token.inlineValue === true && token.value !== undefined) {
+        rest.push(`${token.rawName}=${token.value}`);
+      } else {
+        rest.push(token.rawName);
+      }
+      continue;
+    }
+    if (token.kind === "positional") {
+      rest.push(token.value);
+      continue;
+    }
+    if (token.kind === "option-terminator") {
+      rest.push("--");
+    }
+  }
+
+  const values = parsed.values as { help?: boolean; json?: boolean };
+  return {
+    json: values.json === true,
+    help: values.help === true,
+    rest,
+  };
+}
+
+/**
  * Parse argv, dispatch to a command, render the result.
  * Commands return values; this function is the only place that writes streams.
  */
@@ -102,29 +157,21 @@ export async function run(options: RunOptions): Promise<ExitCodeValue> {
   let json = false;
 
   try {
-    // Global parse: allow unknown options so subcommands can define their own.
-    let values: { help?: boolean; json?: boolean };
-    let positionals: string[];
+    // Global parse: strip only --json/--help; pass every other token through.
+    let help = false;
+    let argvRest: string[];
     try {
-      const parsed = parseArgs({
-        args: options.argv,
-        options: {
-          help: { type: "boolean", short: "h", default: false },
-          json: { type: "boolean", default: false },
-        },
-        allowPositionals: true,
-        strict: false,
-      });
-      values = parsed.values as { help?: boolean; json?: boolean };
-      positionals = parsed.positionals;
+      const peeled = peelGlobalArgs(options.argv);
+      json = peeled.json;
+      help = peeled.help;
+      argvRest = peeled.rest;
     } catch (err) {
       throw new UsageError(
         err instanceof Error ? err.message : String(err),
       );
     }
 
-    json = values.json === true;
-    const [commandName, ...rest] = positionals;
+    const [commandName, ...rest] = argvRest;
 
     // No subcommand: print help (and exit 0). Agents use --json for a machine list.
     if (!commandName) {
@@ -152,7 +199,7 @@ export async function run(options: RunOptions): Promise<ExitCodeValue> {
     }
 
     // Per-command help: `excalicli version --help`
-    if (values.help || rest.includes("--help") || rest.includes("-h")) {
+    if (help || rest.includes("--help") || rest.includes("-h")) {
       if (json) {
         io.stdout.write(
           formatJson({

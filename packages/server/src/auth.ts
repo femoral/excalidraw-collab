@@ -9,6 +9,7 @@
  */
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import type {
+  FastifyInstance,
   FastifyReply,
   FastifyRequest,
   preHandlerHookHandler,
@@ -172,6 +173,45 @@ export function seedBootstrapToken(
     name: ADMIN_TOKEN_NAME,
     token_hash: hashToken(bootstrapToken),
   });
+}
+
+/** Public identity for the authenticated bearer token (`GET /api/whoami`). */
+export type WhoamiInfo = {
+  id: string;
+  /** Token name — recorded as `author` on versions. */
+  name: string;
+  isAdmin: boolean;
+};
+
+/**
+ * Register `GET /api/whoami` — any valid bearer token may read its own identity
+ * (the name that appears as author in history). Not admin-gated.
+ */
+export async function registerWhoamiRoute(
+  app: FastifyInstance,
+  db: Database,
+): Promise<void> {
+  const authPreHandler = createAuthPreHandler(db);
+
+  await app.register(
+    async (api) => {
+      api.addHook("preHandler", authPreHandler);
+
+      api.get("/whoami", async (request) => {
+        const identity = request.auth;
+        if (!identity) {
+          throw unauthorized("authentication required");
+        }
+        const body: WhoamiInfo = {
+          id: identity.tokenId,
+          name: identity.name,
+          isAdmin: identity.isAdmin,
+        };
+        return body;
+      });
+    },
+    { prefix: "/api" },
+  );
 }
 
 // Augment FastifyRequest with optional auth identity (set by the preHandler).

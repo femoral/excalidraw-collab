@@ -6,7 +6,7 @@ import Fastify, {
   type FastifyServerOptions,
 } from "fastify";
 import fastifyStatic from "@fastify/static";
-import { seedBootstrapToken } from "./auth.js";
+import { registerWhoamiRoute, seedBootstrapToken } from "./auth.js";
 import { type Config, loadConfig } from "./config.js";
 import type { Database } from "./db.js";
 import {
@@ -124,6 +124,7 @@ export async function buildApp(
   if (deps.db) {
     // First-boot admin seed (no-op when already bootstrapped or token empty).
     seedBootstrapToken(deps.db, config.bootstrapToken);
+    await registerWhoamiRoute(app, deps.db);
     await registerTokenRoutes(app, deps.db);
     await registerSceneRoutes(app, deps.db);
     if (fileStore) {

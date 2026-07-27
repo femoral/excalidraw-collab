@@ -607,3 +607,71 @@ describe("token lifecycle", () => {
     );
   });
 });
+
+describe("GET /api/whoami", () => {
+  test("returns the authenticated token name, id, and isAdmin", async () => {
+    const dataDir = tempDataDir();
+    const bootstrapSecret = "admin-whoami";
+    const { app } = await buildAuthApp({
+      dataDir,
+      bootstrapToken: bootstrapSecret,
+    });
+
+    const admin = await app.inject({
+      method: "GET",
+      url: "/api/whoami",
+      headers: bearer(bootstrapSecret),
+    });
+    assert.equal(admin.statusCode, 200);
+    const adminBody = admin.json() as {
+      id: string;
+      name: string;
+      isAdmin: boolean;
+    };
+    assert.equal(adminBody.name, ADMIN_TOKEN_NAME);
+    assert.equal(adminBody.isAdmin, true);
+    assert.equal(typeof adminBody.id, "string");
+    assert.ok(adminBody.id.length > 0);
+
+    const mint = await app.inject({
+      method: "POST",
+      url: "/api/tokens",
+      headers: {
+        ...bearer(bootstrapSecret),
+        "content-type": "application/json",
+      },
+      payload: { name: "agent-whoami" },
+    });
+    assert.equal(mint.statusCode, 201);
+    const agent = mint.json() as TokenCreated;
+
+    const who = await app.inject({
+      method: "GET",
+      url: "/api/whoami",
+      headers: bearer(agent.token),
+    });
+    assert.equal(who.statusCode, 200);
+    const whoBody = who.json() as {
+      id: string;
+      name: string;
+      isAdmin: boolean;
+    };
+    assert.equal(whoBody.name, "agent-whoami");
+    assert.equal(whoBody.isAdmin, false);
+    assert.equal(whoBody.id, agent.id);
+  });
+
+  test("rejects missing auth with 401", async () => {
+    const dataDir = tempDataDir();
+    const { app } = await buildAuthApp({
+      dataDir,
+      bootstrapToken: "admin-whoami-401",
+    });
+    const res = await app.inject({ method: "GET", url: "/api/whoami" });
+    assert.equal(res.statusCode, 401);
+    assert.equal(
+      (res.json() as ErrorEnvelope).error.code,
+      ErrorCode.UNAUTHORIZED,
+    );
+  });
+});
