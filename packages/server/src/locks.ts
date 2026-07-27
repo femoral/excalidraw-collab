@@ -14,6 +14,7 @@ import { authorFromIdentity, createAuthPreHandler } from "./auth.js";
 import type { Database } from "./db.js";
 import type { SceneEventHub } from "./events.js";
 import { AppError, ErrorCode } from "./errors.js";
+import type { LockExpiryScheduler } from "./lock-expiry.js";
 import { isSceneLockActive, toLock, type SceneInfo } from "./scenes.js";
 
 /** Default claim TTL when the body omits `ttl` (PLAN.md §5). */
@@ -62,11 +63,14 @@ function lockInfoFromScene(
  * Register lock claim/release routes under `/api` with Bearer auth.
  * When `events` is provided, claim/release fan out on the multiplexed stream
  * so dashboard/open-scene lock badges stay live without a version commit.
+ * When `lockExpiry` is provided, claims arm a server-side TTL timer that
+ * publishes a free lock event on expiry (issue #39).
  */
 export async function registerLockRoutes(
   app: FastifyInstance,
   db: Database,
   events?: SceneEventHub,
+  lockExpiry?: LockExpiryScheduler,
 ): Promise<void> {
   const authPreHandler = createAuthPreHandler(db);
 
@@ -151,6 +155,7 @@ export async function registerLockRoutes(
           }
 
           const lock = toLock(updated, nowMs)!;
+          lockExpiry?.arm(scene.id, scene.slug, holder, expiresAt);
           events?.publishLock({
             sceneId: scene.id,
             slug: scene.slug,
@@ -185,6 +190,7 @@ export async function registerLockRoutes(
             ? authorFromIdentity(identity)
             : scene.lock_holder ?? "unknown";
 
+          lockExpiry?.disarm(scene.id);
           db.setSceneLock(scene.id, null, null);
           events?.publishLock({
             sceneId: scene.id,

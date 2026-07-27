@@ -32,6 +32,7 @@ import {
 import type { SceneDiffService } from "./diff.js";
 import type { SceneEventHub } from "./events.js";
 import { AppError, ErrorCode } from "./errors.js";
+import type { LockExpiryScheduler } from "./lock-expiry.js";
 import { toLock } from "./scenes.js";
 import {
   decodeDataURL,
@@ -421,9 +422,14 @@ export async function registerVersionRoutes(
      * stale parent returns 501 — never a hand-rolled fallback.
      */
     merge?: SceneMergeService | null;
+    /**
+     * When the commit auto-releases the holder's lock, disarm the TTL
+     * expiry timer so we do not publish a second free-lock event later.
+     */
+    lockExpiry?: LockExpiryScheduler;
   },
 ): Promise<void> {
-  const { db, store, diffs, events } = deps;
+  const { db, store, diffs, events, lockExpiry } = deps;
   const mergeService = deps.merge ?? null;
   const authPreHandler = createAuthPreHandler(db);
 
@@ -791,6 +797,8 @@ export async function registerVersionRoutes(
               version: toVersionInfo(result.version),
               lock: locked ? toLock(locked) : null,
             });
+            // Holder auto-release inside commitVersion may have freed the lock.
+            lockExpiry?.disarmIfFree(scene.id);
 
             const body: PushVersionResponse & MergePushExtras = {
               ...toPushResponse(result.version),
@@ -885,6 +893,8 @@ export async function registerVersionRoutes(
             version: toVersionInfo(result.version),
             lock: locked ? toLock(locked) : null,
           });
+          // Holder auto-release inside commitVersion may have freed the lock.
+          lockExpiry?.disarmIfFree(scene.id);
 
           return reply.status(201).send(toPushResponse(result.version));
         },

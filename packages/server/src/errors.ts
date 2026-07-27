@@ -1,7 +1,7 @@
 /**
  * Shared API error codes. The CLI imports these and maps them to process exit
  * codes mechanically:
- *   0 ok · 1 error · 2 usage · 4 conflict · 5 lock held
+ *   0 ok · 1 error · 2 usage · 4 conflict · 5 lock held · 6 timeout
  */
 export const ErrorCode = {
   INTERNAL: "INTERNAL",
@@ -25,6 +25,8 @@ export const ExitCode = {
   USAGE: 2,
   CONFLICT: 4,
   LOCK_HELD: 5,
+  /** Client-side wait deadline (`watch --timeout`); not a server HTTP status. */
+  TIMEOUT: 6,
 } as const;
 
 export type ExitCode = (typeof ExitCode)[keyof typeof ExitCode];
