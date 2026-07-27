@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "type": "module",
   "bin": {
-    "excalicli": "./dist/index.js"
+    "excalicli": "./bin/excalicli"
   },
   "exports": {
     ".": {
@@ -14,11 +14,15 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
+    "bin",
     "dist"
   ],
   "scripts": {
     "build": "tsc -b",
     "test": "node --test dist/**/*.test.js",
     "dev": "tsc -b --watch"
+  },
+  "devDependencies": {
+    "@excalidraw-collab/server": "workspace:*"
   }
 }
