@@ -750,3 +750,26 @@ export function isEmptyDiff(diff: SceneDiff): boolean {
     diff.summary.reordered === 0
   );
 }
+
+/**
+ * True when two elements differ in meaningful content — the same change
+ * detection the diff engine uses for updates (ignores `version`,
+ * `versionNonce`, `updated`, `seed`, and `index`), plus live/tombstone
+ * transitions via `isDeleted`.
+ *
+ * `boundElements` alone is not meaningful (mirror of bindings on the
+ * arrow/text); matches {@link diffScenes}.
+ *
+ * Used by the server merge path to find hand-edited elements that still
+ * carry pull-time version numbers so it can bump them before
+ * `reconcileElements` (which keys winners on version / versionNonce).
+ */
+export function elementHasMeaningfulChange(
+  before: ExcalidrawElement,
+  after: ExcalidrawElement,
+): boolean {
+  if (isLive(before) !== isLive(after)) return true;
+  const props = collectPropDeltas(before, after);
+  const meaningful = props.filter((p) => p.key !== "boundElements");
+  return meaningful.length > 0;
+}

@@ -70,5 +70,6 @@ export {
   formatDiff,
   formatAppStateValue,
   isEmptyDiff,
+  elementHasMeaningfulChange,
   type DiffScenesOptions,
 } from "./diff.js";
