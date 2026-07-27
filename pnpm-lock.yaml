@@ -45,6 +45,9 @@ importers:
       '@excalidraw-collab/core':
         specifier: workspace:*
         version: link:../core
+      '@excalidraw-collab/render':
+        specifier: workspace:*
+        version: link:../render
       '@fastify/static':
         specifier: ^10.1.2
         version: 10.1.2

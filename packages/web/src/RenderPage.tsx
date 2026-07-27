@@ -1,24 +1,34 @@
 /**
- * Hidden headless export surface at `/render`.
+ * Hidden headless export / conversion surface at `/render`.
  *
  * Driven by Playwright (packages/render): the page announces READY, then
- * accepts REQUEST messages and replies with RESPONSE carrying PNG base64 or
- * SVG markup. Uses only public `@excalidraw/excalidraw` export helpers —
- * never mutates element internals.
+ * accepts REQUEST (PNG/SVG export) or SKELETON_REQUEST (convertToExcalidrawElements)
+ * messages and replies with RESPONSE / SKELETON_RESPONSE. Uses only public
+ * `@excalidraw/excalidraw` helpers — never mutates element internals by hand.
  */
 import { useEffect, useState, type ReactElement } from "react";
-import { exportToBlob, exportToSvg } from "@excalidraw/excalidraw";
+import {
+  convertToExcalidrawElements,
+  exportToBlob,
+  exportToSvg,
+  restoreElements,
+} from "@excalidraw/excalidraw";
 import type { BinaryFiles, ExcalidrawElement } from "@excalidraw-collab/core";
 import {
   blobToBase64,
   buildExportAppState,
   filterExportElements,
   isRenderRequest,
+  isSkeletonRequest,
   normalizeRenderOptions,
   RENDER_MSG,
   type RenderRequestMessage,
   type RenderResponseMessage,
+  type SkeletonRequestMessage,
+  type SkeletonResponseMessage,
 } from "./render-logic.ts";
+
+type PageResponse = RenderResponseMessage | SkeletonResponseMessage;
 
 async function handleRenderRequest(
   msg: RenderRequestMessage,
@@ -69,16 +79,43 @@ async function handleRenderRequest(
   };
 }
 
-function reply(message: RenderResponseMessage): void {
+async function handleSkeletonRequest(
+  msg: SkeletonRequestMessage,
+): Promise<SkeletonResponseMessage> {
+  // Text width / bound-label sizing need real font metrics.
+  if (typeof document !== "undefined" && document.fonts?.ready) {
+    await document.fonts.ready;
+  }
+
+  // Agents supply ids for arrow bindings — keep them unless explicitly asked
+  // to regenerate (matches packages/core fixture generation).
+  const regenerateIds = msg.regenerateIds === true;
+  const converted = convertToExcalidrawElements(
+    msg.elements as Parameters<typeof convertToExcalidrawElements>[0],
+    { regenerateIds },
+  );
+  // restoreElements repairs ordering/indices and binding bookkeeping via
+  // upstream code only — we never invent element internals ourselves.
+  const elements = restoreElements(converted, null, {
+    repairBindings: true,
+  }) as unknown[];
+
+  return {
+    type: RENDER_MSG.SKELETON_RESPONSE,
+    id: msg.id,
+    ok: true,
+    elements,
+  };
+}
+
+function reply(message: PageResponse): void {
   // Target the opener/parent if present; otherwise broadcast on the window
-  // so Playwright's page.evaluate / page.on('console') style bridges work
-  // via window.postMessage from the page itself (Playwright listens with
-  // page.exposeFunction or waitForFunction — we also stash on window).
+  // so Playwright's page.evaluate bridges work via window.postMessage.
   window.postMessage(message, "*");
   // Mirror onto a global for Playwright evaluate loops that don't use
   // MessageEvent (belt-and-suspenders with the exposed bridge).
   const queue = (window as Window & {
-    __excalidrawCollabRenderResults?: RenderResponseMessage[];
+    __excalidrawCollabRenderResults?: PageResponse[];
   }).__excalidrawCollabRenderResults;
   if (Array.isArray(queue)) {
     queue.push(message);
@@ -93,35 +130,58 @@ export function RenderPage(): ReactElement {
     // Result queue for Playwright polling fallback.
     (
       window as Window & {
-        __excalidrawCollabRenderResults?: RenderResponseMessage[];
+        __excalidrawCollabRenderResults?: PageResponse[];
       }
     ).__excalidrawCollabRenderResults = [];
 
     const onMessage = (event: MessageEvent) => {
-      // Only accept structured render requests (same-window or Playwright).
-      if (!isRenderRequest(event.data)) return;
+      if (isRenderRequest(event.data)) {
+        setStatus("busy");
+        setLastError(null);
+        void (async () => {
+          try {
+            const result = await handleRenderRequest(event.data);
+            reply(result);
+            setStatus("ready");
+          } catch (err) {
+            const message =
+              err instanceof Error ? err.message : "render failed";
+            reply({
+              type: RENDER_MSG.RESPONSE,
+              id: (event.data as RenderRequestMessage).id,
+              ok: false,
+              error: message,
+            });
+            setLastError(message);
+            setStatus("error");
+          }
+        })();
+        return;
+      }
 
-      setStatus("busy");
-      setLastError(null);
-
-      void (async () => {
-        try {
-          const result = await handleRenderRequest(event.data);
-          reply(result);
-          setStatus("ready");
-        } catch (err) {
-          const message =
-            err instanceof Error ? err.message : "render failed";
-          reply({
-            type: RENDER_MSG.RESPONSE,
-            id: (event.data as RenderRequestMessage).id,
-            ok: false,
-            error: message,
-          });
-          setLastError(message);
-          setStatus("error");
-        }
-      })();
+      if (isSkeletonRequest(event.data)) {
+        setStatus("busy");
+        setLastError(null);
+        void (async () => {
+          try {
+            const result = await handleSkeletonRequest(event.data);
+            reply(result);
+            setStatus("ready");
+          } catch (err) {
+            const message =
+              err instanceof Error ? err.message : "skeleton conversion failed";
+            reply({
+              type: RENDER_MSG.SKELETON_RESPONSE,
+              id: (event.data as SkeletonRequestMessage).id,
+              ok: false,
+              error: message,
+              reason: message,
+            });
+            setLastError(message);
+            setStatus("error");
+          }
+        })();
+      }
     };
 
     window.addEventListener("message", onMessage);
@@ -150,7 +210,7 @@ export function RenderPage(): ReactElement {
     >
       <h1 style={{ fontSize: 14, margin: 0 }}>excalidraw-collab render</h1>
       <p style={{ fontSize: 12, margin: "8px 0 0", opacity: 0.7 }}>
-        Headless export surface — driven via postMessage.
+        Headless export / skeleton conversion surface — driven via postMessage.
       </p>
       <p style={{ fontSize: 12, margin: "8px 0 0" }} data-testid="render-status">
         status: {status}

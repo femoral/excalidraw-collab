@@ -4,6 +4,7 @@ import {
   buildExportAppState,
   filterExportElements,
   isRenderRequest,
+  isSkeletonRequest,
   normalizeRenderOptions,
   RENDER_MSG,
 } from "./render-logic.ts";
@@ -92,5 +93,44 @@ test("isRenderRequest validates shape", () => {
       scene: { elements: [] },
     }),
     true,
+  );
+});
+
+test("isSkeletonRequest validates shape", () => {
+  assert.equal(isSkeletonRequest(null), false);
+  assert.equal(isSkeletonRequest({ type: RENDER_MSG.SKELETON_REQUEST }), false);
+  assert.equal(
+    isSkeletonRequest({
+      type: RENDER_MSG.SKELETON_REQUEST,
+      id: "1",
+      elements: "nope",
+    }),
+    false,
+  );
+  assert.equal(
+    isSkeletonRequest({
+      type: RENDER_MSG.SKELETON_REQUEST,
+      id: "1",
+      elements: [],
+    }),
+    true,
+  );
+  assert.equal(
+    isSkeletonRequest({
+      type: RENDER_MSG.SKELETON_REQUEST,
+      id: "1",
+      elements: [{ type: "rectangle" }],
+      regenerateIds: false,
+    }),
+    true,
+  );
+  assert.equal(
+    isSkeletonRequest({
+      type: RENDER_MSG.SKELETON_REQUEST,
+      id: "1",
+      elements: [],
+      regenerateIds: "yes",
+    }),
+    false,
   );
 });

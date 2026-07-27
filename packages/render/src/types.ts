@@ -33,6 +33,20 @@ export type RenderResult = {
   format: RenderFormat;
 };
 
+/** Skeleton → full elements conversion (DOM required for text metrics). */
+export type SkeletonConvertRequest = {
+  elements: readonly unknown[];
+  /**
+   * When true, regenerate element ids (upstream default). Agents that supply
+   * ids for arrow bindings should leave this false (worker default).
+   */
+  regenerateIds?: boolean;
+};
+
+export type SkeletonConvertResult = {
+  elements: unknown[];
+};
+
 export type RenderWorkerOptions = {
   /**
    * Base URL of the web app that serves `/render` (e.g. `http://127.0.0.1:3000`).
@@ -55,6 +69,13 @@ export type RenderWorkerOptions = {
 export type RenderWorker = {
   /** Render a scene to PNG or SVG. Lazily launches the browser on first call. */
   render(request: RenderRequest): Promise<RenderResult>;
+  /**
+   * Convert skeleton elements to full Excalidraw elements via upstream
+   * `convertToExcalidrawElements` inside the browser page.
+   */
+  convertSkeleton(
+    request: SkeletonConvertRequest,
+  ): Promise<SkeletonConvertResult>;
   /** Shut down the browser and drain the pool. Safe to call multiple times. */
   close(): Promise<void>;
   /** True while a Chromium process is held open. */

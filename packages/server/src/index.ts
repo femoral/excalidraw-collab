@@ -127,3 +127,13 @@ export {
   SceneEventHub,
   type SceneEventResponse,
 } from "./events.js";
+export {
+  registerSkeletonRoutes,
+  validateSkeletonElements,
+  validateSkeletonEntry,
+  SKELETON_TYPES,
+  SKELETON_WORKER_DISABLED_MESSAGE,
+  type SkeletonConverter,
+  type SkeletonConverterHolder,
+  type SkeletonErrorDetails,
+} from "./skeleton.js";

@@ -1,15 +1,20 @@
 /**
  * Pure helpers for the headless `/render` page.
  *
- * The page accepts a scene document + export options via postMessage and
- * calls upstream `exportToBlob` / `exportToSvg`. Message types are namespaced
- * so they never collide with Excalidraw's own postMessage traffic.
+ * The page accepts either:
+ *   - a scene document + export options → `exportToBlob` / `exportToSvg`
+ *   - a skeleton element list → `convertToExcalidrawElements`
+ *
+ * Message types are namespaced so they never collide with Excalidraw's own
+ * postMessage traffic. Keep string values in lockstep with packages/render.
  */
 
 export const RENDER_MSG = {
   READY: "excalidraw-collab:render-ready",
   REQUEST: "excalidraw-collab:render-request",
   RESPONSE: "excalidraw-collab:render-response",
+  SKELETON_REQUEST: "excalidraw-collab:skeleton-request",
+  SKELETON_RESPONSE: "excalidraw-collab:skeleton-response",
 } as const;
 
 export type RenderFormat = "png" | "svg";
@@ -57,6 +62,36 @@ export type RenderResponseErr = {
 };
 
 export type RenderResponseMessage = RenderResponseOk | RenderResponseErr;
+
+export type SkeletonRequestMessage = {
+  type: typeof RENDER_MSG.SKELETON_REQUEST;
+  id: string;
+  elements: readonly unknown[];
+  /**
+   * When true, regenerate element ids (upstream default). Agents that supply
+   * ids for arrow bindings should leave this false (our default).
+   */
+  regenerateIds?: boolean;
+};
+
+export type SkeletonResponseOk = {
+  type: typeof RENDER_MSG.SKELETON_RESPONSE;
+  id: string;
+  ok: true;
+  elements: unknown[];
+};
+
+export type SkeletonResponseErr = {
+  type: typeof RENDER_MSG.SKELETON_RESPONSE;
+  id: string;
+  ok: false;
+  error: string;
+  /** Zero-based skeleton index when the failure maps to one entry. */
+  index?: number;
+  reason?: string;
+};
+
+export type SkeletonResponseMessage = SkeletonResponseOk | SkeletonResponseErr;
 
 export type RenderReadyMessage = {
   type: typeof RENDER_MSG.READY;
@@ -123,6 +158,20 @@ export function isRenderRequest(data: unknown): data is RenderRequestMessage {
   if (m.scene === null || typeof m.scene !== "object") return false;
   const scene = m.scene as Record<string, unknown>;
   if (!Array.isArray(scene.elements)) return false;
+  return true;
+}
+
+export function isSkeletonRequest(
+  data: unknown,
+): data is SkeletonRequestMessage {
+  if (data === null || typeof data !== "object") return false;
+  const m = data as Record<string, unknown>;
+  if (m.type !== RENDER_MSG.SKELETON_REQUEST) return false;
+  if (typeof m.id !== "string" || m.id.length === 0) return false;
+  if (!Array.isArray(m.elements)) return false;
+  if (m.regenerateIds !== undefined && typeof m.regenerateIds !== "boolean") {
+    return false;
+  }
   return true;
 }
 
