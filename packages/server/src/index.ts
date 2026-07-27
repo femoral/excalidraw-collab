@@ -38,6 +38,7 @@ export {
   BUSY_TIMEOUT_MS,
   META_BOOTSTRAP_COMPLETED,
   type SceneRow,
+  type SceneListRow,
   type VersionRow,
   type DraftRow,
   type TokenRow,
@@ -50,3 +51,10 @@ export {
   type OpenDatabaseOptions,
 } from "./db.js";
 export type { TokenCreated, TokenInfo } from "./tokens.js";
+export type { SceneInfo } from "./scenes.js";
+export {
+  allocateSlug,
+  isValidSlug,
+  slugifyName,
+  SLUG_MAX_LENGTH,
+} from "./scenes.js";

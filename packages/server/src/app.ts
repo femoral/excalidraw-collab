@@ -15,6 +15,7 @@ import {
   errorEnvelope,
   type ErrorEnvelope,
 } from "./errors.js";
+import { registerSceneRoutes } from "./scenes.js";
 import { registerTokenRoutes } from "./tokens.js";
 
 /** Injectable readiness probe; issue #5 will plug SQLite reachability here. */
@@ -103,6 +104,7 @@ export async function buildApp(
     // First-boot admin seed (no-op when already bootstrapped or token empty).
     seedBootstrapToken(deps.db, config.bootstrapToken);
     await registerTokenRoutes(app, deps.db);
+    await registerSceneRoutes(app, deps.db);
   }
 
   if (config.serveStatic) {
