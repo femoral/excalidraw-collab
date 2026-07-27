@@ -104,3 +104,9 @@ export {
   formatDiff,
   isEmptyDiff,
 } from "./diff.js";
+export {
+  registerDraftRoutes,
+  toDraftResponse,
+  type DraftResponse,
+  type PutDraftResponse,
+} from "./drafts.js";
