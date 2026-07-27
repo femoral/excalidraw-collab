@@ -66,7 +66,18 @@ export type TokenRow = {
   token_hash: string;
   created_at: string;
   last_used_at: string | null;
+  /** Explicit privilege flag; never inferred from `name`. */
+  is_admin: boolean;
 };
+
+/** Key/value row in the `meta` table (server-side durable flags). */
+export type MetaRow = {
+  key: string;
+  value: string;
+};
+
+/** Meta key set when first-boot bootstrap has completed (value `"1"`). */
+export const META_BOOTSTRAP_COMPLETED = "bootstrap_completed";
 
 export type SchemaMigrationRow = {
   id: number;
@@ -118,6 +129,8 @@ export type NewToken = {
   token_hash: string;
   created_at?: string;
   last_used_at?: string | null;
+  /** Defaults to false (non-admin). */
+  is_admin?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -233,6 +246,21 @@ const MIGRATIONS: readonly Migration[] = [
       CREATE INDEX idx_scenes_updated_at ON scenes(updated_at);
       CREATE INDEX idx_versions_scene_created ON versions(scene_id, created_at);
       CREATE INDEX idx_tokens_token_hash ON tokens(token_hash);
+    `,
+  },
+  {
+    id: 2,
+    name: "002_token_admin_and_meta",
+    sql: `
+      -- Explicit privilege bit (was previously inferred from name === "admin").
+      ALTER TABLE tokens ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0;
+
+      -- Durable key/value store for server flags (e.g. bootstrap completed).
+      -- Lives in the DB so backup/restore cannot lose it independently of tokens.
+      CREATE TABLE meta (
+        key   TEXT PRIMARY KEY NOT NULL,
+        value TEXT NOT NULL
+      );
     `,
   },
 ];
@@ -597,17 +625,38 @@ export class Database {
   }
 
   // -------------------------------------------------------------------------
+  // Meta (key/value flags)
+  // -------------------------------------------------------------------------
+
+  getMeta(key: string): string | undefined {
+    const row = this.raw
+      .prepare(`SELECT value FROM meta WHERE key = ?`)
+      .get(key) as { value: string } | undefined;
+    return row?.value;
+  }
+
+  setMeta(key: string, value: string): void {
+    this.raw
+      .prepare(
+        `INSERT INTO meta (key, value) VALUES (?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      )
+      .run(key, value);
+  }
+
+  // -------------------------------------------------------------------------
   // Tokens
   // -------------------------------------------------------------------------
 
   insertToken(input: NewToken): TokenRow {
     const created_at = input.created_at ?? nowIso();
     const last_used_at = input.last_used_at ?? null;
+    const is_admin = input.is_admin ? 1 : 0;
 
     this.raw
       .prepare(
-        `INSERT INTO tokens (id, name, token_hash, created_at, last_used_at)
-         VALUES (?, ?, ?, ?, ?)`,
+        `INSERT INTO tokens (id, name, token_hash, created_at, last_used_at, is_admin)
+         VALUES (?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.id,
@@ -615,6 +664,7 @@ export class Database {
         input.token_hash,
         created_at,
         last_used_at,
+        is_admin,
       );
 
     return this.getTokenById(input.id)!;
@@ -623,21 +673,21 @@ export class Database {
   getTokenById(id: string): TokenRow | undefined {
     const row = this.raw
       .prepare(`SELECT * FROM tokens WHERE id = ?`)
-      .get(id) as TokenRow | undefined;
+      .get(id) as Record<string, unknown> | undefined;
     return row ? mapToken(row) : undefined;
   }
 
   getTokenByHash(tokenHash: string): TokenRow | undefined {
     const row = this.raw
       .prepare(`SELECT * FROM tokens WHERE token_hash = ?`)
-      .get(tokenHash) as TokenRow | undefined;
+      .get(tokenHash) as Record<string, unknown> | undefined;
     return row ? mapToken(row) : undefined;
   }
 
   listTokens(): TokenRow[] {
     const rows = this.raw
       .prepare(`SELECT * FROM tokens ORDER BY created_at ASC`)
-      .all() as TokenRow[];
+      .all() as Array<Record<string, unknown>>;
     return rows.map(mapToken);
   }
 
@@ -649,6 +699,71 @@ export class Database {
 
   deleteToken(id: string): void {
     this.raw.prepare(`DELETE FROM tokens WHERE id = ?`).run(id);
+  }
+
+  /**
+   * First-boot bootstrap seed in a single transaction:
+   * - If `bootstrap_completed` meta is already set, no-op.
+   * - If the tokens table is empty, insert the admin token (`is_admin = 1`).
+   * - Always set `bootstrap_completed` so a later boot never re-seeds,
+   *   even after the admin token is revoked.
+   *
+   * Token insert and meta flag share one transaction so they cannot disagree.
+   * Returns true when a new admin row was inserted.
+   */
+  runBootstrapSeed(input: {
+    id: string;
+    name: string;
+    token_hash: string;
+  }): boolean {
+    this.raw.exec("BEGIN");
+    try {
+      const existing = this.raw
+        .prepare(`SELECT value FROM meta WHERE key = ?`)
+        .get(META_BOOTSTRAP_COMPLETED) as { value: string } | undefined;
+      if (existing?.value === "1") {
+        this.raw.exec("COMMIT");
+        return false;
+      }
+
+      const countRow = this.raw
+        .prepare(`SELECT COUNT(*) AS n FROM tokens`)
+        .get() as { n: number };
+      const tokenCount = Number(countRow.n);
+
+      let seeded = false;
+      if (tokenCount === 0) {
+        const hashHit = this.raw
+          .prepare(`SELECT id FROM tokens WHERE token_hash = ?`)
+          .get(input.token_hash) as { id: string } | undefined;
+        if (!hashHit) {
+          this.raw
+            .prepare(
+              `INSERT INTO tokens (id, name, token_hash, created_at, last_used_at, is_admin)
+               VALUES (?, ?, ?, ?, NULL, 1)`,
+            )
+            .run(input.id, input.name, input.token_hash, nowIso());
+          seeded = true;
+        }
+      }
+
+      this.raw
+        .prepare(
+          `INSERT INTO meta (key, value) VALUES (?, ?)
+           ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+        )
+        .run(META_BOOTSTRAP_COMPLETED, "1");
+
+      this.raw.exec("COMMIT");
+      return seeded;
+    } catch (err) {
+      try {
+        this.raw.exec("ROLLBACK");
+      } catch {
+        // ignore rollback errors
+      }
+      throw err;
+    }
   }
 }
 
@@ -695,13 +810,17 @@ function mapDraft(row: Record<string, unknown>): DraftRow {
   };
 }
 
-function mapToken(row: TokenRow): TokenRow {
+function mapToken(row: Record<string, unknown>): TokenRow {
   return {
-    id: row.id,
-    name: row.name,
-    token_hash: row.token_hash,
-    created_at: row.created_at,
-    last_used_at: row.last_used_at ?? null,
+    id: String(row.id),
+    name: String(row.name),
+    token_hash: String(row.token_hash),
+    created_at: String(row.created_at),
+    last_used_at:
+      row.last_used_at === null || row.last_used_at === undefined
+        ? null
+        : String(row.last_used_at),
+    is_admin: Number(row.is_admin ?? 0) === 1,
   };
 }
 

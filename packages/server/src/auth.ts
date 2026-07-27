@@ -4,24 +4,24 @@
  * Tokens are stored as SHA-256 hashes and compared with timingSafeEqual.
  * The authenticated token's *name* is the request identity; version `author`
  * must be derived from that identity (see {@link authorFromIdentity}), never
- * from a client-supplied field.
+ * from a client-supplied field. Admin privilege is an explicit `is_admin`
+ * column, never inferred from the name.
  */
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import path from "node:path";
 import type {
   FastifyReply,
   FastifyRequest,
   preHandlerHookHandler,
 } from "fastify";
-import { hashToken, nowIso, type Database } from "./db.js";
+import {
+  hashToken,
+  META_BOOTSTRAP_COMPLETED,
+  type Database,
+} from "./db.js";
 import { AppError, ErrorCode } from "./errors.js";
 
-/** Reserved name for the bootstrap admin token. */
+/** Default name for the bootstrap admin token (not load-bearing for privilege). */
 export const ADMIN_TOKEN_NAME = "admin";
-
-/** Marker file under DATA_DIR: bootstrap runs at most once per data dir. */
-export const BOOTSTRAP_SEEDED_MARKER = ".bootstrap_seeded";
 
 /**
  * Authenticated request identity. Later route handlers should read the author
@@ -110,7 +110,7 @@ export function createAuthPreHandler(db: Database): preHandlerHookHandler {
     const identity: RequestIdentity = {
       tokenId: row.id,
       name: row.name,
-      isAdmin: row.name === ADMIN_TOKEN_NAME,
+      isAdmin: row.is_admin,
     };
     request.auth = identity;
 
@@ -151,11 +151,12 @@ export async function requireAdminPreHandler(
 /**
  * Seed the bootstrap admin token on first boot only.
  *
- * - No-op when `bootstrapToken` is empty.
- * - No-op when the data dir has already been bootstrapped (marker file), so a
- *   revoked admin token is never resurrected on later boots.
- * - Inserts a token named {@link ADMIN_TOKEN_NAME} only when the tokens table
- *   is still empty.
+ * - No-op when `bootstrapToken` is empty (does not mark bootstrap complete).
+ * - No-op when `meta.bootstrap_completed` is already set, so a revoked admin
+ *   is never resurrected on later boots — even after a DB-only restore.
+ * - Inserts an admin token (`is_admin = 1`) named {@link ADMIN_TOKEN_NAME}
+ *   only when the tokens table is still empty.
+ * - Admin insert and the meta flag run in one DB transaction.
  *
  * Returns true when a new admin row was inserted.
  */
@@ -164,36 +165,13 @@ export function seedBootstrapToken(
   bootstrapToken: string,
 ): boolean {
   if (!bootstrapToken) return false;
+  if (db.getMeta(META_BOOTSTRAP_COMPLETED) === "1") return false;
 
-  const markerPath = path.join(db.dataDir, BOOTSTRAP_SEEDED_MARKER);
-  if (existsSync(markerPath)) {
-    return false;
-  }
-
-  let seeded = false;
-  if (db.listTokens().length === 0) {
-    // Guard against a hash that somehow already exists (shouldn't on empty table).
-    const token_hash = hashToken(bootstrapToken);
-    if (!db.getTokenByHash(token_hash)) {
-      db.insertToken({
-        id: randomUUID(),
-        name: ADMIN_TOKEN_NAME,
-        token_hash,
-      });
-      seeded = true;
-    }
-  }
-
-  // Mark bootstrap complete even when tokens already existed (restored DB),
-  // so a later BOOTSTRAP_TOKEN never re-seeds or resurrects a revoked admin.
-  mkdirSync(db.dataDir, { recursive: true });
-  try {
-    writeFileSync(markerPath, `${nowIso()}\n`, { flag: "wx" });
-  } catch {
-    // Another process won the race, or marker appeared concurrently.
-  }
-
-  return seeded;
+  return db.runBootstrapSeed({
+    id: randomUUID(),
+    name: ADMIN_TOKEN_NAME,
+    token_hash: hashToken(bootstrapToken),
+  });
 }
 
 // Augment FastifyRequest with optional auth identity (set by the preHandler).

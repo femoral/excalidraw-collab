@@ -18,6 +18,8 @@ export type TokenInfo = {
   name: string;
   createdAt: string;
   lastUsed: string | null;
+  /** Explicit privilege bit from `tokens.is_admin` (not a secret). */
+  isAdmin: boolean;
 };
 
 /** POST /api/tokens response — secret is present only at creation. */
@@ -32,6 +34,7 @@ function toTokenInfo(row: TokenRow): TokenInfo {
     name: row.name,
     createdAt: row.created_at,
     lastUsed: row.last_used_at,
+    isAdmin: row.is_admin,
   };
 }
 
@@ -40,6 +43,8 @@ const createTokenBodySchema = {
   required: ["name"],
   properties: {
     name: { type: "string", minLength: 1, maxLength: 128 },
+    /** When true, mint an admin token. Only an existing admin may request this. */
+    isAdmin: { type: "boolean" },
   },
   additionalProperties: false,
 } as const;
@@ -59,7 +64,7 @@ export async function registerTokenRoutes(
       api.addHook("preHandler", authPreHandler);
       api.addHook("preHandler", requireAdminPreHandler);
 
-      api.post<{ Body: { name: string } }>(
+      api.post<{ Body: { name: string; isAdmin?: boolean } }>(
         "/tokens",
         {
           schema: {
@@ -86,11 +91,16 @@ export async function registerTokenRoutes(
             );
           }
 
+          // Default non-admin; only an admin caller (already enforced) may set
+          // isAdmin: true explicitly.
+          const isAdmin = request.body.isAdmin === true;
+
           const secret = generateTokenSecret();
           const row = db.insertToken({
             id: randomUUID(),
             name,
             token_hash: hashToken(secret),
+            is_admin: isAdmin,
           });
 
           const body: TokenCreated = {
