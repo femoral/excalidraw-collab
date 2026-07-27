@@ -653,6 +653,46 @@ describe("GC helper", () => {
     );
   });
 
+  test("thumbnail_file_id anchors files for GC (not only file_ids)", () => {
+    const dataDir = tempDataDir();
+    const db = openDatabase(dataDir);
+    openDbs.push(db);
+    const store = new FileStore(dataDir, 1024 * 1024);
+
+    const thumbBytes = Buffer.from("thumbnail-only-anchor-bytes");
+    const thumbId = hashFileContent(thumbBytes);
+    store.put({
+      bytes: thumbBytes,
+      mimeType: "image/png",
+      created: Date.UTC(2025, 0, 1),
+      claimedFileId: thumbId,
+    });
+
+    const scene = db.insertScene({
+      id: "s-thumb-gc",
+      slug: "thumb-gc",
+      name: "Thumb GC",
+    });
+    db.insertVersion({
+      scene_id: scene.id,
+      version: 1,
+      parent_version: null,
+      author: "human",
+      message: "thumb only",
+      elements: gzipJson([]),
+      app_state: gzipJson({}),
+      file_ids: [],
+      thumbnail_file_id: thumbId,
+    });
+
+    assert.deepEqual(db.listReferencedFileIds(), [thumbId]);
+
+    const now = Date.UTC(2026, 6, 1);
+    const result = gcUnreferencedFiles(store, db, 30, now);
+    assert.ok(result.retainedReferenced.includes(thumbId));
+    assert.ok(store.exists(thumbId));
+  });
+
   test("listReferencedFileIds unions across versions and ignores drafts", () => {
     const dataDir = tempDataDir();
     const db = openDatabase(dataDir);

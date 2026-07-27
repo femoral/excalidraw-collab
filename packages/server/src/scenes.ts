@@ -32,6 +32,12 @@ export type SceneInfo = {
    * versions yet (`headVersion === 0`).
    */
   headAuthor: string | null;
+  /**
+   * Content-addressed file id of the head version's uploaded thumbnail PNG
+   * (`GET /api/files/:fileId`). Null when none was uploaded — clients fall
+   * back to the render worker, then a neutral placeholder.
+   */
+  thumbnailFileId: string | null;
 };
 
 /**
@@ -79,6 +85,7 @@ export function toSceneInfo(row: SceneListRow): SceneInfo {
     lock: toLock(row),
     elementCount: row.element_count,
     headAuthor: row.head_author ?? null,
+    thumbnailFileId: row.thumbnail_file_id ?? null,
   };
 }
 
@@ -239,6 +246,7 @@ export async function registerSceneRoutes(
             ...row,
             element_count: 0,
             head_author: null,
+            thumbnail_file_id: null,
           });
           return reply.status(201).send(info);
         },

@@ -34,6 +34,7 @@ import type { SceneEventHub } from "./events.js";
 import { AppError, ErrorCode } from "./errors.js";
 import {
   decodeDataURL,
+  FILE_ID_HEX_RE,
   type FileStore,
 } from "./files.js";
 import {
@@ -68,6 +69,8 @@ export type VersionInfo = {
   createdAt: string;
   elementCount: number;
   sceneHash: string;
+  /** Content-addressed thumbnail file id, if the client uploaded one. */
+  thumbnailFileId: string | null;
 };
 
 /** 201 body after a successful push. */
@@ -85,6 +88,8 @@ export type PushVersionResponse = {
   mergeParents?: { local: number; remote: number };
   /** Diff of remote head → merge result (what the merge decided). */
   diff?: SceneDiff;
+  /** Content-addressed thumbnail file id stored with this version, if any. */
+  thumbnailFileId: string | null;
 };
 
 /**
@@ -175,6 +180,7 @@ export function toVersionInfo(row: VersionRow): VersionInfo {
     createdAt: row.created_at,
     elementCount: row.element_count,
     sceneHash: row.scene_hash,
+    thumbnailFileId: row.thumbnail_file_id ?? null,
   };
 }
 
@@ -188,7 +194,37 @@ export function toPushResponse(row: VersionRow): PushVersionResponse {
     elementCount: row.element_count,
     sceneHash: row.scene_hash,
     headVersion: row.version,
+    thumbnailFileId: row.thumbnail_file_id ?? null,
   };
+}
+
+/**
+ * Validate an optional client-supplied thumbnail file id.
+ * Empty / missing → null (no thumbnail). Non-hex or missing blob → 400.
+ * The id must already exist in the content-addressed store (upload first).
+ */
+export function resolveThumbnailFileId(
+  raw: unknown,
+  store: FileStore,
+): string | null {
+  if (raw === undefined || raw === null || raw === "") {
+    return null;
+  }
+  if (typeof raw !== "string" || !FILE_ID_HEX_RE.test(raw)) {
+    throw new AppError(
+      ErrorCode.VALIDATION,
+      "thumbnailFileId must be a 40-char lowercase SHA-1 hex digest",
+      400,
+    );
+  }
+  if (!store.exists(raw)) {
+    throw new AppError(
+      ErrorCode.VALIDATION,
+      `thumbnailFileId not found in file store: ${raw} (upload the PNG via POST /api/files first)`,
+      400,
+    );
+  }
+  return raw;
 }
 
 /**
@@ -333,6 +369,11 @@ type PushBody = {
   appState?: unknown;
   files?: unknown;
   message: string;
+  /**
+   * Optional content-addressed PNG already uploaded via POST /api/files.
+   * Stored on the version for scene-list previews (no render worker).
+   */
+  thumbnailFileId?: unknown;
   /** Ignored if present — author is always the token identity. */
   author?: unknown;
 };
@@ -346,6 +387,7 @@ const pushBodySchema = {
     appState: { type: "object" },
     files: { type: "object" },
     message: { type: "string" },
+    thumbnailFileId: { type: ["string", "null"] },
     // Accepted so clients may echo a local draft author, but never honoured.
     author: {},
   },
@@ -733,6 +775,13 @@ export async function registerVersionRoutes(
           // Content-addressed file store (SHA-1 verify each claimed id).
           const fileIds = storeSceneFiles(store, doc.files);
 
+          // Optional client-rendered thumbnail (browser exportToBlob → /files).
+          // Must already be in the store; never invented server-side.
+          const thumbnailFileId = resolveThumbnailFileId(
+            request.body.thumbnailFileId,
+            store,
+          );
+
           const elementsBlob = gzipJson(doc.elements);
           const appStateBlob = gzipJson(doc.appState);
           const elementCount = doc.elements.length;
@@ -749,6 +798,7 @@ export async function registerVersionRoutes(
             file_ids: fileIds,
             element_count: elementCount,
             scene_hash: hash,
+            thumbnail_file_id: thumbnailFileId,
           });
 
           if (!result.ok) {

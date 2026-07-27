@@ -26,6 +26,7 @@ function scene(overrides: Partial<SceneInfo> = {}): SceneInfo {
     lock: null,
     elementCount: 3,
     headAuthor: "admin",
+    thumbnailFileId: null,
     ...overrides,
   };
 }
