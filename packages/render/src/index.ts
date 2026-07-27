@@ -22,6 +22,8 @@ export {
   type RenderScene,
   type RenderWorker,
   type RenderWorkerOptions,
+  type SkeletonConvertRequest,
+  type SkeletonConvertResult,
 } from "./types.js";
 
 export { RENDER_MSG } from "./protocol.js";

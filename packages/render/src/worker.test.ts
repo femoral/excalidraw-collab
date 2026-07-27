@@ -251,6 +251,132 @@ describe("render worker (playwright)", async () => {
       assert.ok(files.includes(f), `missing fixture ${f}`);
     }
   });
+
+  /**
+   * Done-when for issue #28: three boxes + two arrows from a short skeleton,
+   * with genuine bindings (startBinding/endBinding + boundElements).
+   */
+  test("convertSkeleton: three-box two-arrow diagram has real bindings", async () => {
+    // Under-20-line hand-authored architecture skeleton (also pasted in report).
+    const skeleton = [
+      {
+        type: "rectangle",
+        id: "api",
+        x: 0,
+        y: 40,
+        width: 160,
+        height: 80,
+        label: { text: "API" },
+      },
+      {
+        type: "rectangle",
+        id: "db",
+        x: 280,
+        y: 0,
+        width: 160,
+        height: 80,
+        label: { text: "DB" },
+      },
+      {
+        type: "rectangle",
+        id: "cache",
+        x: 280,
+        y: 120,
+        width: 160,
+        height: 80,
+        label: { text: "Cache" },
+      },
+      {
+        type: "arrow",
+        id: "a-api-db",
+        start: { id: "api" },
+        end: { id: "db" },
+      },
+      {
+        type: "arrow",
+        id: "a-api-cache",
+        start: { id: "api" },
+        end: { id: "cache" },
+      },
+    ];
+    // Hand-written form: one element per line, under 20 lines total.
+    const handWritten = [
+      "[",
+      `  ${JSON.stringify(skeleton[0])},`,
+      `  ${JSON.stringify(skeleton[1])},`,
+      `  ${JSON.stringify(skeleton[2])},`,
+      `  ${JSON.stringify(skeleton[3])},`,
+      `  ${JSON.stringify(skeleton[4])}`,
+      "]",
+    ].join("\n");
+    assert.ok(
+      handWritten.split("\n").length < 20,
+      `skeleton JSON should be under 20 lines, got ${handWritten.split("\n").length}`,
+    );
+
+    const { elements } = await worker.convertSkeleton({
+      elements: skeleton,
+      regenerateIds: false,
+    });
+
+    type El = {
+      id: string;
+      type: string;
+      startBinding?: { elementId: string } | null;
+      endBinding?: { elementId: string } | null;
+      boundElements?: Array<{ id: string; type: string }> | null;
+      containerId?: string | null;
+      text?: string;
+    };
+    const els = elements as El[];
+    const byId = new Map(els.map((e) => [e.id, e]));
+
+    const api = byId.get("api");
+    const db = byId.get("db");
+    const cache = byId.get("cache");
+    const a1 = byId.get("a-api-db");
+    const a2 = byId.get("a-api-cache");
+    assert.ok(api && api.type === "rectangle", "api box");
+    assert.ok(db && db.type === "rectangle", "db box");
+    assert.ok(cache && cache.type === "rectangle", "cache box");
+    assert.ok(a1 && a1.type === "arrow", "arrow api→db");
+    assert.ok(a2 && a2.type === "arrow", "arrow api→cache");
+
+    // Genuine bindings — not merely co-located free arrows.
+    assert.equal(a1!.startBinding?.elementId, "api");
+    assert.equal(a1!.endBinding?.elementId, "db");
+    assert.equal(a2!.startBinding?.elementId, "api");
+    assert.equal(a2!.endBinding?.elementId, "cache");
+
+    const apiBound = api!.boundElements ?? [];
+    assert.ok(
+      apiBound.some((b) => b.id === "a-api-db" && b.type === "arrow"),
+      "api.boundElements must list a-api-db",
+    );
+    assert.ok(
+      apiBound.some((b) => b.id === "a-api-cache" && b.type === "arrow"),
+      "api.boundElements must list a-api-cache",
+    );
+    assert.ok(
+      (db!.boundElements ?? []).some(
+        (b) => b.id === "a-api-db" && b.type === "arrow",
+      ),
+      "db.boundElements must list a-api-db",
+    );
+    assert.ok(
+      (cache!.boundElements ?? []).some(
+        (b) => b.id === "a-api-cache" && b.type === "arrow",
+      ),
+      "cache.boundElements must list a-api-cache",
+    );
+
+    // Labels become bound text elements via upstream conversion.
+    const apiText = els.find(
+      (e) => e.type === "text" && e.containerId === "api",
+    );
+    assert.ok(apiText, "API label should be bound text");
+    assert.match(String(apiText!.text ?? ""), /API/i);
+  });
 });
 
 // Ensure the type export is used (compile-time).

@@ -7,6 +7,8 @@ export const RENDER_MSG = {
   READY: "excalidraw-collab:render-ready",
   REQUEST: "excalidraw-collab:render-request",
   RESPONSE: "excalidraw-collab:render-response",
+  SKELETON_REQUEST: "excalidraw-collab:skeleton-request",
+  SKELETON_RESPONSE: "excalidraw-collab:skeleton-response",
 } as const;
 
 export type PageRenderRequest = {
@@ -39,4 +41,27 @@ export type PageRenderResponse =
       id: string;
       ok: false;
       error: string;
+    };
+
+export type PageSkeletonRequest = {
+  type: typeof RENDER_MSG.SKELETON_REQUEST;
+  id: string;
+  elements: readonly unknown[];
+  regenerateIds?: boolean;
+};
+
+export type PageSkeletonResponse =
+  | {
+      type: typeof RENDER_MSG.SKELETON_RESPONSE;
+      id: string;
+      ok: true;
+      elements: unknown[];
+    }
+  | {
+      type: typeof RENDER_MSG.SKELETON_RESPONSE;
+      id: string;
+      ok: false;
+      error: string;
+      index?: number;
+      reason?: string;
     };

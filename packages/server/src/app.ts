@@ -25,6 +25,11 @@ import {
 import { FileStore, registerFileRoutes } from "./files.js";
 import { registerLockRoutes } from "./locks.js";
 import { registerSceneRoutes } from "./scenes.js";
+import {
+  registerSkeletonRoutes,
+  type SkeletonConverter,
+  type SkeletonConverterHolder,
+} from "./skeleton.js";
 import { registerTokenRoutes } from "./tokens.js";
 import { registerVersionRoutes } from "./versions.js";
 
@@ -67,6 +72,13 @@ export type BuildAppDeps = {
    * {@link EVENTS_TIMEOUT_MS} (30 s). Shorten in tests.
    */
   eventsTimeoutMs?: number;
+  /**
+   * Skeleton → full-elements converter (render worker). When omitted or null,
+   * `POST /api/skeleton/convert` returns 501 with a clear message.
+   * Pass a {@link SkeletonConverterHolder} to late-bind after listen.
+   * Inject a mock in tests; production wires Playwright via main.ts.
+   */
+  skeletonConverter?: SkeletonConverter | SkeletonConverterHolder | null;
 };
 
 function isFastifyError(err: unknown): err is FastifyError {
@@ -153,6 +165,10 @@ export async function buildApp(
     await registerSceneRoutes(app, deps.db);
     await registerDraftRoutes(app, { db: deps.db });
     await registerLockRoutes(app, deps.db);
+    await registerSkeletonRoutes(app, {
+      db: deps.db,
+      converter: deps.skeletonConverter ?? null,
+    });
 
     // Long-poll hub: shared by version commits (publish) and GET /events.
     const events = deps.events ?? new SceneEventHub();
