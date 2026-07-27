@@ -1,6 +1,10 @@
 #!/usr/bin/env node
+// Filter node:sqlite experimental warnings before the db module loads it.
+import "./sqlite-warning.js";
+
 import { buildApp } from "./app.js";
 import { ConfigError, loadConfig } from "./config.js";
+import { openDatabase, type Database } from "./db.js";
 
 async function main(): Promise<void> {
   let config;
@@ -14,15 +18,32 @@ async function main(): Promise<void> {
     throw err;
   }
 
-  const app = await buildApp({ config });
+  let db: Database;
+  try {
+    db = openDatabase(config.dataDir);
+  } catch (err) {
+    console.error("Failed to open database:", err);
+    process.exit(1);
+  }
+
+  const app = await buildApp({
+    config,
+    readinessCheck: () => db.isHealthy(),
+  });
 
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info(`received ${signal}, shutting down`);
     try {
       await app.close();
+      db.close();
       process.exit(0);
     } catch (err) {
       app.log.error({ err }, "error during shutdown");
+      try {
+        db.close();
+      } catch {
+        // ignore
+      }
       process.exit(1);
     }
   };
@@ -36,7 +57,7 @@ async function main(): Promise<void> {
 
   await app.listen({ port: config.port, host: "0.0.0.0" });
   app.log.info(
-    { port: config.port, dataDir: config.dataDir },
+    { port: config.port, dataDir: config.dataDir, dbPath: db.dbPath },
     "server listening",
   );
 }
