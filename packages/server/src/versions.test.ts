@@ -726,6 +726,292 @@ describe("POST/GET /api/scenes/:slug/scene", () => {
     assert.equal(docLocal.elements[0]!.version, 5);
   });
 
+  test("merge keeps hand-edited client changes that never bumped version (agent workflow)", async () => {
+    // Regression: agents edit pulled JSON without bumping version/versionNonce.
+    // Before the prepareLocalElementsForMerge fix, reconcileElements discarded
+    // the whole client turn and reported an empty merge-decided diff.
+    const dataDir = tempDataDir();
+    const token = "versions-token-merge-hand-edit";
+    const { app } = await buildVersionsApp({
+      dataDir,
+      bootstrapToken: token,
+      merge: versionRuleMergeService(),
+    });
+    await createScene(app, token);
+
+    // v1: API + DB boxes (as a skeleton convert would produce), both at v=1.
+    const baseApi = {
+      ...rect("api"),
+      x: 0,
+      backgroundColor: "transparent",
+      version: 1,
+      versionNonce: 100,
+    };
+    const baseDb = {
+      ...rect("db"),
+      x: 300,
+      backgroundColor: "transparent",
+      version: 1,
+      versionNonce: 101,
+    };
+    const baseArrow = {
+      ...rect("arrow"),
+      type: "arrow",
+      x: 0,
+      y: 40,
+      width: 300,
+      height: 0,
+      version: 1,
+      versionNonce: 102,
+    };
+    await pushScene(app, token, {
+      parentVersion: 0,
+      elements: [baseApi, baseDb, baseArrow],
+      message: "skeleton: API DB arrow",
+    });
+
+    // v2 (human): only DB fill changes — bumps version like the real editor.
+    await pushScene(app, token, {
+      parentVersion: 1,
+      elements: [
+        { ...baseApi },
+        {
+          ...baseDb,
+          backgroundColor: "#ffc9c9",
+          version: 2,
+          versionNonce: 200,
+        },
+        { ...baseArrow },
+      ],
+      message: "human recolours DB",
+    });
+
+    // Agent still on parent v1: hand-edits API fill only — does NOT touch
+    // version / versionNonce (exactly how agents edit .excalidraw JSON).
+    const agentLocal = [
+      {
+        ...baseApi,
+        backgroundColor: "#b2f2bb",
+        // deliberately stale:
+        version: 1,
+        versionNonce: 100,
+      },
+      { ...baseDb },
+      { ...baseArrow },
+    ];
+    const merged = await pushScene(
+      app,
+      token,
+      {
+        parentVersion: 1,
+        elements: agentLocal,
+        message: "agent recolours the API box",
+      },
+      { merge: true },
+    );
+    assert.equal(merged.statusCode, 201, merged.body);
+    const body = merged.json() as PushVersionResponse;
+    assert.equal(body.merged, true);
+    assert.equal(body.version, 3);
+    assert.ok(body.diff, "merge response must include merge-decided diff");
+
+    // Invariant that would have caught the data-loss bug: when the committed
+    // scene differs from remote head, the reported merge diff must not be empty.
+    const pull = await app.inject({
+      method: "GET",
+      url: "/api/scenes/arch/scene",
+      headers: bearer(token),
+    });
+    const doc = pull.json() as {
+      elements: Array<{ id: string; backgroundColor?: string }>;
+    };
+    const byId = Object.fromEntries(doc.elements.map((e) => [e.id, e]));
+    assert.equal(
+      byId.api!.backgroundColor,
+      "#b2f2bb",
+      "agent hand-edit to API must survive merge",
+    );
+    assert.equal(
+      byId.db!.backgroundColor,
+      "#ffc9c9",
+      "human edit to DB must survive merge",
+    );
+
+    const diff = body.diff!;
+    const nonEmpty =
+      diff.summary.added +
+        diff.summary.deleted +
+        diff.summary.updated +
+        diff.summary.reordered >
+      0;
+    assert.ok(
+      nonEmpty,
+      "merge-decided diff must not be empty when committed version differs from remote head",
+    );
+    assert.ok(
+      diff.elements.some(
+        (c) =>
+          c.op === "update" &&
+          c.id === "api" &&
+          c.props.some(
+            (p) => p.key === "backgroundColor" && p.to === "#b2f2bb",
+          ),
+      ),
+      "merge-decided diff must report the API fill from the client",
+    );
+  });
+
+  test("merge preserves client-side additions and deletions", async () => {
+    const dataDir = tempDataDir();
+    const token = "versions-token-merge-add-del";
+    const { app } = await buildVersionsApp({
+      dataDir,
+      bootstrapToken: token,
+      merge: versionRuleMergeService(),
+    });
+    await createScene(app, token);
+
+    const a = { ...rect("a"), x: 0, version: 1, versionNonce: 1 };
+    const b = { ...rect("b"), x: 100, version: 1, versionNonce: 2 };
+    await pushScene(app, token, {
+      parentVersion: 0,
+      elements: [a, b],
+      message: "base a+b",
+    });
+
+    // Remote restyles A only (different element from the one local will delete).
+    await pushScene(app, token, {
+      parentVersion: 1,
+      elements: [
+        {
+          ...a,
+          backgroundColor: "#ffc9c9",
+          version: 2,
+          versionNonce: 20,
+        },
+        { ...b },
+      ],
+      message: "remote restyle a",
+    });
+
+    // Local on parent 1: hard-delete B, add C — no version bumps on hand-edits.
+    const c = {
+      ...rect("c"),
+      x: 200,
+      version: 1,
+      versionNonce: 30,
+      backgroundColor: "#a5d8ff",
+    };
+    const merged = await pushScene(
+      app,
+      token,
+      {
+        parentVersion: 1,
+        elements: [{ ...a }, c],
+        message: "local delete b add c",
+      },
+      { merge: true },
+    );
+    assert.equal(merged.statusCode, 201, merged.body);
+    const body = merged.json() as PushVersionResponse;
+    assert.equal(body.merged, true);
+    assert.ok(body.diff);
+
+    const pull = await app.inject({
+      method: "GET",
+      url: "/api/scenes/arch/scene",
+      headers: bearer(token),
+    });
+    const doc = pull.json() as {
+      elements: Array<{
+        id: string;
+        isDeleted?: boolean;
+        backgroundColor?: string;
+      }>;
+    };
+    const live = doc.elements.filter((e) => e.isDeleted !== true);
+    const byId = Object.fromEntries(doc.elements.map((e) => [e.id, e]));
+
+    assert.ok(
+      live.some((e) => e.id === "c"),
+      "client addition must survive merge",
+    );
+    assert.equal(byId.c!.backgroundColor, "#a5d8ff");
+
+    // B deleted by client: either absent or tombstoned (remote left B alone).
+    const bEl = byId.b;
+    assert.ok(
+      bEl === undefined || bEl.isDeleted === true,
+      "client deletion of B must survive merge",
+    );
+    assert.equal(
+      byId.a!.backgroundColor,
+      "#ffc9c9",
+      "remote restyle of A must survive",
+    );
+    assert.ok(
+      live.some((e) => e.id === "a"),
+      "remote-edited A must remain live",
+    );
+
+    // Non-empty merge-decided diff when result ≠ remote head.
+    const s = body.diff!.summary;
+    assert.ok(
+      s.added + s.deleted + s.updated + s.reordered > 0,
+      "merge-decided diff must not be empty when result differs from remote head",
+    );
+  });
+
+  test("merge that changes nothing reports empty merge-decided diff", async () => {
+    const dataDir = tempDataDir();
+    const token = "versions-token-merge-noop";
+    const { app } = await buildVersionsApp({
+      dataDir,
+      bootstrapToken: token,
+      merge: versionRuleMergeService(),
+    });
+    await createScene(app, token);
+
+    const a = { ...rect("a"), version: 1, versionNonce: 1 };
+    await pushScene(app, token, {
+      parentVersion: 0,
+      elements: [a],
+      message: "v1",
+    });
+    // Remote makes no content change that local lacks — local resubmits parent
+    // content while a no-op remote bump of version only… use content-identical
+    // remote with a second element so heads diverge, then local merges parent
+    // equal to remote content for shared ids and no extra client edits.
+    await pushScene(app, token, {
+      parentVersion: 1,
+      elements: [{ ...a, version: 1, versionNonce: 1 }],
+      message: "remote identical content",
+    });
+
+    // Local still on parent 0? parent 1 with identical content — actually
+    // parentVersion 1 === head 2 is false. Local sends same elements as parent
+    // (v1 content) while head is v2 with same content → merge result == head.
+    const merged = await pushScene(
+      app,
+      token,
+      {
+        parentVersion: 1,
+        elements: [{ ...a }],
+        message: "noop merge",
+      },
+      { merge: true },
+    );
+    assert.equal(merged.statusCode, 201, merged.body);
+    const body = merged.json() as PushVersionResponse;
+    assert.equal(body.merged, true);
+    const s = body.diff!.summary;
+    assert.equal(s.added, 0);
+    assert.equal(s.deleted, 0);
+    assert.equal(s.updated, 0);
+    assert.equal(s.reordered, 0);
+    assert.equal(body.diff!.elements.length, 0);
+  });
+
   test("?force=true commits on a stale parent; history stays gapless", async () => {
     const dataDir = tempDataDir();
     const token = "versions-token-force";

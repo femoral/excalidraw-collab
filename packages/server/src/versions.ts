@@ -43,6 +43,7 @@ import {
   MERGE_WORKER_DISABLED_MESSAGE,
   MERGE_WORKER_NOT_INSTALLED_MESSAGE,
   parseMergeQuery,
+  prepareLocalElementsForMerge,
   type MergePushExtras,
   type SceneMergeService,
 } from "./merge.js";
@@ -618,10 +619,34 @@ export async function registerVersionRoutes(
             }
             const remoteDoc = versionToDocument(store, remoteRow);
 
+            // Parent the client pulled — used to detect hand-edits that left
+            // version/versionNonce stale (agents edit JSON without bumping).
+            // Empty parent (parentVersion 0) means no prior elements.
+            let parentElements: SceneDocument["elements"] = [];
+            if (parentVersion > 0) {
+              const parentRow = db.getVersion(scene.id, parentVersion);
+              if (!parentRow) {
+                throw new AppError(
+                  ErrorCode.VALIDATION,
+                  `parentVersion ${parentVersion} not found for scene ${slug}`,
+                  400,
+                );
+              }
+              parentElements = versionToDocument(store, parentRow).elements;
+            }
+
+            // Bump version/versionNonce on elements the client actually
+            // changed vs parent so reconcileElements sees honest input.
+            // Does not invent a conflict rule — only fixes dishonest fields.
+            const localForMerge = prepareLocalElementsForMerge(
+              doc.elements,
+              parentElements,
+            );
+
             let mergedElements: unknown[];
             try {
               const merged = await mergeService.merge({
-                localElements: doc.elements,
+                localElements: localForMerge,
                 remoteElements: remoteDoc.elements,
                 // Empty appState → pure version/versionNonce rules (no
                 // "currently editing" local bias from a browser session).

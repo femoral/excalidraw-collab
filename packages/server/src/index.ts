@@ -32,9 +32,11 @@ export {
 } from "./errors.js";
 export {
   collectReferencedFileIds,
+  deterministicVersionNonce,
   formatMergeCommitMessage,
   MERGE_WORKER_DISABLED_MESSAGE,
   parseMergeQuery,
+  prepareLocalElementsForMerge,
   type MergePushExtras,
   type SceneMergeService,
 } from "./merge.js";
