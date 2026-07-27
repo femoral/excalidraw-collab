@@ -161,3 +161,7 @@ Regenerate the CLI reference after changing command parsers:
 pnpm --filter @excalidraw-collab/cli build
 pnpm --filter @excalidraw-collab/cli generate-cli-ref
 ```
+
+## License
+
+[MIT](LICENSE)
