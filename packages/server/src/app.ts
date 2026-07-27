@@ -196,15 +196,16 @@ export async function buildApp(
     await registerTokenRoutes(app, deps.db);
     await registerSceneRoutes(app, deps.db);
     await registerDraftRoutes(app, { db: deps.db });
-    await registerLockRoutes(app, deps.db);
+
+    // Long-poll hub: shared by version commits, lock claim/release, and
+    // both GET /api/events (multiplexed) and GET /api/scenes/:slug/events.
+    const events = deps.events ?? new SceneEventHub();
+    app.decorate("events", events);
+    await registerLockRoutes(app, deps.db, events);
     await registerSkeletonRoutes(app, {
       db: deps.db,
       converter: deps.skeletonConverter ?? null,
     });
-
-    // Long-poll hub: shared by version commits (publish) and GET /events.
-    const events = deps.events ?? new SceneEventHub();
-    app.decorate("events", events);
     await registerEventRoutes(app, {
       db: deps.db,
       events,
