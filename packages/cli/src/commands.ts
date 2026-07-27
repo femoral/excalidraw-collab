@@ -2,6 +2,10 @@ import type { CommandResult } from "./format.js";
 import { formatTable } from "./format.js";
 import type { ResolvedConfig } from "./config.js";
 import { loginCommand } from "./login.js";
+import { lsCommand } from "./ls.js";
+import { newCommand } from "./new.js";
+import { pullCommand } from "./pull.js";
+import { pushCommand } from "./push.js";
 import { whoamiCommand } from "./whoami.js";
 import { tokenCommand } from "./token.js";
 
@@ -13,6 +17,11 @@ export type CommandContext = {
   args: string[];
   env: NodeJS.ProcessEnv;
   config: ResolvedConfig;
+  /**
+   * Working directory for local state (`.excalidraw-collab/state.json`) and
+   * relative scene file paths. Injectable in tests; defaults to process.cwd().
+   */
+  cwd: string;
 };
 
 export type Command = {
@@ -68,3 +77,7 @@ registerCommand(versionCommand);
 registerCommand(loginCommand);
 registerCommand(whoamiCommand);
 registerCommand(tokenCommand);
+registerCommand(lsCommand);
+registerCommand(newCommand);
+registerCommand(pullCommand);
+registerCommand(pushCommand);
