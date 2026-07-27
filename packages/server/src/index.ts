@@ -127,3 +127,25 @@ export {
   SceneEventHub,
   type SceneEventResponse,
 } from "./events.js";
+export {
+  DEFAULT_RENDER_SCALE,
+  MAX_RENDER_SCALE,
+  etagMatches,
+  parseRenderDark,
+  parseRenderScale,
+  registerRenderRoutes,
+  renderWorkerDisabledError,
+  SceneRenderService,
+  type SceneRenderResult,
+  type SceneRenderWorker,
+} from "./render.js";
+export {
+  RENDERS_SUBDIR,
+  RenderCache,
+  optionsFileStem,
+  renderCacheEtag,
+  renderCachePath,
+  type RenderCacheKey,
+  type RenderCacheOptions,
+  type RenderFormat,
+} from "./render-cache.js";
