@@ -29,9 +29,12 @@ import type {
 // ---------------------------------------------------------------------------
 
 export type DiffScenesOptions = {
-  /** Version number of scene `a` (shown in the diff header). Default 0. */
+  /**
+   * Version number of scene `a` (1,2,3…). When either end is omitted,
+   * formatDiff skips the version header entirely rather than inventing 0.
+   */
   from?: number;
-  /** Version number of scene `b`. Default 0. */
+  /** Version number of scene `b` (1,2,3…). */
   to?: number;
 };
 
@@ -536,9 +539,9 @@ function diffAppState(
 /**
  * Diff two scene documents. Returns a structured `SceneDiff`.
  *
- * Pass the older scene as `a` and the newer as `b`. Version numbers for the
- * summary header default to 0; supply `options.from` / `options.to` when
- * known (e.g. conflict responses).
+ * Pass the older scene as `a` and the newer as `b`. Supply `options.from` /
+ * `options.to` when known (e.g. conflict responses); omit them otherwise —
+ * they are not defaulted to 0.
  */
 export function diffScenes(
   a: SceneDocument,
@@ -651,13 +654,16 @@ export function diffScenes(
     reordered: elements.filter((c) => c.op === "reorder").length,
   };
 
-  return {
-    from: options?.from ?? 0,
-    to: options?.to ?? 0,
+  // Only attach version numbers when the caller supplied them. Never invent
+  // version 0 — versions are 1,2,3… monotonic per scene (PLAN.md §4).
+  const diff: SceneDiff = {
     summary,
     elements,
     appState,
   };
+  if (options?.from !== undefined) diff.from = options.from;
+  if (options?.to !== undefined) diff.to = options.to;
+  return diff;
 }
 
 // ---------------------------------------------------------------------------
@@ -678,9 +684,14 @@ export function formatDiff(diff: SceneDiff): string {
   if (summary.reordered) counts.push(`↕${summary.reordered}`);
   const countStr = counts.length > 0 ? counts.join(" ") : "(empty)";
 
-  const lines: string[] = [
-    `v${diff.from} → v${diff.to}   ${countStr}`,
-  ];
+  // Version header only when *both* ends are known. Partial/missing versions
+  // would be misleading (and "v0" is not a real version in our scheme).
+  const hasVersions = diff.from !== undefined && diff.to !== undefined;
+  const header = hasVersions
+    ? `v${diff.from} → v${diff.to}   ${countStr}`
+    : countStr;
+
+  const lines: string[] = [header];
 
   for (const change of diff.elements) {
     lines.push(formatChangeLine(change));

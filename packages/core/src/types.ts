@@ -216,10 +216,14 @@ export type ElementChange =
 /**
  * Structured diff between two scene versions (PLAN.md §6).
  * Produced by `diffScenes`; rendered by `formatDiff`.
+ *
+ * `from` / `to` are optional version numbers (1,2,3… monotonic per scene).
+ * They are omitted — never defaulted to 0 — when the caller has no version
+ * context, so formatDiff does not invent a nonexistent version 0.
  */
 export type SceneDiff = {
-  from: number;
-  to: number;
+  from?: number;
+  to?: number;
   summary: {
     added: number;
     deleted: number;

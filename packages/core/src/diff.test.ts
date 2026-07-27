@@ -431,62 +431,64 @@ describe("diffScenes appState", () => {
 // ---------------------------------------------------------------------------
 
 describe("formatDiff", () => {
-  test("byte-identical for a fixed SceneDiff input", () => {
+  const fixedElements: SceneDiff["elements"] = [
+    {
+      op: "add",
+      id: "rq",
+      type: "rectangle",
+      label: "Retry Queue",
+      bbox: { x: 640, y: 220, width: 180, height: 80 },
+      describe: '+ rectangle "Retry Queue"  (640,220 180x80)',
+    },
+    {
+      op: "add",
+      id: "ar",
+      type: "arrow",
+      label: '"Worker" → "Retry Queue"',
+      bbox: { x: 0, y: 0, width: 100, height: 0 },
+      describe: '+ arrow "Worker" → "Retry Queue"  (0,0 100x0)',
+    },
+    {
+      op: "update",
+      id: "auth",
+      type: "rectangle",
+      label: "Auth Service",
+      props: [
+        { key: "y", from: 120, to: 200 },
+        { key: "backgroundColor", from: "#fff", to: "#e9ecef" },
+      ],
+      describe:
+        '~ rectangle "Auth Service"  moved (320,120) → (320,200); restyled fill #e9ecef',
+    },
+    {
+      op: "update",
+      id: "a1",
+      type: "arrow",
+      label: '"API" → "Cache"',
+      props: [
+        {
+          key: "endBinding",
+          from: { elementId: "db" },
+          to: { elementId: "cache" },
+        },
+      ],
+      describe: '~ arrow "API" → "Cache"  rebound: was "API" → "DB"',
+    },
+    {
+      op: "delete",
+      id: "legacy",
+      type: "ellipse",
+      label: "Legacy cache",
+      describe: '- ellipse "Legacy cache"',
+    },
+  ];
+
+  test("byte-identical with versions supplied", () => {
     const fixed: SceneDiff = {
       from: 7,
       to: 9,
       summary: { added: 2, deleted: 1, updated: 2, reordered: 0 },
-      elements: [
-        {
-          op: "add",
-          id: "rq",
-          type: "rectangle",
-          label: "Retry Queue",
-          bbox: { x: 640, y: 220, width: 180, height: 80 },
-          describe: '+ rectangle "Retry Queue"  (640,220 180x80)',
-        },
-        {
-          op: "add",
-          id: "ar",
-          type: "arrow",
-          label: '"Worker" → "Retry Queue"',
-          bbox: { x: 0, y: 0, width: 100, height: 0 },
-          describe: '+ arrow "Worker" → "Retry Queue"  (0,0 100x0)',
-        },
-        {
-          op: "update",
-          id: "auth",
-          type: "rectangle",
-          label: "Auth Service",
-          props: [
-            { key: "y", from: 120, to: 200 },
-            { key: "backgroundColor", from: "#fff", to: "#e9ecef" },
-          ],
-          describe:
-            '~ rectangle "Auth Service"  moved (320,120) → (320,200); restyled fill #e9ecef',
-        },
-        {
-          op: "update",
-          id: "a1",
-          type: "arrow",
-          label: '"API" → "Cache"',
-          props: [
-            {
-              key: "endBinding",
-              from: { elementId: "db" },
-              to: { elementId: "cache" },
-            },
-          ],
-          describe: '~ arrow "API" → "Cache"  rebound: was "API" → "DB"',
-        },
-        {
-          op: "delete",
-          id: "legacy",
-          type: "ellipse",
-          label: "Legacy cache",
-          describe: '- ellipse "Legacy cache"',
-        },
-      ],
+      elements: fixedElements,
       appState: [],
     };
 
@@ -494,7 +496,6 @@ describe("formatDiff", () => {
     const twice = formatDiff(fixed);
     assert.equal(once, twice, "formatDiff must be deterministic");
 
-    // Golden snapshot — readability is the deliverable.
     const expected = [
       "v7 → v9   +2 -1 ~2",
       '+ rectangle "Retry Queue"  (640,220 180x80)',
@@ -507,15 +508,71 @@ describe("formatDiff", () => {
     assert.equal(once, expected);
   });
 
-  test("empty diff renders a stable empty header", () => {
+  test("byte-identical without versions — no invented v0", () => {
+    const fixed: SceneDiff = {
+      summary: { added: 2, deleted: 1, updated: 2, reordered: 0 },
+      elements: fixedElements,
+      appState: [],
+    };
+
+    const once = formatDiff(fixed);
+    const twice = formatDiff(fixed);
+    assert.equal(once, twice, "formatDiff must be deterministic");
+
+    // Counts only — no `vN → vM` prefix when versions are absent.
+    const expected = [
+      "+2 -1 ~2",
+      '+ rectangle "Retry Queue"  (640,220 180x80)',
+      '+ arrow "Worker" → "Retry Queue"  (0,0 100x0)',
+      '~ rectangle "Auth Service"  moved (320,120) → (320,200); restyled fill #e9ecef',
+      '~ arrow "API" → "Cache"  rebound: was "API" → "DB"',
+      '- ellipse "Legacy cache"',
+      "",
+    ].join("\n");
+    assert.equal(once, expected);
+    assert.ok(!once.includes("v0"), "must not invent version 0");
+    assert.ok(!once.startsWith("v"), "must not emit a version header");
+  });
+
+  test("empty diff without versions renders a stable empty header", () => {
     const empty: SceneDiff = {
-      from: 0,
-      to: 0,
       summary: { added: 0, deleted: 0, updated: 0, reordered: 0 },
       elements: [],
       appState: [],
     };
-    assert.equal(formatDiff(empty), "v0 → v0   (empty)\n");
+    assert.equal(formatDiff(empty), "(empty)\n");
+  });
+
+  test("empty diff with versions still shows the version transition", () => {
+    const empty: SceneDiff = {
+      from: 3,
+      to: 3,
+      summary: { added: 0, deleted: 0, updated: 0, reordered: 0 },
+      elements: [],
+      appState: [],
+    };
+    assert.equal(formatDiff(empty), "v3 → v3   (empty)\n");
+  });
+
+  test("partial versions omit the version header entirely", () => {
+    const onlyFrom: SceneDiff = {
+      from: 2,
+      summary: { added: 1, deleted: 0, updated: 0, reordered: 0 },
+      elements: [],
+      appState: [],
+    };
+    assert.equal(formatDiff(onlyFrom), "+1\n");
+    assert.ok(!formatDiff(onlyFrom).includes("v2"));
+  });
+
+  test("diffScenes without options leaves from/to undefined", () => {
+    const { before, after } = loadPair("restyle");
+    const diff = diffScenes(before, after);
+    assert.equal(diff.from, undefined);
+    assert.equal(diff.to, undefined);
+    const text = formatDiff(diff);
+    assert.ok(!text.includes("v0"));
+    assert.match(text, /^~/); // counts first, no version prefix
   });
 
   test("formatDiff of a real pair is stable across calls", () => {
@@ -526,6 +583,7 @@ describe("formatDiff", () => {
     assert.equal(a, b);
     assert.match(a, /restyled/);
     assert.match(a, /Service A/);
+    assert.match(a, /^v3 → v4/);
   });
 
   test("formatDiff of reorder uses ↕ lines from structured fields", () => {
@@ -534,6 +592,7 @@ describe("formatDiff", () => {
     const text = formatDiff(diff);
     assert.match(text, /↕/);
     assert.ok(!text.includes("undefined"));
+    assert.ok(!text.includes("v0"));
   });
 });
 
