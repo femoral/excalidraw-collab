@@ -753,6 +753,151 @@ code {
 }
 
 /* ---------------------------------------------------------------------------
+   Scene editor
+   --------------------------------------------------------------------------- */
+
+.editor-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  position: relative;
+}
+
+.editor-chrome {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.4rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  z-index: 2;
+}
+
+.editor-chrome-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.editor-chrome-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.editor-version {
+  font-weight: 550;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.editor-stale-badge {
+  display: inline-block;
+  margin-left: 0.45rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: #fff4e6;
+  color: #9c5b12;
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.editor-save-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-faint);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.editor-save-indicator.is-active {
+  color: var(--text-muted);
+}
+
+.editor-save-indicator.is-saved {
+  color: #2b8a3e;
+}
+
+.editor-save-indicator.is-error {
+  color: var(--danger);
+}
+
+.editor-save-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse-dot 1s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.editor-banner {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.55rem 0.85rem;
+  font-size: 0.8125rem;
+  background: var(--accent-soft);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  z-index: 2;
+}
+
+.editor-banner-error {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-bottom-color: #ffc9c9;
+}
+
+.editor-shell .excalidraw-host {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.editor-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  height: 100%;
+  min-height: 12rem;
+  color: var(--text-muted);
+  font-size: 0.9375rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.editor-state-error {
+  color: var(--danger);
+}
+
+/* Editor route: main must not scroll — Excalidraw owns the viewport. */
+.app-main:has(.editor-shell) {
+  overflow: hidden;
+}
+
+/* ---------------------------------------------------------------------------
    Reduced motion
    --------------------------------------------------------------------------- */
 
@@ -766,5 +911,10 @@ code {
   .btn,
   .scene-card {
     transition: none;
+  }
+
+  .editor-save-dot {
+    animation: none;
+    opacity: 0.8;
   }
 }

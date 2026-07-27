@@ -1,4 +1,3 @@
-import { Excalidraw } from "@excalidraw/excalidraw";
 import {
   useCallback,
   useEffect,
@@ -9,7 +8,7 @@ import {
   type MouseEvent,
   type ReactElement,
 } from "react";
-import { ApiError, createApiClient } from "./api.ts";
+import { ApiError, createApiClient, type ApiClient } from "./api.ts";
 import {
   applyUnauthorized,
   readStoredToken,
@@ -19,6 +18,12 @@ import {
 } from "./auth.ts";
 import { LoginScreen } from "./LoginScreen.tsx";
 import { matchRoute, type Route } from "./routing.ts";
+import {
+  getEditorUnsavedFlag,
+  setEditorUnsavedFlag,
+  UNSAVED_LEAVE_MESSAGE,
+} from "./editor-logic.ts";
+import { SceneEditor } from "./SceneEditor.tsx";
 import { SceneList } from "./SceneList.tsx";
 
 function usePathname(): string {
@@ -45,22 +50,16 @@ function navigate(to: string, event?: MouseEvent<HTMLAnchorElement>) {
     return;
   }
   event?.preventDefault();
-  if (window.location.pathname !== to) {
-    window.history.pushState({}, "", to);
-    window.dispatchEvent(new PopStateEvent("popstate"));
+  if (window.location.pathname === to) return;
+
+  if (getEditorUnsavedFlag()) {
+    const ok = window.confirm(UNSAVED_LEAVE_MESSAGE);
+    if (!ok) return;
+    setEditorUnsavedFlag(false);
   }
-}
 
-function ExcalidrawCanvas({ label }: { label: string }): ReactElement {
-  return (
-    <div className="excalidraw-host" data-canvas={label}>
-      <Excalidraw />
-    </div>
-  );
-}
-
-function SceneView({ slug }: { slug: string }): ReactElement {
-  return <ExcalidrawCanvas label={`scene:${slug}`} />;
+  window.history.pushState({}, "", to);
+  window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
 function HistoryView({ slug }: { slug: string }): ReactElement {
@@ -80,6 +79,16 @@ function HistoryView({ slug }: { slug: string }): ReactElement {
       </p>
     </div>
   );
+}
+
+function SceneView({
+  slug,
+  api,
+}: {
+  slug: string;
+  api: ApiClient;
+}): ReactElement {
+  return <SceneEditor slug={slug} api={api} onNavigate={navigate} />;
 }
 
 function NotFoundView({ path }: { path: string }): ReactElement {
@@ -299,7 +308,9 @@ export function App(): ReactElement {
         {route.name === "home" ? (
           <SceneList api={api} onNavigate={navigate} />
         ) : null}
-        {route.name === "scene" ? <SceneView slug={route.slug} /> : null}
+        {route.name === "scene" ? (
+          <SceneView slug={route.slug} api={api} />
+        ) : null}
         {route.name === "history" ? (
           <HistoryView slug={route.slug} />
         ) : null}
