@@ -20,6 +20,11 @@ export type RunOptions = {
   argv: string[];
   env?: NodeJS.ProcessEnv;
   io?: IoStreams;
+  /**
+   * Working directory for local state and relative scene paths.
+   * Defaults to `process.cwd()`. Tests pass a temp dir.
+   */
+  cwd?: string;
 };
 
 function globalUsage(): string {
@@ -220,6 +225,7 @@ export async function run(options: RunOptions): Promise<ExitCodeValue> {
       args: rest,
       env,
       config,
+      cwd: options.cwd ?? process.cwd(),
     };
 
     const result = await command.run(ctx);

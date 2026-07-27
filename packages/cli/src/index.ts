@@ -32,6 +32,22 @@ export {
   CLI_VERSION,
 } from "./commands.js";
 export type { Command, CommandContext } from "./commands.js";
+export {
+  getPulledVersion,
+  setPulledVersion,
+  readLocalState,
+  writeLocalState,
+  statePath,
+  normalizeServerKey,
+  emptyLocalState,
+} from "./state.js";
+export type { LocalState, SceneState, ServerState } from "./state.js";
+export {
+  formatConflictDiff,
+  formatConflictMessage,
+  resolutionCommands,
+} from "./conflict.js";
+export type { ConflictDetails, ConflictDiff } from "./conflict.js";
 
 const isMain =
   process.argv[1] !== undefined &&
