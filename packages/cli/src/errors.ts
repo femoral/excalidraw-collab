@@ -1,13 +1,14 @@
 /**
  * CLI exit codes and server error-code mapping.
  *
- * Exit codes (from PLAN.md / issue #6):
- *   0 ok, 1 error, 2 usage, 4 conflict, 5 lock held
+ * Exit codes (from PLAN.md / issue #6; TIMEOUT from issue #39):
+ *   0 ok, 1 error, 2 usage, 4 conflict, 5 lock held, 6 timeout
  *
  * Runtime keeps its own copy so the published CLI has zero runtime deps
  * (must not pull Fastify). Source of truth is packages/server `ErrorCode` /
  * `exitCodeForError` — `errors.drift.test.ts` imports the server at test time
- * and fails if this file diverges.
+ * and fails if this file diverges. `ExitCode.TIMEOUT` is mirrored on the server
+ * ExitCode map (client wait deadline; not an HTTP ErrorCode).
  */
 
 /** Process exit codes used by the CLI. */
@@ -17,6 +18,8 @@ export const ExitCode = {
   USAGE: 2,
   CONFLICT: 4,
   LOCK_HELD: 5,
+  /** `watch --timeout` elapsed with no matching event. */
+  TIMEOUT: 6,
 } as const;
 
 export type ExitCodeValue = (typeof ExitCode)[keyof typeof ExitCode];
@@ -56,6 +59,8 @@ export function exitCodeForError(code: string | undefined): ExitCodeValue {
       return ExitCode.CONFLICT;
     case "LOCK_HELD":
       return ExitCode.LOCK_HELD;
+    case "TIMEOUT":
+      return ExitCode.TIMEOUT;
     default:
       return ExitCode.ERROR;
   }

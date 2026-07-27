@@ -382,3 +382,404 @@ test("watch without SLUG exits usage", async () => {
   assert.equal(code, ExitCode.USAGE);
   assert.match(c.stderr, /watch requires SLUG/);
 });
+
+// ---------------------------------------------------------------------------
+// Issue #39 — blocking wait primitives
+// ---------------------------------------------------------------------------
+
+test("watch --once exits 0 after exactly one event", async () => {
+  const h = await startServer({ eventsTimeoutMs: 5_000 });
+
+  {
+    const c = capture();
+    assert.equal(
+      await run({
+        argv: ["new", "Once", "--slug", "once"],
+        env: h.env,
+        cwd: h.cwd,
+        io: c.io,
+      }),
+      ExitCode.OK,
+      c.stderr,
+    );
+  }
+  writeScene(h.cwd, "once", [rect("a")]);
+  {
+    const c = capture();
+    assert.equal(
+      await run({
+        argv: ["push", "once", "-m", "v1"],
+        env: h.env,
+        cwd: h.cwd,
+        io: c.io,
+      }),
+      ExitCode.OK,
+      c.stderr,
+    );
+  }
+
+  const c = capture();
+  const watchPromise = run({
+    argv: ["--json", "watch", "once", "--since", "1", "--once"],
+    env: h.env,
+    cwd: h.cwd,
+    io: c.io,
+  });
+
+  await new Promise<void>((r) => setTimeout(r, 50));
+
+  const otherCwd = tempDir("excalicli-watch-once-pusher-");
+  writeScene(otherCwd, "once", [rect("a"), rect("b")]);
+  fs.mkdirSync(path.join(otherCwd, ".excalidraw-collab"), { recursive: true });
+  fs.writeFileSync(
+    path.join(otherCwd, ".excalidraw-collab", "state.json"),
+    JSON.stringify({
+      version: 1,
+      servers: {
+        [h.baseUrl.replace(/\/$/, "")]: {
+          scenes: { once: { version: 1 } },
+        },
+      },
+    }) + "\n",
+  );
+  {
+    const pushCap = capture();
+    assert.equal(
+      await run({
+        argv: ["push", "once", "-m", "second"],
+        env: h.env,
+        cwd: otherCwd,
+        io: pushCap.io,
+      }),
+      ExitCode.OK,
+      pushCap.stderr,
+    );
+  }
+
+  const code = await watchPromise;
+  assert.equal(code, ExitCode.OK, c.stderr);
+  const lines = c.stdout
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  assert.equal(lines.length, 1, `expected one JSONL line: ${c.stdout}`);
+  const event = JSON.parse(lines[0]!) as { from: number; to: number };
+  assert.equal(event.from, 1);
+  assert.equal(event.to, 2);
+});
+
+test("watch --once --timeout exits TIMEOUT with JSONL trailer", async () => {
+  const h = await startServer({ eventsTimeoutMs: 2_000 });
+
+  {
+    const c = capture();
+    assert.equal(
+      await run({
+        argv: ["new", "Idle", "--slug", "idle"],
+        env: h.env,
+        cwd: h.cwd,
+        io: c.io,
+      }),
+      ExitCode.OK,
+      c.stderr,
+    );
+  }
+
+  const c = capture();
+  const t0 = Date.now();
+  const code = await run({
+    argv: [
+      "--json",
+      "watch",
+      "idle",
+      "--since",
+      "0",
+      "--once",
+      "--timeout",
+      "1",
+    ],
+    env: h.env,
+    cwd: h.cwd,
+    io: c.io,
+  });
+  const elapsed = Date.now() - t0;
+
+  assert.equal(code, ExitCode.TIMEOUT, c.stderr);
+  assert.ok(elapsed < 3_000, `timeout should be ~1s, took ${elapsed}ms`);
+  const lines = c.stdout
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  assert.equal(lines.length, 1, `expected one timeout JSONL line: ${c.stdout}`);
+  const body = JSON.parse(lines[0]!) as { timeout: boolean; slug: string };
+  assert.equal(body.timeout, true);
+  assert.equal(body.slug, "idle");
+});
+
+test("watch --for-turn wakes on another client's lock release", async () => {
+  const h = await startServer({ eventsTimeoutMs: 5_000 });
+
+  // Mint a second identity so "admin" can hold the lock while "agent" waits.
+  let agentToken = "";
+  {
+    const c = capture();
+    assert.equal(
+      await run({
+        argv: ["token", "create", "agent", "--json"],
+        env: h.env,
+        cwd: h.cwd,
+        io: c.io,
+      }),
+      ExitCode.OK,
+      c.stderr,
+    );
+    agentToken = (JSON.parse(c.stdout) as { token: string }).token;
+  }
+  const agentEnv: NodeJS.ProcessEnv = {
+    ...h.env,
+    EXCALICLI_TOKEN: agentToken,
+  };
+
+  {
+    const c = capture();
+    assert.equal(
+      await run({
+        argv: ["new", "Turn", "--slug", "turn"],
+        env: h.env,
+        cwd: h.cwd,
+        io: c.io,
+      }),
+      ExitCode.OK,
+      c.stderr,
+    );
+  }
+
+  // Admin claims the turn.
+  {
+    const c = capture();
+    assert.equal(
+      await run({
+        argv: ["turn", "claim", "turn", "--ttl", "600"],
+        env: h.env,
+        cwd: h.cwd,
+        io: c.io,
+      }),
+      ExitCode.OK,
+      c.stderr,
+    );
+  }
+
+  const c = capture();
+  const watchPromise = run({
+    argv: ["--json", "watch", "turn", "--for-turn", "--timeout", "10"],
+    env: agentEnv,
+    cwd: h.cwd,
+    io: c.io,
+  });
+
+  await new Promise<void>((r) => setTimeout(r, 80));
+
+  const t0 = Date.now();
+  {
+    const rel = capture();
+    assert.equal(
+      await run({
+        argv: ["turn", "release", "turn"],
+        env: h.env,
+        cwd: h.cwd,
+        io: rel.io,
+      }),
+      ExitCode.OK,
+      rel.stderr,
+    );
+  }
+
+  const code = await watchPromise;
+  const elapsed = Date.now() - t0;
+  assert.equal(code, ExitCode.OK, c.stderr);
+  assert.ok(
+    elapsed < 2_000,
+    `--for-turn should wake on release within 2s, took ${elapsed}ms`,
+  );
+  const lines = c.stdout
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  assert.ok(lines.length >= 1, c.stdout);
+  const last = JSON.parse(lines[lines.length - 1]!) as {
+    kind?: string;
+    ready?: boolean;
+    lock?: unknown;
+  };
+  assert.equal(last.kind, "turn");
+  assert.ok(last.ready === true || last.lock === null);
+});
+
+test("watch --for-turn wakes when lock TTL expires (no client poll)", async () => {
+  const h = await startServer({ eventsTimeoutMs: 5_000 });
+
+  let agentToken = "";
+  {
+    const c = capture();
+    assert.equal(
+      await run({
+        argv: ["token", "create", "waiter", "--json"],
+        env: h.env,
+        cwd: h.cwd,
+        io: c.io,
+      }),
+      ExitCode.OK,
+      c.stderr,
+    );
+    agentToken = (JSON.parse(c.stdout) as { token: string }).token;
+  }
+  const agentEnv: NodeJS.ProcessEnv = {
+    ...h.env,
+    EXCALICLI_TOKEN: agentToken,
+  };
+
+  {
+    const c = capture();
+    assert.equal(
+      await run({
+        argv: ["new", "Expiry", "--slug", "expiry"],
+        env: h.env,
+        cwd: h.cwd,
+        io: c.io,
+      }),
+      ExitCode.OK,
+      c.stderr,
+    );
+  }
+
+  // Short TTL so the server-side scheduler fires during the test.
+  {
+    const c = capture();
+    assert.equal(
+      await run({
+        argv: ["turn", "claim", "expiry", "--ttl", "1"],
+        env: h.env,
+        cwd: h.cwd,
+        io: c.io,
+      }),
+      ExitCode.OK,
+      c.stderr,
+    );
+  }
+
+  const c = capture();
+  const t0 = Date.now();
+  const code = await run({
+    argv: ["--json", "watch", "expiry", "--for-turn", "--timeout", "8"],
+    env: agentEnv,
+    cwd: h.cwd,
+    io: c.io,
+  });
+  const elapsed = Date.now() - t0;
+
+  assert.equal(code, ExitCode.OK, c.stderr);
+  // Should wake near the 1s TTL, not after the full --timeout 8.
+  assert.ok(
+    elapsed < 4_000,
+    `TTL expiry should wake within ~1–2s, took ${elapsed}ms`,
+  );
+  const lines = c.stdout
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  assert.ok(lines.length >= 1, c.stdout);
+});
+
+test("flagless watch JSONL shape unchanged (no kind field on commit)", async () => {
+  const h = await startServer({ eventsTimeoutMs: 5_000 });
+
+  {
+    const c = capture();
+    assert.equal(
+      await run({
+        argv: ["new", "Shape", "--slug", "shape"],
+        env: h.env,
+        cwd: h.cwd,
+        io: c.io,
+      }),
+      ExitCode.OK,
+      c.stderr,
+    );
+  }
+  writeScene(h.cwd, "shape", [rect("a")]);
+  {
+    const c = capture();
+    assert.equal(
+      await run({
+        argv: ["push", "shape", "-m", "v1"],
+        env: h.env,
+        cwd: h.cwd,
+        io: c.io,
+      }),
+      ExitCode.OK,
+      c.stderr,
+    );
+  }
+
+  const c = capture();
+  const watchPromise = run({
+    argv: ["--json", "watch", "shape", "--since", "1"],
+    env: { ...h.env, EXCALICLI_WATCH_MAX_EVENTS: "1" },
+    cwd: h.cwd,
+    io: c.io,
+  });
+  await new Promise<void>((r) => setTimeout(r, 50));
+
+  const otherCwd = tempDir("excalicli-watch-shape-pusher-");
+  writeScene(otherCwd, "shape", [rect("a"), rect("b")]);
+  fs.mkdirSync(path.join(otherCwd, ".excalidraw-collab"), { recursive: true });
+  fs.writeFileSync(
+    path.join(otherCwd, ".excalidraw-collab", "state.json"),
+    JSON.stringify({
+      version: 1,
+      servers: {
+        [h.baseUrl.replace(/\/$/, "")]: {
+          scenes: { shape: { version: 1 } },
+        },
+      },
+    }) + "\n",
+  );
+  {
+    const pushCap = capture();
+    assert.equal(
+      await run({
+        argv: ["push", "shape", "-m", "v2"],
+        env: h.env,
+        cwd: otherCwd,
+        io: pushCap.io,
+      }),
+      ExitCode.OK,
+      pushCap.stderr,
+    );
+  }
+
+  const code = await watchPromise;
+  assert.equal(code, ExitCode.OK, c.stderr);
+  const lines = c.stdout
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  assert.equal(lines.length, 1);
+  const event = JSON.parse(lines[0]!) as Record<string, unknown>;
+  // Historical commit JSONL keys — must not grow a "kind" field on the default path.
+  assert.deepEqual(
+    Object.keys(event).sort(),
+    [
+      "author",
+      "createdAt",
+      "diff",
+      "elementCount",
+      "from",
+      "message",
+      "sceneHash",
+      "slug",
+      "to",
+    ].sort(),
+  );
+  assert.equal("kind" in event, false);
+});

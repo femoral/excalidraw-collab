@@ -75,6 +75,7 @@ export function generateCliReference(): string {
     "| 2 | USAGE | Bad arguments, missing auth/config, or missing prior pull |",
     "| 4 | CONFLICT | Optimistic-concurrency push rejected (409); diff is in the response |",
     "| 5 | LOCK_HELD | Advisory turn lock held by someone else (`turn claim`, or `push --respect-lock`) |",
+    "| 6 | TIMEOUT | `watch --timeout` elapsed with no matching event |",
     "",
     "## Commands",
     "",

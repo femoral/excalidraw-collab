@@ -265,7 +265,7 @@ export async function run(options: RunOptions): Promise<ExitCodeValue> {
     try {
       const result = await command.run(ctx);
       writeSuccess(io, result, json);
-      return ExitCode.OK;
+      return (result.exitCode ?? ExitCode.OK) as ExitCodeValue;
     } finally {
       removeSigint?.();
     }

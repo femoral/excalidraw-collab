@@ -11,6 +11,7 @@ import {
 test("exitCodeForError maps server codes", () => {
   assert.equal(exitCodeForError("CONFLICT"), ExitCode.CONFLICT);
   assert.equal(exitCodeForError("LOCK_HELD"), ExitCode.LOCK_HELD);
+  assert.equal(exitCodeForError("TIMEOUT"), ExitCode.TIMEOUT);
   assert.equal(exitCodeForError("USAGE"), ExitCode.USAGE);
   assert.equal(exitCodeForError("VALIDATION"), ExitCode.USAGE);
   assert.equal(exitCodeForError("BAD_REQUEST"), ExitCode.USAGE);
