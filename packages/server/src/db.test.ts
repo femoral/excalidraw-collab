@@ -45,7 +45,7 @@ function testConfig(overrides: Partial<Config> = {}): Config {
 }
 
 describe("Database migrations", () => {
-  test("fresh DATA_DIR creates full schema via migrations 001 and 002", () => {
+  test("fresh DATA_DIR creates full schema via migrations 001–003", () => {
     const dataDir = tempDataDir();
     const db = openDatabase(dataDir);
     try {
@@ -60,11 +60,13 @@ describe("Database migrations", () => {
       ]);
 
       const migrations = db.listMigrations();
-      assert.equal(migrations.length, 2);
+      assert.equal(migrations.length, 3);
       assert.equal(migrations[0]!.id, 1);
       assert.equal(migrations[0]!.name, "001_initial_schema");
       assert.equal(migrations[1]!.id, 2);
       assert.equal(migrations[1]!.name, "002_token_admin_and_meta");
+      assert.equal(migrations[2]!.id, 3);
+      assert.equal(migrations[2]!.name, "003_scenes_soft_delete");
       assert.equal(typeof migrations[0]!.applied_at, "string");
 
       // File-backed path is under DATA_DIR.
@@ -78,7 +80,7 @@ describe("Database migrations", () => {
     const dataDir = tempDataDir();
     const db1 = openDatabase(dataDir);
     const first = db1.listMigrations();
-    assert.equal(first.length, 2);
+    assert.equal(first.length, 3);
     db1.close();
 
     // Re-open same directory — migrate runs again.
@@ -86,12 +88,14 @@ describe("Database migrations", () => {
     try {
       db2.migrateAgain();
       const second = db2.listMigrations();
-      assert.equal(second.length, 2);
+      assert.equal(second.length, 3);
       assert.equal(second[0]!.id, first[0]!.id);
       assert.equal(second[0]!.name, first[0]!.name);
       assert.equal(second[0]!.applied_at, first[0]!.applied_at);
       assert.equal(second[1]!.id, first[1]!.id);
       assert.equal(second[1]!.applied_at, first[1]!.applied_at);
+      assert.equal(second[2]!.id, first[2]!.id);
+      assert.equal(second[2]!.applied_at, first[2]!.applied_at);
 
       // Schema still intact; insert still works.
       db2.insertScene({
@@ -131,6 +135,86 @@ describe("Database constraints", () => {
           return true;
         },
       );
+    } finally {
+      db.close();
+    }
+  });
+
+  test("slug UNIQUE constraint rejects insert that bypasses collision-suffixing", () => {
+    // Done-when: uniqueness is enforced at the DB level, not only by
+    // allocateSlug. Drive the constraint directly via insertScene.
+    const dataDir = tempDataDir();
+    const db = openDatabase(dataDir);
+    try {
+      db.insertScene({ id: "s1", slug: "collision", name: "First" });
+      assert.throws(
+        () =>
+          db.insertScene({
+            id: "s2",
+            slug: "collision",
+            name: "Bypass suffix helper",
+          }),
+        (err: unknown) => {
+          assert.ok(err instanceof Error);
+          assert.match(err.message, /UNIQUE constraint failed.*slug/i);
+          return true;
+        },
+      );
+      // Soft-deleted rows still occupy the slug under the UNIQUE constraint.
+      assert.equal(db.softDeleteScene("s1"), true);
+      assert.throws(
+        () =>
+          db.insertScene({
+            id: "s3",
+            slug: "collision",
+            name: "After soft-delete",
+          }),
+        (err: unknown) => {
+          assert.ok(err instanceof Error);
+          assert.match(err.message, /UNIQUE constraint failed/i);
+          return true;
+        },
+      );
+    } finally {
+      db.close();
+    }
+  });
+
+  test("softDeleteScene hides from list/get-by-slug but preserves rows and versions", () => {
+    const dataDir = tempDataDir();
+    const db = openDatabase(dataDir);
+    try {
+      const scene = db.insertScene({
+        id: "s1",
+        slug: "arch",
+        name: "Architecture",
+      });
+      const empty = gzipJson([]);
+      db.insertVersion({
+        scene_id: scene.id,
+        version: 1,
+        parent_version: null,
+        author: "agent",
+        message: "init",
+        elements: empty,
+        app_state: empty,
+        element_count: 0,
+      });
+      db.updateSceneHead(scene.id, 1);
+
+      assert.equal(db.softDeleteScene(scene.id), true);
+      assert.equal(db.getSceneBySlug("arch"), undefined);
+      assert.equal(db.listScenes().length, 0);
+
+      const stillThere = db.getSceneBySlugIncludingDeleted("arch");
+      assert.ok(stillThere);
+      assert.equal(typeof stillThere.deleted_at, "string");
+      assert.equal(db.getSceneById(scene.id)?.id, scene.id);
+      assert.equal(db.listVersions(scene.id).length, 1);
+      assert.equal(db.slugExists("arch"), true);
+
+      // Second soft-delete is a no-op.
+      assert.equal(db.softDeleteScene(scene.id), false);
     } finally {
       db.close();
     }
@@ -200,6 +284,7 @@ describe("typed data-access layer", () => {
         name: "Architecture",
       });
       assert.equal(scene.head_version, 0);
+      assert.equal(scene.deleted_at, null);
       assert.equal(db.getSceneBySlug("arch")?.id, "scene-1");
 
       const elements = [{ id: "e1", type: "rectangle", x: 0, y: 0 }];

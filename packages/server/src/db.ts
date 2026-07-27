@@ -32,6 +32,21 @@ export type SceneRow = {
   updated_at: string;
   lock_holder: string | null;
   lock_expires_at: string | null;
+  /**
+   * Soft-delete timestamp (ISO-8601). Null while the scene is live.
+   * Soft-deleted scenes keep their rows and versions; they are hidden from
+   * public list/get-by-slug paths but still occupy their slug under the
+   * UNIQUE constraint (see migration 003 comment).
+   */
+  deleted_at: string | null;
+};
+
+/**
+ * Scene list/detail row with the head version's element count joined in.
+ * When `head_version` is 0 (no versions yet), `element_count` is 0.
+ */
+export type SceneListRow = SceneRow & {
+  element_count: number;
 };
 
 export type VersionRow = {
@@ -98,6 +113,7 @@ export type NewScene = {
   updated_at?: string;
   lock_holder?: string | null;
   lock_expires_at?: string | null;
+  deleted_at?: string | null;
 };
 
 export type NewVersion = {
@@ -261,6 +277,28 @@ const MIGRATIONS: readonly Migration[] = [
         key   TEXT PRIMARY KEY NOT NULL,
         value TEXT NOT NULL
       );
+    `,
+  },
+  {
+    id: 3,
+    name: "003_scenes_soft_delete",
+    sql: `
+      -- Soft delete: DELETE /api/scenes/:slug sets deleted_at rather than
+      -- destroying the row. Versions are never destroyed (no CASCADE on this
+      -- path). Soft-deleted scenes disappear from listings and return 404 by
+      -- slug, but their rows and version history survive.
+      --
+      -- Slug uniqueness interaction: scenes.slug remains UNIQUE across *all*
+      -- rows, including soft-deleted ones. A deleted scene therefore continues
+      -- to occupy its slug. Collision-suffixing for auto-derived slugs skips
+      -- taken slugs (live and deleted); an explicit slug that collides with a
+      -- soft-deleted scene is rejected with 409. We deliberately do not free
+      -- slugs on soft-delete: reusing a slug would make "GET by slug" ambiguous
+      -- against historical rows, and partial UNIQUE indexes would require a
+      -- table rebuild to drop the column-level UNIQUE from migration 001.
+      ALTER TABLE scenes ADD COLUMN deleted_at TEXT;
+
+      CREATE INDEX idx_scenes_deleted_at ON scenes(deleted_at);
     `,
   },
 ];
@@ -454,13 +492,14 @@ export class Database {
     const head_version = input.head_version ?? 0;
     const lock_holder = input.lock_holder ?? null;
     const lock_expires_at = input.lock_expires_at ?? null;
+    const deleted_at = input.deleted_at ?? null;
 
     this.raw
       .prepare(
         `INSERT INTO scenes (
           id, slug, name, head_version, created_at, updated_at,
-          lock_holder, lock_expires_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          lock_holder, lock_expires_at, deleted_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.id,
@@ -471,6 +510,7 @@ export class Database {
         updated_at,
         lock_holder,
         lock_expires_at,
+        deleted_at,
       );
 
     return this.getSceneById(input.id)!;
@@ -479,22 +519,78 @@ export class Database {
   getSceneById(id: string): SceneRow | undefined {
     const row = this.raw
       .prepare(`SELECT * FROM scenes WHERE id = ?`)
-      .get(id) as SceneRow | undefined;
+      .get(id) as Record<string, unknown> | undefined;
     return row ? mapScene(row) : undefined;
   }
 
+  /**
+   * Live scene by slug (excludes soft-deleted). Public GET-by-slug path.
+   */
   getSceneBySlug(slug: string): SceneRow | undefined {
     const row = this.raw
-      .prepare(`SELECT * FROM scenes WHERE slug = ?`)
-      .get(slug) as SceneRow | undefined;
+      .prepare(
+        `SELECT * FROM scenes WHERE slug = ? AND deleted_at IS NULL`,
+      )
+      .get(slug) as Record<string, unknown> | undefined;
     return row ? mapScene(row) : undefined;
   }
 
-  listScenes(): SceneRow[] {
+  /**
+   * Scene by slug including soft-deleted rows. Used for slug-occupation
+   * checks and tests that assert rows survive soft delete.
+   */
+  getSceneBySlugIncludingDeleted(slug: string): SceneRow | undefined {
+    const row = this.raw
+      .prepare(`SELECT * FROM scenes WHERE slug = ?`)
+      .get(slug) as Record<string, unknown> | undefined;
+    return row ? mapScene(row) : undefined;
+  }
+
+  /**
+   * True when any scene row (live or soft-deleted) occupies `slug`.
+   * Soft-deleted scenes still hold their slug under the UNIQUE constraint.
+   */
+  slugExists(slug: string): boolean {
+    const row = this.raw
+      .prepare(`SELECT 1 AS ok FROM scenes WHERE slug = ? LIMIT 1`)
+      .get(slug) as { ok: number } | undefined;
+    return row !== undefined;
+  }
+
+  /**
+   * Live scenes ordered by recency, with head-version element_count joined.
+   * Soft-deleted scenes are omitted.
+   */
+  listScenes(): SceneListRow[] {
     const rows = this.raw
-      .prepare(`SELECT * FROM scenes ORDER BY updated_at DESC`)
-      .all() as SceneRow[];
-    return rows.map(mapScene);
+      .prepare(
+        `SELECT s.*,
+                COALESCE(v.element_count, 0) AS element_count
+         FROM scenes s
+         LEFT JOIN versions v
+           ON v.scene_id = s.id AND v.version = s.head_version
+         WHERE s.deleted_at IS NULL
+         ORDER BY s.updated_at DESC`,
+      )
+      .all() as Array<Record<string, unknown>>;
+    return rows.map(mapSceneList);
+  }
+
+  /**
+   * Live scene by slug with head element_count. Soft-deleted → undefined.
+   */
+  getSceneListRowBySlug(slug: string): SceneListRow | undefined {
+    const row = this.raw
+      .prepare(
+        `SELECT s.*,
+                COALESCE(v.element_count, 0) AS element_count
+         FROM scenes s
+         LEFT JOIN versions v
+           ON v.scene_id = s.id AND v.version = s.head_version
+         WHERE s.slug = ? AND s.deleted_at IS NULL`,
+      )
+      .get(slug) as Record<string, unknown> | undefined;
+    return row ? mapSceneList(row) : undefined;
   }
 
   updateSceneHead(
@@ -521,6 +617,27 @@ export class Database {
       .run(lockHolder, lockExpiresAt, id);
   }
 
+  /**
+   * Soft-delete a scene: set `deleted_at` so it vanishes from listings and
+   * get-by-slug, while the row and all versions remain. Idempotent when
+   * already soft-deleted (refreshes `deleted_at` only if currently null).
+   * Returns true when a live row was marked deleted.
+   */
+  softDeleteScene(id: string, deletedAt: string = nowIso()): boolean {
+    const result = this.raw
+      .prepare(
+        `UPDATE scenes SET deleted_at = ?
+         WHERE id = ? AND deleted_at IS NULL`,
+      )
+      .run(deletedAt, id) as { changes: number };
+    return Number(result.changes) > 0;
+  }
+
+  /**
+   * Hard-delete a scene row (cascades to versions/drafts). Not used by the
+   * HTTP API — soft delete is the only public delete path. Kept for tests
+   * and eventual admin maintenance tooling.
+   */
   deleteScene(id: string): void {
     this.raw.prepare(`DELETE FROM scenes WHERE id = ?`).run(id);
   }
@@ -767,16 +884,34 @@ export class Database {
   }
 }
 
-function mapScene(row: SceneRow): SceneRow {
+function mapScene(row: Record<string, unknown> | SceneRow): SceneRow {
+  const r = row as Record<string, unknown>;
   return {
-    id: row.id,
-    slug: row.slug,
-    name: row.name,
-    head_version: Number(row.head_version),
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-    lock_holder: row.lock_holder ?? null,
-    lock_expires_at: row.lock_expires_at ?? null,
+    id: String(r.id),
+    slug: String(r.slug),
+    name: String(r.name),
+    head_version: Number(r.head_version),
+    created_at: String(r.created_at),
+    updated_at: String(r.updated_at),
+    lock_holder:
+      r.lock_holder === null || r.lock_holder === undefined
+        ? null
+        : String(r.lock_holder),
+    lock_expires_at:
+      r.lock_expires_at === null || r.lock_expires_at === undefined
+        ? null
+        : String(r.lock_expires_at),
+    deleted_at:
+      r.deleted_at === null || r.deleted_at === undefined
+        ? null
+        : String(r.deleted_at),
+  };
+}
+
+function mapSceneList(row: Record<string, unknown>): SceneListRow {
+  return {
+    ...mapScene(row),
+    element_count: Number(row.element_count ?? 0),
   };
 }
 
