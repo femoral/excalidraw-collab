@@ -51,6 +51,7 @@ export {
   pickAppState,
   SceneValidationError,
   PERSISTED_APP_STATE_KEYS,
+  VIEWER_ONLY_APP_STATE_KEYS,
 } from "./normalize.js";
 
 export { splitFiles, mergeFiles } from "./files.js";

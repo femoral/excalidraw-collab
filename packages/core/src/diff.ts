@@ -540,6 +540,8 @@ export const APP_STATE_DEFAULTS: Readonly<Record<string, unknown>> =
     exportScale: 1,
     exportEmbedScene: false,
     frameRendering: { enabled: true, clip: true, name: true, outline: true },
+    // theme is viewer-only (issue #38): still listed so historical absent-vs-
+    // default diffs stay quiet if a stored blob still carries theme: "light".
     theme: "light",
   });
 

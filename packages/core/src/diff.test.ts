@@ -701,12 +701,21 @@ describe("diffScenes appState defaults", () => {
 
   test("an explicit change away from a default is still reported", () => {
     const diff = diffScenes(
+      withAppState({ exportScale: 1 }),
+      withAppState({ exportScale: 2 }),
+    );
+    assert.deepEqual(diff.appState, [
+      { key: "exportScale", from: 1, to: 2 },
+    ]);
+  });
+
+  test("theme changes are not scene-document diffs (issue #38)", () => {
+    const diff = diffScenes(
       withAppState({ theme: "light" }),
       withAppState({ theme: "dark" }),
     );
-    assert.deepEqual(diff.appState, [
-      { key: "theme", from: "light", to: "dark" },
-    ]);
+    assert.deepEqual(diff.appState, []);
+    assert.ok(isEmptyDiff(diff));
   });
 
   test("table agrees with upstream restoreAppState", async () => {

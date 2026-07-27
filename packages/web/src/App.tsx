@@ -27,6 +27,21 @@ import { HistoryView } from "./HistoryView.tsx";
 import { parseVersionQuery } from "./history-logic.ts";
 import { SceneEditor } from "./SceneEditor.tsx";
 import { SceneList } from "./SceneList.tsx";
+import {
+  applyThemeToDocument,
+  oppositeTheme,
+  readHintDismissed,
+  readSystemPreference,
+  readViewerTheme,
+  resolveTheme,
+  shouldShowThemeMismatchHint,
+  subscribeSystemPreference,
+  writeHintDismissed,
+  writeViewerTheme,
+  type InstanceTheme,
+  type Theme,
+  type ViewerThemeChoice,
+} from "./theme-logic.ts";
 
 function useLocation(): { pathname: string; search: string } {
   const [loc, setLoc] = useState(() => ({
@@ -74,10 +89,12 @@ function SceneView({
   slug,
   api,
   search,
+  theme,
 }: {
   slug: string;
   api: ApiClient;
   search: string;
+  theme: Theme;
 }): ReactElement {
   const version = parseVersionQuery(search);
   return (
@@ -86,6 +103,7 @@ function SceneView({
       api={api}
       onNavigate={navigate}
       version={version}
+      theme={theme}
     />
   );
 }
@@ -123,6 +141,180 @@ function routeTitle(route: Route): string {
 
 function storage(): Storage {
   return window.localStorage;
+}
+
+type ThemeController = {
+  theme: Theme;
+  viewerChoice: ViewerThemeChoice;
+  instanceDefault: InstanceTheme;
+  systemPreference: Theme;
+  showMismatchHint: boolean;
+  isAdmin: boolean;
+  setIsAdmin: (value: boolean) => void;
+  toggleTheme: () => void;
+  adoptInstanceTheme: () => void;
+  switchToSystemTheme: () => void;
+  dismissMismatchHint: () => void;
+  publishInstanceDefault: () => Promise<void>;
+  instanceBusy: boolean;
+  instanceError: string | null;
+  clearInstanceError: () => void;
+};
+
+/**
+ * Theme controller: resolves viewer > instance > system, applies to DOM,
+ * and exposes toggle / admin publish controls (issue #38).
+ */
+function useThemeController(api: ApiClient): ThemeController {
+  const [viewerChoice, setViewerChoice] = useState<ViewerThemeChoice>(() =>
+    readViewerTheme(storage()),
+  );
+  const [instanceDefault, setInstanceDefault] = useState<InstanceTheme>(null);
+  const [systemPreference, setSystemPreference] = useState<Theme>(() =>
+    readSystemPreference(),
+  );
+  const [hintDismissed, setHintDismissed] = useState(() =>
+    readHintDismissed(storage()),
+  );
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [instanceBusy, setInstanceBusy] = useState(false);
+  const [instanceError, setInstanceError] = useState<string | null>(null);
+
+  const theme = resolveTheme({
+    viewerChoice,
+    instanceDefault,
+    systemPreference,
+  });
+
+  // Apply immediately (also covers first paint after instance default arrives).
+  useEffect(() => {
+    applyThemeToDocument(theme);
+  }, [theme]);
+
+  // Mid-session OS switches only matter when no higher-precedence source exists.
+  useEffect(() => {
+    return subscribeSystemPreference((next) => {
+      setSystemPreference(next);
+    });
+  }, []);
+
+  // Instance default: unauthenticated read so login themes correctly.
+  // Do not block first paint — provisional theme already applied from
+  // localStorage / prefers-color-scheme in index.html.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const settings = await api.getThemeSettings();
+        if (cancelled) return;
+        setInstanceDefault(settings.theme);
+      } catch {
+        // Offline / 5xx: keep provisional theme; instance stays null.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [api]);
+
+  const showMismatchHint = shouldShowThemeMismatchHint({
+    viewerChoice,
+    instanceDefault,
+    systemPreference,
+    hintDismissed,
+  });
+
+  const setLocalChoice = useCallback((choice: Theme) => {
+    writeViewerTheme(storage(), choice);
+    setViewerChoice(choice);
+    // Choosing is a permanent local preference; hide the hint forever.
+    writeHintDismissed(storage(), true);
+    setHintDismissed(true);
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    setLocalChoice(oppositeTheme(theme));
+  }, [theme, setLocalChoice]);
+
+  const adoptInstanceTheme = useCallback(() => {
+    if (instanceDefault) setLocalChoice(instanceDefault);
+  }, [instanceDefault, setLocalChoice]);
+
+  const switchToSystemTheme = useCallback(() => {
+    setLocalChoice(systemPreference);
+  }, [systemPreference, setLocalChoice]);
+
+  const dismissMismatchHint = useCallback(() => {
+    // Dismiss without switching: lock current resolved (instance) theme as
+    // the local choice so the hint never returns.
+    writeViewerTheme(storage(), theme);
+    setViewerChoice(theme);
+    writeHintDismissed(storage(), true);
+    setHintDismissed(true);
+  }, [theme]);
+
+  const publishInstanceDefault = useCallback(async () => {
+    setInstanceBusy(true);
+    setInstanceError(null);
+    try {
+      const settings = await api.setThemeSettings(theme);
+      setInstanceDefault(settings.theme);
+      // Publishing implies the admin wants this theme locally too.
+      writeViewerTheme(storage(), theme);
+      setViewerChoice(theme);
+    } catch (err) {
+      setInstanceError(
+        err instanceof Error ? err.message : "Could not set instance theme.",
+      );
+    } finally {
+      setInstanceBusy(false);
+    }
+  }, [api, theme]);
+
+  const clearInstanceError = useCallback(() => {
+    setInstanceError(null);
+  }, []);
+
+  return {
+    theme,
+    viewerChoice,
+    instanceDefault,
+    systemPreference,
+    showMismatchHint,
+    isAdmin,
+    setIsAdmin,
+    toggleTheme,
+    adoptInstanceTheme,
+    switchToSystemTheme,
+    dismissMismatchHint,
+    publishInstanceDefault,
+    instanceBusy,
+    instanceError,
+    clearInstanceError,
+  };
+}
+
+function ThemeToggleButton({
+  theme,
+  onToggle,
+  className,
+}: {
+  theme: Theme;
+  onToggle: () => void;
+  className?: string;
+}): ReactElement {
+  const next = oppositeTheme(theme);
+  return (
+    <button
+      type="button"
+      className={`btn btn-ghost btn-sm theme-toggle${className ? ` ${className}` : ""}`}
+      onClick={onToggle}
+      aria-label={next === "dark" ? "Switch to dark theme" : "Switch to light theme"}
+      title={next === "dark" ? "Dark theme" : "Light theme"}
+    >
+      {theme === "dark" ? "☀" : "☾"}
+    </button>
+  );
 }
 
 export function App(): ReactElement {
@@ -167,6 +359,8 @@ export function App(): ReactElement {
     [handleUnauthorized],
   );
 
+  const themeCtl = useThemeController(api);
+
   // Verify stored (or freshly submitted) tokens against the API.
   useEffect(() => {
     if (auth.status !== "checking") return;
@@ -181,6 +375,13 @@ export function App(): ReactElement {
         writeStoredToken(storage(), auth.token);
         dispatchAuth({ type: "session_verified" });
         setLoginError(null);
+        // Load admin bit for "set instance default" control.
+        try {
+          const who = await api.whoami();
+          if (!cancelled) themeCtl.setIsAdmin(who.isAdmin);
+        } catch {
+          if (!cancelled) themeCtl.setIsAdmin(false);
+        }
       } catch (err) {
         if (cancelled) return;
         // 401 already cleared storage + set anonymous via onUnauthorized.
@@ -206,7 +407,17 @@ export function App(): ReactElement {
     return () => {
       cancelled = true;
     };
+    // themeCtl methods are stable enough; avoid re-running on theme flips.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth, api]);
+
+  // Clear admin flag on logout.
+  useEffect(() => {
+    if (auth.status === "anonymous") {
+      themeCtl.setIsAdmin(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth.status]);
 
   function handleLoginSubmit(token: string) {
     setLoginError(null);
@@ -229,6 +440,8 @@ export function App(): ReactElement {
         error={loginError}
         busy={loginBusy}
         onSubmit={handleLoginSubmit}
+        theme={themeCtl.theme}
+        onToggleTheme={themeCtl.toggleTheme}
       />
     );
   }
@@ -296,6 +509,25 @@ export function App(): ReactElement {
               </a>
             </>
           ) : null}
+          <div className="header-theme-controls">
+            <ThemeToggleButton
+              theme={themeCtl.theme}
+              onToggle={themeCtl.toggleTheme}
+            />
+            {themeCtl.isAdmin ? (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm theme-instance-btn"
+                disabled={themeCtl.instanceBusy}
+                onClick={() => {
+                  void themeCtl.publishInstanceDefault();
+                }}
+                title="Publish the current theme as this instance’s default for all viewers without a local choice"
+              >
+                Set instance default
+              </button>
+            ) : null}
+          </div>
           <button
             type="button"
             className="btn btn-ghost btn-sm header-sign-out"
@@ -305,12 +537,69 @@ export function App(): ReactElement {
           </button>
         </nav>
       </header>
+
+      {themeCtl.showMismatchHint && themeCtl.instanceDefault ? (
+        <div
+          className="banner banner-info theme-mismatch-banner"
+          role="status"
+        >
+          <span>
+            This instance defaults to the{" "}
+            <strong>{themeCtl.instanceDefault}</strong> theme, which differs
+            from your system preference ({themeCtl.systemPreference}).
+          </span>
+          <div className="banner-actions">
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={themeCtl.switchToSystemTheme}
+            >
+              Use system ({themeCtl.systemPreference})
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={themeCtl.adoptInstanceTheme}
+            >
+              Keep {themeCtl.instanceDefault}
+            </button>
+            <button
+              type="button"
+              className="banner-dismiss"
+              aria-label="Dismiss"
+              onClick={themeCtl.dismissMismatchHint}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {themeCtl.instanceError ? (
+        <div className="banner banner-error theme-mismatch-banner" role="alert">
+          <span>{themeCtl.instanceError}</span>
+          <button
+            type="button"
+            className="banner-dismiss"
+            aria-label="Dismiss"
+            onClick={themeCtl.clearInstanceError}
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
+
       <main className="app-main">
         {route.name === "home" ? (
           <SceneList api={api} onNavigate={navigate} />
         ) : null}
         {route.name === "scene" ? (
-          <SceneView slug={route.slug} api={api} search={search} />
+          <SceneView
+            slug={route.slug}
+            api={api}
+            search={search}
+            theme={themeCtl.theme}
+          />
         ) : null}
         {route.name === "history" ? (
           <HistoryView slug={route.slug} api={api} onNavigate={navigate} />

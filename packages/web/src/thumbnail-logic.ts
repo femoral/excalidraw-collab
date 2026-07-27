@@ -14,7 +14,11 @@
 // Export options for client-side thumbnail PNG
 // ---------------------------------------------------------------------------
 
-/** Small, list-friendly PNG export (no dark mode, modest scale). */
+/**
+ * Small, list-friendly PNG export options for commit-time dashboard thumbnails.
+ * `darkMode` stays false so stored (content-addressed) previews are always
+ * light and shared across viewers — do not follow the chrome theme (issue #38).
+ */
 export const THUMBNAIL_EXPORT = {
   /** Pixel scale for exportToBlob / appState.exportScale. */
   scale: 0.5,

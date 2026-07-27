@@ -9,6 +9,11 @@
  *
  * Never mutates element internals by hand — public `@excalidraw/excalidraw`
  * exports only.
+ *
+ * Determinism (issue #38): export dark mode is keyed ONLY by the explicit
+ * `darkMode` flag in the request (`excalicli export --dark`). This page must
+ * never read the instance default theme or the host's `prefers-color-scheme`.
+ * A cached PNG/SVG that silently flipped with a settings change would be a bug.
  */
 import { useEffect, useState, type ReactElement } from "react";
 import {

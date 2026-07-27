@@ -21,6 +21,10 @@ import type {
  * `PersistedAppState` in types.ts. Everything else (collaborators,
  * selectedElementIds, scroll/zoom, open dialogs, cursor, …) is per-viewer
  * noise and must never be persisted — it would pollute every diff.
+ *
+ * `theme` remains listed for wire compatibility (historical versions may
+ * carry it), but is a per-viewer preference and is stripped by
+ * {@link pickAppState} so it is never written back or diffed (issue #38).
  */
 export const PERSISTED_APP_STATE_KEYS = [
   "viewBackgroundColor",
@@ -35,6 +39,18 @@ export const PERSISTED_APP_STATE_KEYS = [
   "theme",
   "name",
 ] as const satisfies readonly (keyof PersistedAppState)[];
+
+/**
+ * Keys present in {@link PERSISTED_APP_STATE_KEYS} for wire / historical
+ * compatibility that must never be the source of truth on load or written
+ * on commit. Resolved at view time (localStorage → instance default →
+ * prefers-color-scheme).
+ */
+export const VIEWER_ONLY_APP_STATE_KEYS = ["theme"] as const satisfies readonly (keyof PersistedAppState)[];
+
+const VIEWER_ONLY_APP_STATE_KEY_SET: ReadonlySet<string> = new Set(
+  VIEWER_ONLY_APP_STATE_KEYS,
+);
 
 // ---------------------------------------------------------------------------
 // Validation error — reports every problem found, not just the first
@@ -68,7 +84,9 @@ export class SceneValidationError extends Error {
  * Whitelist only persistable appState keys. Unknown / non-persistable keys
  * are dropped. Input may be any partial object (or nullish → `{}`).
  *
- * This is an allowlist, never a denylist.
+ * This is an allowlist, never a denylist. Viewer-only keys (currently
+ * `theme`) are dropped even when listed in {@link PERSISTED_APP_STATE_KEYS},
+ * so toggling dark mode never enters a scene document or its diffs.
  */
 export function pickAppState(
   appState: unknown,
@@ -79,6 +97,7 @@ export function pickAppState(
   const src = appState as Record<string, unknown>;
   const out: Partial<PersistedAppState> = {};
   for (const key of PERSISTED_APP_STATE_KEYS) {
+    if (VIEWER_ONLY_APP_STATE_KEY_SET.has(key)) continue;
     if (Object.prototype.hasOwnProperty.call(src, key) && src[key] !== undefined) {
       // Value type is trusted as-is; we do not coerce or rewrite.
       (out as Record<string, unknown>)[key] = src[key];

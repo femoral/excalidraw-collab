@@ -119,7 +119,8 @@ describe("pickAppState", () => {
       outline: true,
       clip: true,
     });
-    assert.equal(picked.theme, "dark");
+    // theme is viewer-only: accepted on the wire, never persisted (issue #38)
+    assert.equal(picked.theme, undefined);
     assert.equal(picked.name, "Architecture");
 
     // Noise must be gone
@@ -187,6 +188,25 @@ describe("pickAppState", () => {
         "viewBackgroundColor",
       ],
     );
+  });
+
+  test("theme is never written to the scene document (issue #38)", () => {
+    assert.deepEqual(pickAppState({ theme: "dark" }), {});
+    assert.deepEqual(pickAppState({ theme: "light", name: "x" }), {
+      name: "x",
+    });
+    // Diffing two docs that only differ in theme must be empty once normalized.
+    const a = normalizeScene({
+      elements: [],
+      appState: { theme: "light", viewBackgroundColor: "#fff" },
+    });
+    const b = normalizeScene({
+      elements: [],
+      appState: { theme: "dark", viewBackgroundColor: "#fff" },
+    });
+    assert.equal(Object.prototype.hasOwnProperty.call(a.appState, "theme"), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(b.appState, "theme"), false);
+    assert.deepEqual(a.appState, b.appState);
   });
 });
 
