@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
-import { apiFetch } from "./api.js";
+import { apiFetch, apiFetchBinary } from "./api.js";
 import { CliError, ExitCode } from "./errors.js";
 import type { ResolvedConfig } from "./config.js";
 
@@ -112,4 +112,49 @@ test("apiFetchResult surfaces 204 with empty body (long-poll timeout)", async ()
   assert.equal(result.status, 204);
   assert.equal(result.body, undefined);
   assert.equal(result.text, "");
+});
+
+test("apiFetchBinary returns raw bytes on success", async () => {
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+  globalThis.fetch = (async () =>
+    new Response(png, {
+      status: 200,
+      headers: { "Content-Type": "image/png" },
+    })) as typeof fetch;
+
+  const result = await apiFetchBinary({
+    path: "/api/scenes/arch/render.png",
+    config: cfg,
+  });
+  assert.equal(result.status, 200);
+  assert.equal(result.contentType, "image/png");
+  assert.deepEqual([...result.bytes], [...png]);
+});
+
+test("apiFetchBinary unwraps 501 render-unavailable envelope", async () => {
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        error: {
+          code: "NOT_IMPLEMENTED",
+          message: "PNG/SVG rendering is not available: RENDER_WORKER=off.",
+          details: { reason: "disabled" },
+        },
+      }),
+      { status: 501, headers: { "Content-Type": "application/json" } },
+    )) as typeof fetch;
+
+  await assert.rejects(
+    () =>
+      apiFetchBinary({
+        path: "/api/scenes/arch/render.png",
+        config: cfg,
+      }),
+    (err: unknown) => {
+      assert.ok(err instanceof CliError);
+      assert.equal(err.code, "NOT_IMPLEMENTED");
+      assert.deepEqual(err.details, { reason: "disabled" });
+      return true;
+    },
+  );
 });
