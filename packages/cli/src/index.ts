@@ -21,8 +21,12 @@ export {
   toErrorEnvelope,
 } from "./errors.js";
 export type { ServerErrorCode, ErrorEnvelope, ExitCodeValue } from "./errors.js";
-export { apiFetch } from "./api.js";
-export type { ApiFetchOptions, ServerErrorBody } from "./api.js";
+export { apiFetch, apiFetchResult, apiFetchText } from "./api.js";
+export type {
+  ApiFetchOptions,
+  ApiFetchResult,
+  ServerErrorBody,
+} from "./api.js";
 export { formatTable, formatHuman, formatJson } from "./format.js";
 export type { CommandResult } from "./format.js";
 export {
@@ -31,7 +35,7 @@ export {
   listCommands,
   CLI_VERSION,
 } from "./commands.js";
-export type { Command, CommandContext } from "./commands.js";
+export type { Command, CommandContext, IoStreams } from "./commands.js";
 export {
   getPulledVersion,
   setPulledVersion,
@@ -48,6 +52,7 @@ export {
   resolutionCommands,
 } from "./conflict.js";
 export type { ConflictDetails, ConflictDiff } from "./conflict.js";
+export type { SceneEventResponse, WatchEvent } from "./watch.js";
 
 const isMain =
   process.argv[1] !== undefined &&

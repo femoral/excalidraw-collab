@@ -99,3 +99,17 @@ test("apiFetch requires server in config", async () => {
     },
   );
 });
+
+test("apiFetchResult surfaces 204 with empty body (long-poll timeout)", async () => {
+  const { apiFetchResult } = await import("./api.js");
+  globalThis.fetch = (async () =>
+    new Response(null, { status: 204 })) as typeof fetch;
+
+  const result = await apiFetchResult({
+    path: "/api/scenes/x/events?since=1",
+    config: cfg,
+  });
+  assert.equal(result.status, 204);
+  assert.equal(result.body, undefined);
+  assert.equal(result.text, "");
+});

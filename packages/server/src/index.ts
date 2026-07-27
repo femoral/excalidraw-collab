@@ -121,3 +121,9 @@ export {
   type DraftResponse,
   type PutDraftResponse,
 } from "./drafts.js";
+export {
+  EVENTS_TIMEOUT_MS,
+  registerEventRoutes,
+  SceneEventHub,
+  type SceneEventResponse,
+} from "./events.js";

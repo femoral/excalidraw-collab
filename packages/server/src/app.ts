@@ -17,6 +17,11 @@ import {
 } from "./errors.js";
 import { registerDiffRoutes, SceneDiffService } from "./diff.js";
 import { registerDraftRoutes } from "./drafts.js";
+import {
+  EVENTS_TIMEOUT_MS,
+  registerEventRoutes,
+  SceneEventHub,
+} from "./events.js";
 import { FileStore, registerFileRoutes } from "./files.js";
 import { registerLockRoutes } from "./locks.js";
 import { registerSceneRoutes } from "./scenes.js";
@@ -52,6 +57,16 @@ export type BuildAppDeps = {
    * Inject in tests to observe `computeCount` / a small cache bound.
    */
   diffs?: SceneDiffService;
+  /**
+   * In-process scene event hub for long-poll `GET /events`. When omitted
+   * and `db` is set, a default hub is created. Inject in tests.
+   */
+  events?: SceneEventHub;
+  /**
+   * Long-poll timeout for `GET /events` (ms). Defaults to
+   * {@link EVENTS_TIMEOUT_MS} (30 s). Shorten in tests.
+   */
+  eventsTimeoutMs?: number;
 };
 
 function isFastifyError(err: unknown): err is FastifyError {
@@ -138,6 +153,16 @@ export async function buildApp(
     await registerSceneRoutes(app, deps.db);
     await registerDraftRoutes(app, { db: deps.db });
     await registerLockRoutes(app, deps.db);
+
+    // Long-poll hub: shared by version commits (publish) and GET /events.
+    const events = deps.events ?? new SceneEventHub();
+    app.decorate("events", events);
+    await registerEventRoutes(app, {
+      db: deps.db,
+      events,
+      timeoutMs: deps.eventsTimeoutMs ?? EVENTS_TIMEOUT_MS,
+    });
+
     if (fileStore) {
       await registerFileRoutes(app, {
         db: deps.db,
@@ -153,6 +178,7 @@ export async function buildApp(
         db: deps.db,
         store: fileStore,
         diffs,
+        events,
       });
       await registerDiffRoutes(app, {
         db: deps.db,
@@ -259,5 +285,7 @@ declare module "fastify" {
     fileStore?: FileStore;
     /** Scene diff service (present when db/fileStore is configured). */
     diffs?: SceneDiffService;
+    /** Long-poll event hub (present when db is configured). */
+    events?: SceneEventHub;
   }
 }

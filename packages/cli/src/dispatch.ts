@@ -1,6 +1,11 @@
 import { parseArgs } from "node:util";
 import { loadConfig } from "./config.js";
-import { getCommand, listCommands, type CommandContext } from "./commands.js";
+import {
+  getCommand,
+  listCommands,
+  type CommandContext,
+  type IoStreams,
+} from "./commands.js";
 import {
   CliError,
   ExitCode,
@@ -10,10 +15,7 @@ import {
 } from "./errors.js";
 import { formatHuman, formatJson, type CommandResult } from "./format.js";
 
-export type IoStreams = {
-  stdout: { write(chunk: string): void };
-  stderr: { write(chunk: string): void };
-};
+export type { IoStreams };
 
 export type RunOptions = {
   /** argv without node/executable (e.g. process.argv.slice(2)). */
@@ -25,6 +27,12 @@ export type RunOptions = {
    * Defaults to `process.cwd()`. Tests pass a temp dir.
    */
   cwd?: string;
+  /**
+   * Abort signal for long-running commands (e.g. `watch`). When omitted and
+   * running against real process streams, SIGINT aborts the signal so watch
+   * exits cleanly.
+   */
+  signal?: AbortSignal;
 };
 
 function globalUsage(): string {
@@ -77,6 +85,8 @@ function writeSuccess(
       : `${result.warning}\n`;
     io.stderr.write(msg);
   }
+  // Streaming commands (watch JSONL) already wrote; do not emit a trailer.
+  if (result.streamed) return;
   if (json) {
     io.stdout.write(formatJson(result.data));
   } else {
@@ -226,20 +236,49 @@ export async function run(options: RunOptions): Promise<ExitCodeValue> {
     }
 
     const config = loadConfig(env);
+    // Long-running commands honour AbortSignal. When the caller did not pass
+    // one and we own the process streams, wire SIGINT so `watch` exits cleanly.
+    let signal = options.signal;
+    let removeSigint: (() => void) | undefined;
+    if (!signal && io.stdout === process.stdout) {
+      const ac = new AbortController();
+      signal = ac.signal;
+      const onSigint = (): void => {
+        ac.abort();
+      };
+      process.once("SIGINT", onSigint);
+      removeSigint = () => {
+        process.off("SIGINT", onSigint);
+      };
+    }
+
     const ctx: CommandContext = {
       json,
       args: rest,
       env,
       config,
       cwd: options.cwd ?? process.cwd(),
+      io,
+      signal,
     };
 
-    const result = await command.run(ctx);
-    writeSuccess(io, result, json);
-    return ExitCode.OK;
+    try {
+      const result = await command.run(ctx);
+      writeSuccess(io, result, json);
+      return ExitCode.OK;
+    } finally {
+      removeSigint?.();
+    }
   } catch (err) {
     if (err instanceof CliError) {
       return writeFailure(io, err, json);
+    }
+    // Abort from SIGINT / test controller is a clean stop for watch.
+    if (
+      err instanceof Error &&
+      (err.name === "AbortError" || err.name === "TimeoutError")
+    ) {
+      return ExitCode.OK;
     }
     const wrapped = new CliError(
       err instanceof Error ? err.message : String(err),
