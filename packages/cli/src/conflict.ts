@@ -107,12 +107,24 @@ export function formatConflictDiff(diff: ConflictDiff | undefined): string {
     lines.push("appState:");
     for (const p of diff.appState) {
       lines.push(
-        `  ${p.key}: ${JSON.stringify(p.from)} → ${JSON.stringify(p.to)}`,
+        `  ${p.key}: ${formatAppStateValue(p.from)} → ${formatAppStateValue(p.to)}`,
       );
     }
   }
 
   return lines.join("\n") + "\n";
+}
+
+/**
+ * Render one side of an appState delta. Absent keys arrive as JS `undefined`
+ * (JSON.stringify(undefined) is the bare word "undefined" in a template string);
+ * surface that as an explicit "(unset)" for humans and LLMs.
+ */
+export function formatAppStateValue(value: unknown): string {
+  if (value === undefined) {
+    return "(unset)";
+  }
+  return JSON.stringify(value);
 }
 
 /**
