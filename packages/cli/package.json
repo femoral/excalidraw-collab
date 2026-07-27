@@ -21,5 +21,8 @@
     "build": "tsc -b",
     "test": "node --test dist/**/*.test.js",
     "dev": "tsc -b --watch"
+  },
+  "devDependencies": {
+    "@excalidraw-collab/server": "workspace:*"
   }
 }

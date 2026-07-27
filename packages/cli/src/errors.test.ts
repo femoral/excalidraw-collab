@@ -12,10 +12,13 @@ test("exitCodeForError maps server codes", () => {
   assert.equal(exitCodeForError("CONFLICT"), ExitCode.CONFLICT);
   assert.equal(exitCodeForError("LOCK_HELD"), ExitCode.LOCK_HELD);
   assert.equal(exitCodeForError("USAGE"), ExitCode.USAGE);
+  assert.equal(exitCodeForError("VALIDATION"), ExitCode.USAGE);
+  assert.equal(exitCodeForError("BAD_REQUEST"), ExitCode.USAGE);
   assert.equal(exitCodeForError("UNAUTHORIZED"), ExitCode.ERROR);
   assert.equal(exitCodeForError("NOT_FOUND"), ExitCode.ERROR);
-  assert.equal(exitCodeForError("VALIDATION"), ExitCode.ERROR);
   assert.equal(exitCodeForError("INTERNAL"), ExitCode.ERROR);
+  assert.equal(exitCodeForError("NOT_READY"), ExitCode.ERROR);
+  assert.equal(exitCodeForError("NOT_IMPLEMENTED"), ExitCode.ERROR);
   assert.equal(exitCodeForError(undefined), ExitCode.ERROR);
   assert.equal(exitCodeForError("SOMETHING_NEW"), ExitCode.ERROR);
 });

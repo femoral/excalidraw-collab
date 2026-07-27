@@ -4,10 +4,10 @@
  * Exit codes (from PLAN.md / issue #6):
  *   0 ok, 1 error, 2 usage, 4 conflict, 5 lock held
  *
- * Source of truth for server error codes: packages/server error-code enum
- * (issue #4). Declared here so this package builds before that lands; a later
- * issue can replace SERVER_ERROR_CODES with a direct import without touching
- * call sites of {@link exitCodeForError} / {@link CliError}.
+ * Runtime keeps its own copy so the published CLI has zero runtime deps
+ * (must not pull Fastify). Source of truth is packages/server `ErrorCode` /
+ * `exitCodeForError` — `errors.drift.test.ts` imports the server at test time
+ * and fails if this file diverges.
  */
 
 /** Process exit codes used by the CLI. */
@@ -22,31 +22,40 @@ export const ExitCode = {
 export type ExitCodeValue = (typeof ExitCode)[keyof typeof ExitCode];
 
 /**
- * Server error-code strings. Keep aligned with packages/server (issue #4).
- * @see packages/server — error-code enum (source of truth)
+ * Server error-code strings. Must match `ErrorCode` in packages/server exactly
+ * (see errors.drift.test.ts).
+ * @see packages/server/src/errors.ts — source of truth
  */
 export const SERVER_ERROR_CODES = [
-  "UNAUTHORIZED",
-  "FORBIDDEN",
+  "INTERNAL",
   "NOT_FOUND",
   "VALIDATION",
+  "BAD_REQUEST",
+  "UNAUTHORIZED",
+  "FORBIDDEN",
   "CONFLICT",
   "LOCK_HELD",
-  "INTERNAL",
-  "BAD_REQUEST",
+  "NOT_READY",
+  "NOT_IMPLEMENTED",
 ] as const;
 
 export type ServerErrorCode = (typeof SERVER_ERROR_CODES)[number] | (string & {});
 
-/** Map a server (or CLI) error code string to a process exit code. */
+/**
+ * Map a server (or CLI-local) error code string to a process exit code.
+ * Keep in lockstep with packages/server `exitCodeForError`.
+ * `USAGE` is CLI-local (parse failures), not a server ErrorCode.
+ */
 export function exitCodeForError(code: string | undefined): ExitCodeValue {
   switch (code) {
+    case "VALIDATION":
+    case "BAD_REQUEST":
+    case "USAGE":
+      return ExitCode.USAGE;
     case "CONFLICT":
       return ExitCode.CONFLICT;
     case "LOCK_HELD":
       return ExitCode.LOCK_HELD;
-    case "USAGE":
-      return ExitCode.USAGE;
     default:
       return ExitCode.ERROR;
   }
