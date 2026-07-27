@@ -33,6 +33,7 @@ import {
 } from "./render.js";
 import { RenderCache } from "./render-cache.js";
 import { registerSceneRoutes } from "./scenes.js";
+import { registerSettingsRoutes } from "./settings.js";
 import {
   registerSkeletonRoutes,
   type SkeletonConverter,
@@ -194,6 +195,8 @@ export async function buildApp(
     seedBootstrapToken(deps.db, config.bootstrapToken);
     await registerWhoamiRoute(app, deps.db);
     await registerTokenRoutes(app, deps.db);
+    // Instance theme: public GET, admin PUT (issue #38).
+    await registerSettingsRoutes(app, deps.db);
     await registerSceneRoutes(app, deps.db);
     await registerDraftRoutes(app, { db: deps.db });
     await registerLockRoutes(app, deps.db);

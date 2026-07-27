@@ -50,6 +50,8 @@ export {
   DB_FILENAME,
   BUSY_TIMEOUT_MS,
   META_BOOTSTRAP_COMPLETED,
+  META_INSTANCE_THEME,
+  type InstanceTheme,
   type SceneRow,
   type SceneListRow,
   type VersionRow,
@@ -123,6 +125,10 @@ export {
 } from "./files.js";
 export type { TokenCreated, TokenInfo } from "./tokens.js";
 export type { SceneInfo } from "./scenes.js";
+export {
+  registerSettingsRoutes,
+  type ThemeSettings,
+} from "./settings.js";
 export {
   allocateSlug,
   isSceneLockActive,

@@ -113,6 +113,16 @@ export type MetaRow = {
 /** Meta key set when first-boot bootstrap has completed (value `"1"`). */
 export const META_BOOTSTRAP_COMPLETED = "bootstrap_completed";
 
+/**
+ * Instance default UI theme (`"light"` | `"dark"`). Absent → viewers without
+ * a local choice follow `prefers-color-scheme` (issue #38). Lives in `meta`
+ * so no migration is required; covered by SQLite DATA_DIR backup/restore.
+ */
+export const META_INSTANCE_THEME = "instance_theme";
+
+/** Allowed values for {@link META_INSTANCE_THEME}. */
+export type InstanceTheme = "light" | "dark";
+
 export type SchemaMigrationRow = {
   id: number;
   name: string;
@@ -1166,6 +1176,11 @@ export class Database {
          ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
       )
       .run(key, value);
+  }
+
+  /** Remove a meta key (e.g. clear instance theme default). Idempotent. */
+  deleteMeta(key: string): void {
+    this.raw.prepare(`DELETE FROM meta WHERE key = ?`).run(key);
   }
 
   // -------------------------------------------------------------------------

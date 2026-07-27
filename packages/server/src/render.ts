@@ -12,6 +12,12 @@
  * All HTTP handlers share one worker instance; the worker already caps
  * concurrency. Identical in-flight requests coalesce so concurrent cache
  * misses for the same key hit Chromium only once.
+ *
+ * Dark mode (issue #38): `?dark=` is the sole source of truth for export
+ * theme. Do not read the instance default (`meta.instance_theme`) or the
+ * host OS prefers-color-scheme — a cached render that changed after a
+ * settings flip would be a genuine bug. Thumbnails stay light via the
+ * client's fixed THUMBNAIL_EXPORT.darkMode=false.
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { createAuthPreHandler } from "./auth.js";
