@@ -160,7 +160,7 @@ export type ConflictResponse = {
 };
 
 // ---------------------------------------------------------------------------
-// Diff / digest declarations only — implementations land in later issues
+// Diff / digest (diff engine in src/diff.ts; digest lands later)
 // ---------------------------------------------------------------------------
 
 export type ElementBBox = {
@@ -178,7 +178,7 @@ export type PropDelta = {
 
 /**
  * One element-level change between two scene versions (PLAN.md §6).
- * Declarations only; the diff engine is a later issue.
+ * Produced by `diffScenes`; rendered by `formatDiff`.
  */
 export type ElementChange =
   | {
@@ -215,7 +215,7 @@ export type ElementChange =
 
 /**
  * Structured diff between two scene versions (PLAN.md §6).
- * Declarations only; the diff engine is a later issue.
+ * Produced by `diffScenes`; rendered by `formatDiff`.
  */
 export type SceneDiff = {
   from: number;
