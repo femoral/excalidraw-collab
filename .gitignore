@@ -1,0 +1,21 @@
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# runtime data (sqlite db + content-addressed files)
+data/
+
+# cli local state
+.excalidraw-collab/
+
+.env
+.env.*
+!.env.example
+
+coverage/
+playwright-report/
+test-results/
+
+.DS_Store
+*.log
