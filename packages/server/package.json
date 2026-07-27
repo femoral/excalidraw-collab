@@ -12,7 +12,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc -b",
+    "build": "node --eval \"const{rmSync}=require('node:fs');rmSync('dist',{recursive:true,force:true});rmSync('tsconfig.tsbuildinfo',{force:true})\" && tsc -b",
     "test": "node --test dist/**/*.test.js",
     "dev": "tsc -b --watch",
     "start": "node dist/main.js"

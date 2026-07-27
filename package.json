@@ -9,6 +9,7 @@
   "scripts": {
     "build": "pnpm -r run build",
     "test": "pnpm -r run test",
+    "clean": "node --eval \"const{rmSync}=require('node:fs');for(const p of['packages/core','packages/server','packages/cli','packages/render','packages/web']){rmSync(p+'/dist',{recursive:true,force:true});rmSync(p+'/tsconfig.tsbuildinfo',{force:true})}\"",
     "dev": "pnpm -r --parallel run dev",
     "format": "prettier --write ."
   },
