@@ -172,6 +172,11 @@ describe("type surface (compile-time + shape smoke)", () => {
     };
     const digest: SceneDigest = {
       elementCount: 0,
+      countsByType: {},
+      bbox: null,
+      frameCount: 0,
+      truncated: false,
+      omitted: 0,
       frames: [],
       groups: [],
       edges: [],

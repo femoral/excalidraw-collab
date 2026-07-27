@@ -231,32 +231,70 @@ export type SceneDiff = {
 };
 
 /**
+ * One row in a scene digest's element listing (PLAN.md §6 `describe`).
+ * Spatial order is top-to-bottom, then left-to-right (tie-break by id).
+ */
+export type DigestElement = {
+  id: string;
+  type: ExcalidrawElement["type"];
+  /** Resolved display label (bound text, own text, or frame name). */
+  label: string | null;
+  bbox: ElementBBox;
+  frameId: string | null;
+  groupIds: readonly GroupId[];
+};
+
+/**
  * Text outline of a scene for agents that cannot see a canvas
- * (`excalicli describe` — PLAN.md §6). Declarations only.
+ * (`excalicli describe` — PLAN.md §6).
+ *
+ * Produced by `digestScene`. The structured form keeps ids for tooling;
+ * `formatDigest` omits them unless `verbose` is set.
  */
 export type SceneDigest = {
+  /** Non-deleted element count (includes bound text and arrows). */
   elementCount: number;
+  /**
+   * Counts by `type` over non-deleted elements. Key order is alphabetical
+   * so `JSON.stringify` is stable.
+   */
+  countsByType: { [type: string]: number };
+  /** Axis-aligned bounds of all non-deleted elements; null if empty. */
+  bbox: ElementBBox | null;
+  /** Non-deleted frame count. */
+  frameCount: number;
+  /**
+   * True when the element listing was capped by `maxElements`. The edge
+   * list is never truncated — graph structure always ships complete.
+   */
+  truncated: boolean;
+  /** How many listable elements were dropped by the cap (0 if not truncated). */
+  omitted: number;
   frames: Array<{
     id: string;
     name: string | null;
+    /** Child element ids (non-deleted), spatial order. */
     children: string[];
   }>;
   groups: Array<{
     groupId: GroupId;
+    /** Member element ids (non-deleted), spatial order. */
     members: string[];
   }>;
+  /**
+   * Arrows as an edge list. `from` / `to` are **resolved endpoint labels**
+   * (bound-text label, else type name); null means unbound.
+   * Always complete — never subject to the element-listing cap.
+   */
   edges: Array<{
     id: string;
     from: string | null;
     to: string | null;
     label: string | null;
   }>;
-  elements: Array<{
-    id: string;
-    type: ExcalidrawElement["type"];
-    label: string | null;
-    bbox: ElementBBox;
-    frameId: string | null;
-    groupIds: readonly GroupId[];
-  }>;
+  /**
+   * Flat element listing (listable elements only — excludes arrows and
+   * container-bound text, which appear as edges / labels). May be capped.
+   */
+  elements: DigestElement[];
 };
