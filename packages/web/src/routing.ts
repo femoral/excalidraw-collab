@@ -4,10 +4,12 @@ export type Route =
   | { name: "home" }
   | { name: "scene"; slug: string }
   | { name: "history"; slug: string }
+  /** Headless export surface — mounted outside the auth shell in main.tsx. */
+  | { name: "render" }
   | { name: "notFound"; path: string };
 
 /**
- * Match exactly the three app routes: `/`, `/s/:slug`, `/s/:slug/history`.
+ * Match app routes: `/`, `/s/:slug`, `/s/:slug/history`, `/render`.
  * Trailing slashes (except root) are normalized away.
  */
 export function matchRoute(pathname: string): Route {
@@ -18,6 +20,10 @@ export function matchRoute(pathname: string): Route {
 
   if (path === "/" || path === "") {
     return { name: "home" };
+  }
+
+  if (path === "/render") {
+    return { name: "render" };
   }
 
   const historyMatch = /^\/s\/([^/]+)\/history$/.exec(path);

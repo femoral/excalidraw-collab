@@ -19,6 +19,11 @@ test("matchRoute: history", () => {
   });
 });
 
+test("matchRoute: render", () => {
+  assert.deepEqual(matchRoute("/render"), { name: "render" });
+  assert.deepEqual(matchRoute("/render/"), { name: "render" });
+});
+
 test("matchRoute: notFound", () => {
   assert.deepEqual(matchRoute("/nope"), { name: "notFound", path: "/nope" });
   assert.deepEqual(matchRoute("/s/"), { name: "notFound", path: "/s/" });
