@@ -22,7 +22,11 @@
     "test": "node --test dist/**/*.test.js",
     "dev": "tsc -b --watch"
   },
+  "dependencies": {
+    "@excalidraw-collab/core": "workspace:*"
+  },
   "devDependencies": {
     "@excalidraw-collab/server": "workspace:*"
   }
 }
+

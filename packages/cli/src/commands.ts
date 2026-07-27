@@ -1,7 +1,10 @@
 import type { CommandResult } from "./format.js";
 import { formatTable } from "./format.js";
 import type { ResolvedConfig } from "./config.js";
+import { describeCommand } from "./describe.js";
+import { diffCommand } from "./diff.js";
 import { loginCommand } from "./login.js";
+import { logCommand } from "./log.js";
 import { lsCommand } from "./ls.js";
 import { newCommand } from "./new.js";
 import { pullCommand } from "./pull.js";
@@ -73,7 +76,7 @@ export const CLI_VERSION = "0.0.0";
 
 /**
  * Stub command that exercises both human-table and `--json` output modes.
- * Later issues add ls, new, pull, push, diff, describe, log, watch, lock, export.
+ * Later issues add watch, lock, export.
  */
 const versionCommand: Command = {
   name: "version",
@@ -101,3 +104,6 @@ registerCommand(pullCommand);
 registerCommand(pushCommand);
 registerCommand(turnCommand);
 registerCommand(watchCommand);
+registerCommand(diffCommand);
+registerCommand(describeCommand);
+registerCommand(logCommand);
