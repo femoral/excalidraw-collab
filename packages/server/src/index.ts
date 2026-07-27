@@ -15,6 +15,7 @@ export {
 export {
   loadConfig,
   ConfigError,
+  DEFAULT_MAX_FILE_BYTES,
   type Config,
   type LogLevel,
   type RenderWorkerMode,
@@ -49,4 +50,20 @@ export {
   type NewToken,
   type OpenDatabaseOptions,
 } from "./db.js";
+export {
+  FileStore,
+  gcUnreferencedFiles,
+  hashFileContent,
+  decodeDataURL,
+  registerFileRoutes,
+  FILES_SUBDIR,
+  SIDECAR_SUFFIX,
+  FILE_ID_HEX_RE,
+  IMMUTABLE_CACHE_CONTROL,
+  type FileSidecar,
+  type StoredFile,
+  type PutFileResult,
+  type GcOptions,
+  type GcResult,
+} from "./files.js";
 export type { TokenCreated, TokenInfo } from "./tokens.js";

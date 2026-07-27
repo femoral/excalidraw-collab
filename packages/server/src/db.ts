@@ -579,6 +579,34 @@ export class Database {
     return rows.map(mapVersion);
   }
 
+  /**
+   * Union of every content-addressed file id referenced by any version row.
+   * Used by the file-store GC helper (unreferenced + older-than-N-days).
+   * Drafts are intentionally excluded — only committed history anchors files.
+   */
+  listReferencedFileIds(): string[] {
+    const rows = this.raw
+      .prepare(`SELECT file_ids FROM versions`)
+      .all() as Array<{ file_ids: string }>;
+
+    const ids = new Set<string>();
+    for (const row of rows) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(row.file_ids ?? "[]");
+      } catch {
+        continue;
+      }
+      if (!Array.isArray(parsed)) continue;
+      for (const id of parsed) {
+        if (typeof id === "string" && id.length > 0) {
+          ids.add(id);
+        }
+      }
+    }
+    return [...ids];
+  }
+
   // -------------------------------------------------------------------------
   // Drafts
   // -------------------------------------------------------------------------

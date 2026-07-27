@@ -15,6 +15,7 @@ import {
   errorEnvelope,
   type ErrorEnvelope,
 } from "./errors.js";
+import { FileStore, registerFileRoutes } from "./files.js";
 import { registerTokenRoutes } from "./tokens.js";
 
 /** Injectable readiness probe; issue #5 will plug SQLite reachability here. */
@@ -35,6 +36,11 @@ export type BuildAppDeps = {
    * is registered. Health probes work without it (unit tests of the shell).
    */
   db?: Database;
+  /**
+   * Content-addressed file store. When omitted and `db` is set, a store is
+   * created under `config.dataDir`. Inject in tests to share a temp DATA_DIR.
+   */
+  fileStore?: FileStore;
 };
 
 function isFastifyError(err: unknown): err is FastifyError {
@@ -64,8 +70,13 @@ export async function buildApp(
   const readinessCheck: ReadinessCheck =
     deps.readinessCheck ?? (() => true);
 
+  // Global body limit must cover JSON BinaryFileData uploads (base64 bloat).
+  // Per-route limits on /api/files refine this further.
+  const bodyLimit = Math.ceil(config.maxFileBytes * 1.4) + 4096;
+
   const app = Fastify({
     logger: { level: config.logLevel },
+    bodyLimit,
     ...deps.fastifyOpts,
   });
 
@@ -74,6 +85,15 @@ export async function buildApp(
   app.decorate("config", config);
   if (deps.db) {
     app.decorate("db", deps.db);
+  }
+
+  const fileStore =
+    deps.fileStore ??
+    (deps.db
+      ? new FileStore(config.dataDir, config.maxFileBytes)
+      : undefined);
+  if (fileStore) {
+    app.decorate("fileStore", fileStore);
   }
 
   registerErrorHandlers(app, config);
@@ -103,6 +123,13 @@ export async function buildApp(
     // First-boot admin seed (no-op when already bootstrapped or token empty).
     seedBootstrapToken(deps.db, config.bootstrapToken);
     await registerTokenRoutes(app, deps.db);
+    if (fileStore) {
+      await registerFileRoutes(app, {
+        db: deps.db,
+        store: fileStore,
+        config,
+      });
+    }
   }
 
   if (config.serveStatic) {
@@ -198,5 +225,7 @@ declare module "fastify" {
     config: Config;
     /** Present when `buildApp` was given a `db` handle. */
     db?: Database;
+    /** Content-addressed file store (present when db/fileStore is configured). */
+    fileStore?: FileStore;
   }
 }

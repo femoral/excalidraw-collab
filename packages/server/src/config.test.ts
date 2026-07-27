@@ -12,6 +12,7 @@ describe("loadConfig", () => {
     assert.equal(cfg.logLevel, "info");
     assert.equal(cfg.serveStatic, false);
     assert.equal(cfg.staticRoot, "./public");
+    assert.equal(cfg.maxFileBytes, 10 * 1024 * 1024);
   });
 
   test("reads valid overrides", () => {
@@ -23,6 +24,7 @@ describe("loadConfig", () => {
       LOG_LEVEL: "debug",
       SERVE_STATIC: "true",
       STATIC_ROOT: "./dist/web",
+      MAX_FILE_BYTES: "5242880",
     });
     assert.equal(cfg.port, 8080);
     assert.equal(cfg.dataDir, "./var/data");
@@ -31,6 +33,7 @@ describe("loadConfig", () => {
     assert.equal(cfg.logLevel, "debug");
     assert.equal(cfg.serveStatic, true);
     assert.equal(cfg.staticRoot, "./dist/web");
+    assert.equal(cfg.maxFileBytes, 5_242_880);
   });
 
   test("rejects a bad PORT and names the variable", () => {
@@ -85,6 +88,26 @@ describe("loadConfig", () => {
       (err: unknown) => {
         assert.ok(err instanceof ConfigError);
         assert.equal(err.variable, "SERVE_STATIC");
+        return true;
+      },
+    );
+  });
+
+  test("rejects a bad MAX_FILE_BYTES and names the variable", () => {
+    assert.throws(
+      () => loadConfig({ MAX_FILE_BYTES: "big" }),
+      (err: unknown) => {
+        assert.ok(err instanceof ConfigError);
+        assert.equal(err.variable, "MAX_FILE_BYTES");
+        assert.match(err.message, /MAX_FILE_BYTES/);
+        return true;
+      },
+    );
+    assert.throws(
+      () => loadConfig({ MAX_FILE_BYTES: "0" }),
+      (err: unknown) => {
+        assert.ok(err instanceof ConfigError);
+        assert.equal(err.variable, "MAX_FILE_BYTES");
         return true;
       },
     );
