@@ -113,6 +113,14 @@ export type VersionInfo = {
   sceneHash: string;
 };
 
+/**
+ * Body from `GET /api/scenes/:slug/events?since=N` (200).
+ * 204 means the long-poll timed out with no change.
+ */
+export type SceneEventResponse = VersionInfo & {
+  headVersion: number;
+};
+
 export type VersionsPage = {
   versions: VersionInfo[];
   total: number;
@@ -249,6 +257,8 @@ export type RequestOptions = {
   headers?: Record<string, string>;
   /** When true, return raw Response body as ArrayBuffer (binary GET). */
   binary?: boolean;
+  /** AbortSignal for long-poll / cancel-on-unmount. */
+  signal?: AbortSignal;
 };
 
 /**
@@ -326,6 +336,7 @@ export function createApiClient(options: ApiClientOptions) {
       method: init.method ?? "GET",
       headers,
       body,
+      signal: init.signal,
     });
 
     if (init.binary) {
@@ -563,6 +574,46 @@ export function createApiClient(options: ApiClientOptions) {
       params.set("to", String(to));
       return request<SceneDiffResponse>(
         `/api/scenes/${encodeURIComponent(slug)}/diff?${params}`,
+      );
+    },
+
+    /**
+     * Long-poll for head advances past `since` (issue #24).
+     * Returns the new head event, or `null` on 204 timeout / empty body.
+     * Pass `signal` so the editor can cancel on unmount.
+     */
+    async getSceneEvents(
+      slug: string,
+      since: number,
+      opts?: { signal?: AbortSignal },
+    ): Promise<SceneEventResponse | null> {
+      const body = await request<SceneEventResponse | undefined>(
+        `/api/scenes/${encodeURIComponent(slug)}/events` +
+          `?since=${encodeURIComponent(String(since))}`,
+        { signal: opts?.signal },
+      );
+      if (body === undefined || body === null) return null;
+      return body;
+    },
+
+    /**
+     * SEAM (issue #29 — server-side merge, landing in parallel):
+     * `POST /api/scenes/:slug/scene?merge=true` with the local working copy.
+     * The server is expected to reconcile local elements with head via
+     * upstream `reconcileElements` and commit a new version.
+     *
+     * Do **not** implement client-side merge here. If the endpoint is not
+     * present yet the call fails with a clear 4xx/5xx from the server; the
+     * toast surfaces that message. When #29 ships, this method is the only
+     * client change needed (path + body already match the documented shape).
+     */
+    async mergeScene(
+      slug: string,
+      body: CommitSceneBody,
+    ): Promise<CommitSceneResponse> {
+      return request<CommitSceneResponse>(
+        `/api/scenes/${encodeURIComponent(slug)}/scene?merge=true`,
+        { method: "POST", body },
       );
     },
   };

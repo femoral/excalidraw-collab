@@ -2,9 +2,13 @@
  * Scene editor: load head-or-draft, debounced draft autosave, commit turn,
  * MainMenu items, image upload to the content-addressed file store.
  * Also supports opening a past version read-only (`?v=N`) with restore.
+ *
+ * What-changed panel + remote-version toast (issue #22): humans review agent
+ * turns by scrolling to changed elements; remote loads use CaptureUpdateAction.NEVER
+ * so they never land on the human undo stack.
  */
 
-import { Excalidraw, MainMenu } from "@excalidraw/excalidraw";
+import { CaptureUpdateAction, Excalidraw, MainMenu } from "@excalidraw/excalidraw";
 import type {
   AppState,
   BinaryFiles,
@@ -54,10 +58,48 @@ import {
 } from "./editor-logic.ts";
 import {
   buildRestorePayload,
+  formatChangeCounts,
   headEditorPath,
   historyPath,
   isReadOnlyVersion,
+  opBadge,
 } from "./history-logic.ts";
+import {
+  buildRemoteSceneUpdate,
+  buildWhatChangedModel,
+  canReopenPanel,
+  findScrollTarget,
+  formatRemoteToastMessage,
+  formatWhatChangedTitle,
+  getLastSeenVersion,
+  initialPollState,
+  isPanelVisible,
+  markSceneSeen,
+  panelAfterRemoteLoad,
+  panelBeginLoad,
+  panelDismiss,
+  panelLoadFailed,
+  panelLoadSucceeded,
+  panelReopen,
+  pollAdvanceSince,
+  pollBeginWait,
+  pollNextDelayMs,
+  pollOnError,
+  pollOnEvent,
+  pollOnTimeout,
+  pollStop,
+  REMOTE_CAPTURE_UPDATE,
+  remoteUpdateSkipsUndoHistory,
+  shouldShowWhatChangedOnOpen,
+  toastApplyFailed,
+  toastApplySucceeded,
+  toastBeginApply,
+  toastDismiss,
+  toastFromSceneEvent,
+  toastShow,
+  type WhatChangedPanelState,
+  type ToastState,
+} from "./what-changed-logic.ts";
 
 export type SceneEditorProps = {
   slug: string;
@@ -146,10 +188,25 @@ export function SceneEditor({
   const [selfName, setSelfName] = useState<string | null>(null);
   const [lockBusy, setLockBusy] = useState(false);
 
+  /** What-changed review panel (last-seen → head). */
+  const [whatChanged, setWhatChanged] = useState<WhatChangedPanelState>({
+    kind: "hidden",
+  });
+  /** Toast when head advances while the tab is open. */
+  const [remoteToast, setRemoteToast] = useState<ToastState>({
+    kind: "hidden",
+  });
+  /** Live head shown in chrome (updated on commit / remote Load without remount). */
+  const [chromeHeadVersion, setChromeHeadVersion] = useState(0);
+
   const headVersionRef = useRef(0);
+  /** Long-poll cursor — advanced on commit and remote Load so we don't re-toast ourselves. */
+  const pollSinceRef = useRef(0);
   const uploadedFilesRef = useRef(new Set<string>());
   const latestSnapshotRef = useRef<EditorSnapshot | null>(null);
   const hydratingRef = useRef(true);
+  /** Skip one onChange after remote updateScene so draft autosave does not fire. */
+  const applyingRemoteRef = useRef(false);
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const coalescerRef = useRef<ReturnType<
     typeof createDebouncedCoalescer<EditorSnapshot>
@@ -160,9 +217,11 @@ export function SceneEditor({
     appState: Record<string, unknown>;
     files: Record<string, BinaryFilePayload | undefined>;
   } | null>(null);
+  const selfNameRef = useRef<string | null>(null);
 
   const commitTitleId = useId();
   const commitMessageId = useId();
+  const whatChangedTitleId = useId();
 
   // ----- load: meta+whoami in parallel; version-aware body; no draft in RO ---
 
@@ -176,8 +235,12 @@ export function SceneEditor({
     setBanner(null);
     setCommitOpen(false);
     setLock(null);
+    setWhatChanged({ kind: "hidden" });
+    setRemoteToast({ kind: "hidden" });
+    setChromeHeadVersion(0);
     uploadedFilesRef.current = new Set();
     loadedDocRef.current = null;
+    applyingRemoteRef.current = false;
 
     void (async () => {
       try {
@@ -188,11 +251,18 @@ export function SceneEditor({
         ]);
         if (cancelled) return;
 
-        if (who) setSelfName(who.name);
+        if (who) {
+          setSelfName(who.name);
+          selfNameRef.current = who.name;
+        } else {
+          selfNameRef.current = null;
+        }
         setLock(
           meta.lock && isEditorLockActive(meta.lock) ? meta.lock : null,
         );
         headVersionRef.current = meta.headVersion;
+        pollSinceRef.current = meta.headVersion;
+        setChromeHeadVersion(meta.headVersion);
 
         const wantVersion = version ?? null;
         const readOnly = isReadOnlyVersion(wantVersion, meta.headVersion);
@@ -342,6 +412,37 @@ export function SceneEditor({
             "Your draft is based on an older version — someone committed while you were away. Review before committing.",
           );
         }
+
+        // What-changed panel: last-seen → head (dismissible; first visit is silent).
+        const lastSeen = getLastSeenVersion(window.localStorage, slug);
+        if (shouldShowWhatChangedOnOpen(lastSeen, meta.headVersion)) {
+          const from = lastSeen as number;
+          const to = meta.headVersion;
+          setWhatChanged(panelBeginLoad(from, to));
+          try {
+            const diff = await api.getDiff(slug, from, to);
+            if (cancelled) return;
+            const model = buildWhatChangedModel(diff, { from, to });
+            if (model.view.isEmpty) {
+              setWhatChanged({ kind: "hidden" });
+              markSceneSeen(window.localStorage, slug, meta.headVersion);
+            } else {
+              setWhatChanged(panelLoadSucceeded(model));
+            }
+          } catch (err) {
+            if (cancelled) return;
+            if (err instanceof ApiError && err.isUnauthorized) return;
+            setWhatChanged(
+              panelLoadFailed(
+                { from, to },
+                err instanceof Error ? err.message : "Could not load changes.",
+              ),
+            );
+          }
+        } else {
+          // First visit or already current — record head so future visits diff.
+          markSceneSeen(window.localStorage, slug, meta.headVersion);
+        }
       } catch (err) {
         if (cancelled) return;
         if (err instanceof ApiError && err.isUnauthorized) return;
@@ -476,10 +577,342 @@ export function SceneEditor({
         return;
       }
 
+      // Remote Load/Merge applied via updateScene(NEVER) — do not draft-save
+      // that as a local dirty burst (it is already on the server as head).
+      if (applyingRemoteRef.current) {
+        applyingRemoteRef.current = false;
+        return;
+      }
+
       coalescerRef.current?.push(snapshot);
     },
     [load],
   );
+
+  // ----- long-poll for remote commits while the tab is open -----------------
+
+  useEffect(() => {
+    if (readOnly || load.kind !== "ready") return;
+
+    let cancelled = false;
+    const ac = new AbortController();
+    let poll = initialPollState(pollSinceRef.current);
+
+    const sleep = (ms: number) =>
+      new Promise<void>((resolve) => {
+        const t = window.setTimeout(() => resolve(), ms);
+        ac.signal.addEventListener(
+          "abort",
+          () => {
+            window.clearTimeout(t);
+            resolve();
+          },
+          { once: true },
+        );
+      });
+
+    void (async () => {
+      while (!cancelled && !ac.signal.aborted) {
+        // Keep the pure state machine's since in sync with commits / Load.
+        poll = pollAdvanceSince(poll, pollSinceRef.current);
+
+        const delay = pollNextDelayMs(poll);
+        if (delay === Number.POSITIVE_INFINITY) break;
+        if (delay > 0) {
+          await sleep(delay);
+          if (cancelled || ac.signal.aborted) break;
+        }
+
+        poll = pollBeginWait(poll);
+        try {
+          const event = await api.getSceneEvents(slug, pollSinceRef.current, {
+            signal: ac.signal,
+          });
+          if (cancelled || ac.signal.aborted) break;
+
+          if (!event) {
+            poll = pollOnTimeout(poll);
+            continue;
+          }
+
+          const from = pollSinceRef.current;
+          const to =
+            typeof event.headVersion === "number"
+              ? event.headVersion
+              : event.version;
+
+          if (!Number.isInteger(to) || to <= from) {
+            poll = pollOnTimeout(poll);
+            continue;
+          }
+
+          poll = pollOnEvent(poll, to);
+          // Advance the poll cursor so we do not re-deliver the same event.
+          // Do NOT touch headVersionRef here — that is the local commit parent
+          // and only moves on our own commit or an explicit Load/Merge.
+          pollSinceRef.current = to;
+
+          // Suppress toast for our own commits (we already advanced after push).
+          const self = selfNameRef.current;
+          if (self && event.author === self) {
+            // Our commit already updated headVersionRef / chrome; just mark seen.
+            markSceneSeen(window.localStorage, slug, to);
+            continue;
+          }
+
+          setRemoteToast((s) =>
+            toastShow(s, toastFromSceneEvent(from, event)),
+          );
+        } catch (err) {
+          if (cancelled || ac.signal.aborted) break;
+          if (err instanceof Error && err.name === "AbortError") break;
+          if (err instanceof ApiError && err.isUnauthorized) break;
+          poll = pollOnError(poll);
+        }
+      }
+      poll = pollStop(poll);
+    })();
+
+    return () => {
+      cancelled = true;
+      ac.abort();
+    };
+  }, [api, slug, readOnly, load.kind]);
+
+  // ----- scroll-to-element from what-changed panel --------------------------
+
+  function handleScrollToChange(elementId: string) {
+    const apiHandle = apiRef.current;
+    if (!apiHandle) return;
+    const elements = apiHandle.getSceneElementsIncludingDeleted();
+    const target = findScrollTarget(elements, elementId);
+    if (!target) return;
+    // Public upstream API — fly the viewport to the changed element.
+    apiHandle.scrollToContent(target as OrderedExcalidrawElement, {
+      fitToViewport: true,
+    });
+  }
+
+  /**
+   * Apply a remote scene document without putting it on the undo stack.
+   * Tripwire: buildRemoteSceneUpdate always sets captureUpdate NEVER; we also
+   * pass CaptureUpdateAction.NEVER explicitly so a refactors cannot silently
+   * drop it.
+   */
+  async function applyRemoteDocument(opts: {
+    fromVersion: number;
+    toVersion: number;
+    /** When true, open the what-changed panel for from→to after apply. */
+    showDiff: boolean;
+  }): Promise<void> {
+    const sceneDoc = await api.getSceneDocument(slug, opts.toVersion);
+    const apiHandle = apiRef.current;
+    if (!apiHandle) {
+      throw new Error("Editor is not ready yet.");
+    }
+
+    const elements =
+      (sceneDoc.elements as readonly OrderedExcalidrawElement[]) ?? [];
+    const appState = (sceneDoc.appState ?? {}) as Record<string, unknown>;
+    const files = toBinaryFiles(
+      sceneDoc.files as Record<string, BinaryFilePayload> | undefined,
+    );
+
+    const remotePayload = buildRemoteSceneUpdate({
+      elements,
+      appState: {
+        ...appState,
+        name:
+          load.kind === "ready" ? load.sceneName : (appState.name as string),
+      },
+    });
+    // Acceptance tripwire: remote must never enter undo history.
+    if (
+      !remoteUpdateSkipsUndoHistory(remotePayload) ||
+      remotePayload.captureUpdate !== CaptureUpdateAction.NEVER ||
+      REMOTE_CAPTURE_UPDATE !== CaptureUpdateAction.NEVER
+    ) {
+      throw new Error(
+        "Internal error: remote load would capture undo history.",
+      );
+    }
+
+    applyingRemoteRef.current = true;
+    // captureUpdate MUST be NEVER — remote content must not enter undo history.
+    // appState is a whitelist subset from the server; cast through unknown for TS.
+    apiHandle.updateScene({
+      elements: remotePayload.elements as OrderedExcalidrawElement[],
+      appState: remotePayload.appState as unknown as AppState,
+      captureUpdate: CaptureUpdateAction.NEVER,
+    });
+
+    const fileList = Object.values(files).filter(Boolean) as BinaryFiles[string][];
+    if (fileList.length > 0) {
+      apiHandle.addFiles(fileList);
+    }
+    for (const id of Object.keys(files)) {
+      uploadedFilesRef.current.add(id);
+    }
+
+    headVersionRef.current = opts.toVersion;
+    pollSinceRef.current = opts.toVersion;
+    setChromeHeadVersion(opts.toVersion);
+    setLoad((prev) =>
+      prev.kind === "ready"
+        ? {
+            ...prev,
+            headVersion: opts.toVersion,
+            viewingVersion: opts.toVersion,
+            draftStale: false,
+          }
+        : prev,
+    );
+    markSceneSeen(window.localStorage, slug, opts.toVersion);
+    setBanner(null);
+
+    // Baseline snapshot so subsequent edits draft against the loaded head.
+    latestSnapshotRef.current = snapshotFromEditor(
+      elements,
+      apiHandle.getAppState(),
+      apiHandle.getFiles(),
+    );
+
+    if (opts.showDiff && opts.fromVersion < opts.toVersion) {
+      try {
+        const diff = await api.getDiff(slug, opts.fromVersion, opts.toVersion);
+        const model = buildWhatChangedModel(diff, {
+          from: opts.fromVersion,
+          to: opts.toVersion,
+        });
+        setWhatChanged(panelAfterRemoteLoad(model));
+      } catch {
+        // Non-fatal: scene is loaded even if the review panel fails.
+      }
+    }
+  }
+
+  async function handleRemoteLoad() {
+    if (remoteToast.kind !== "visible" && remoteToast.kind !== "error") return;
+    const toast = remoteToast.toast;
+    setRemoteToast((s) => toastBeginApply(s, "load"));
+    try {
+      await applyRemoteDocument({
+        fromVersion: toast.fromVersion,
+        toVersion: toast.toVersion,
+        showDiff: true,
+      });
+      // Clear local draft — head is now the source of truth we just loaded.
+      try {
+        await api.deleteDraft(slug);
+      } catch {
+        // non-fatal
+      }
+      setSaveIndicator("idle");
+      setRemoteToast((s) => toastApplySucceeded(s));
+    } catch (err) {
+      if (err instanceof ApiError && err.isUnauthorized) return;
+      setRemoteToast((s) =>
+        toastApplyFailed(
+          s,
+          err instanceof Error ? err.message : "Could not load remote version.",
+        ),
+      );
+    }
+  }
+
+  /**
+   * SEAM (issue #29): wire Merge to POST /scene?merge=true with the local
+   * working copy. Server reconciles with head; we do not fake a client merge.
+   */
+  async function handleRemoteMerge() {
+    if (remoteToast.kind !== "visible" && remoteToast.kind !== "error") return;
+    const toast = remoteToast.toast;
+    setRemoteToast((s) => toastBeginApply(s, "merge"));
+
+    let snapshot = latestSnapshotRef.current;
+    const apiHandle = apiRef.current;
+    if (apiHandle) {
+      snapshot = snapshotFromEditor(
+        apiHandle.getSceneElementsIncludingDeleted(),
+        apiHandle.getAppState(),
+        apiHandle.getFiles(),
+      );
+      latestSnapshotRef.current = snapshot;
+    }
+    if (!snapshot) {
+      setRemoteToast((s) =>
+        toastApplyFailed(s, "Nothing local to merge yet."),
+      );
+      return;
+    }
+
+    try {
+      // Upload any new local binaries first so merge fileIds resolve.
+      const need = filesNeedingUpload(snapshot.files, uploadedFilesRef.current);
+      for (const file of need) {
+        await api.uploadFile(file);
+        uploadedFilesRef.current.add(file.id);
+      }
+
+      // parentVersion is the version we were on when remote advanced — the
+      // local working copy's base. Server merges local with current head.
+      const body = buildCommitPayload(
+        snapshot,
+        toast.fromVersion,
+        `merge with v${toast.toVersion}`,
+        { includeFiles: true },
+      );
+
+      // SEAM: issue #29 — do not replace with client-side reconcileElements.
+      const result = await api.mergeScene(slug, body);
+
+      await applyRemoteDocument({
+        fromVersion: toast.fromVersion,
+        toVersion: result.headVersion,
+        showDiff: true,
+      });
+      try {
+        await api.deleteDraft(slug);
+      } catch {
+        // non-fatal
+      }
+      setSaveIndicator("idle");
+      setRemoteToast((s) => toastApplySucceeded(s));
+      setBanner(
+        `Merged as v${result.version}. Local strokes were reconciled with remote head.`,
+      );
+    } catch (err) {
+      if (err instanceof ApiError && err.isUnauthorized) return;
+      const message =
+        err instanceof ApiError
+          ? err.message ||
+            (err.status === 404 || err.status === 501
+              ? "Server-side merge is not available yet (issue #29)."
+              : err.message)
+          : err instanceof Error
+            ? err.message
+            : "Merge failed.";
+      setRemoteToast((s) => toastApplyFailed(s, message));
+    }
+  }
+
+  function handleDismissWhatChanged() {
+    setWhatChanged((s) => {
+      const next = panelDismiss(s);
+      // Dismissing marks head as seen so the panel does not re-ambush on reload,
+      // but the model is retained for the "What changed" re-open control.
+      if (s.kind === "ready") {
+        markSceneSeen(
+          window.localStorage,
+          slug,
+          s.model.range.to,
+        );
+      } else if (s.kind === "loading" || s.kind === "error") {
+        markSceneSeen(window.localStorage, slug, headVersionRef.current);
+      }
+      return next;
+    });
+  }
 
   // ----- commit (live editor only) ------------------------------------------
 
@@ -555,11 +988,25 @@ export function SceneEditor({
 
       const next = postCommitState(result.headVersion);
       headVersionRef.current = next.headVersion;
+      // Advance poll cursor before the events hub notifies us of our own push.
+      pollSinceRef.current = next.headVersion;
+      setChromeHeadVersion(next.headVersion);
+      markSceneSeen(window.localStorage, slug, next.headVersion);
       setSaveIndicator(next.saveIndicator);
       setSaveError(null);
       setBanner(null);
       setCommitOpen(false);
       setCommitMessage("");
+      setLoad((prev) =>
+        prev.kind === "ready"
+          ? {
+              ...prev,
+              headVersion: next.headVersion,
+              viewingVersion: next.headVersion,
+              draftStale: false,
+            }
+          : prev,
+      );
       // Successful push by the lock holder auto-releases server-side.
       if (selfName && lock && lock.holder === selfName) {
         setLock(null);
@@ -726,6 +1173,13 @@ export function SceneEditor({
   const indicatorText = readOnly ? "" : saveIndicatorLabel(saveIndicator);
   const lockActive = isEditorLockActive(lock);
   const menuTurnLabel = turnMenuLabel(lock, selfName);
+  // Local base version (commit parent). Remote advances surface via the toast,
+  // not by rewriting this number — that would desync parentVersion from content.
+  const displayHead =
+    chromeHeadVersion > 0 ? chromeHeadVersion : load.headVersion;
+  const panelVisible = isPanelVisible(whatChanged);
+  const reopenWhatChanged = canReopenPanel(whatChanged);
+  const toastBusy = remoteToast.kind === "applying";
 
   return (
     <div className="editor-shell">
@@ -739,11 +1193,11 @@ export function SceneEditor({
                 <span className="meta-sep" aria-hidden="true">
                   ·
                 </span>
-                <span>head v{load.headVersion}</span>
+                <span>head v{displayHead}</span>
               </>
             ) : (
               <>
-                head v{load.headVersion}
+                head v{displayHead}
                 {load.draftStale ? (
                   <span
                     className="editor-stale-badge"
@@ -825,6 +1279,16 @@ export function SceneEditor({
               Commit turn
             </button>
           )}
+          {!readOnly && reopenWhatChanged ? (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setWhatChanged((s) => panelReopen(s))}
+              title="Re-open the review panel for changes since your last visit"
+            >
+              What changed
+            </button>
+          ) : null}
           <button
             type="button"
             className="btn btn-secondary btn-sm"
@@ -873,6 +1337,247 @@ export function SceneEditor({
         </div>
       ) : null}
 
+      {/* Remote version toast — Load uses updateScene(CaptureUpdateAction.NEVER). */}
+      {!readOnly && remoteToast.kind !== "hidden" ? (
+        <div
+          className={
+            remoteToast.kind === "error"
+              ? "remote-toast remote-toast-error"
+              : "remote-toast"
+          }
+          role="status"
+          aria-live="polite"
+        >
+          <div className="remote-toast-body">
+            <p className="remote-toast-message">
+              {formatRemoteToastMessage(remoteToast.toast)}
+            </p>
+            {remoteToast.kind === "error" ? (
+              <p className="remote-toast-error-text" role="alert">
+                {remoteToast.message}
+              </p>
+            ) : (
+              <p className="remote-toast-hint">
+                Load replaces the canvas with remote head (kept off your undo
+                stack). Merge keeps your strokes and reconciles server-side.
+              </p>
+            )}
+          </div>
+          <div className="remote-toast-actions">
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              disabled={toastBusy}
+              onClick={() => void handleRemoteLoad()}
+            >
+              {toastBusy &&
+              remoteToast.kind === "applying" &&
+              remoteToast.action === "load"
+                ? "Loading…"
+                : "Load"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              disabled={toastBusy}
+              onClick={() => void handleRemoteMerge()}
+              title="POST /scene?merge=true — server-side reconcile (issue #29)"
+            >
+              {toastBusy &&
+              remoteToast.kind === "applying" &&
+              remoteToast.action === "merge"
+                ? "Merging…"
+                : "Merge into mine"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-icon remote-toast-dismiss"
+              aria-label="Dismiss"
+              disabled={toastBusy}
+              onClick={() => setRemoteToast((s) => toastDismiss(s))}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* What-changed review panel — dismissible; re-open from chrome. */}
+      {!readOnly && whatChanged.kind === "loading" ? (
+        <aside
+          className="what-changed-panel"
+          aria-labelledby={whatChangedTitleId}
+          aria-busy="true"
+        >
+          <div className="what-changed-header">
+            <h2 id={whatChangedTitleId} className="what-changed-title">
+              What changed
+            </h2>
+            <button
+              type="button"
+              className="btn btn-icon"
+              aria-label="Dismiss"
+              onClick={handleDismissWhatChanged}
+            >
+              ×
+            </button>
+          </div>
+          <div className="what-changed-state" role="status">
+            <div className="spinner" aria-hidden="true" />
+            <p>
+              Loading changes v{whatChanged.range.from} → v
+              {whatChanged.range.to}…
+            </p>
+          </div>
+        </aside>
+      ) : null}
+
+      {!readOnly && whatChanged.kind === "error" ? (
+        <aside
+          className="what-changed-panel"
+          aria-labelledby={whatChangedTitleId}
+          role="alert"
+        >
+          <div className="what-changed-header">
+            <h2 id={whatChangedTitleId} className="what-changed-title">
+              What changed
+            </h2>
+            <button
+              type="button"
+              className="btn btn-icon"
+              aria-label="Dismiss"
+              onClick={handleDismissWhatChanged}
+            >
+              ×
+            </button>
+          </div>
+          <div className="what-changed-state what-changed-state-error">
+            <p>{whatChanged.message}</p>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => {
+                const { from, to } = whatChanged.range;
+                setWhatChanged(panelBeginLoad(from, to));
+                void (async () => {
+                  try {
+                    const diff = await api.getDiff(slug, from, to);
+                    const model = buildWhatChangedModel(diff, { from, to });
+                    setWhatChanged(panelLoadSucceeded(model));
+                  } catch (err) {
+                    setWhatChanged(
+                      panelLoadFailed(
+                        { from, to },
+                        err instanceof Error
+                          ? err.message
+                          : "Could not load changes.",
+                      ),
+                    );
+                  }
+                })();
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        </aside>
+      ) : null}
+
+      {!readOnly && panelVisible && whatChanged.kind === "ready" ? (
+        <aside
+          className="what-changed-panel"
+          aria-labelledby={whatChangedTitleId}
+        >
+          <div className="what-changed-header">
+            <div className="what-changed-header-text">
+              <h2 id={whatChangedTitleId} className="what-changed-title">
+                {formatWhatChangedTitle(whatChanged.model.range)}
+              </h2>
+              <p className="what-changed-subtitle">
+                <span className="what-changed-counts">
+                  {formatChangeCounts(whatChanged.model.view.summary)}
+                </span>
+                {" · "}
+                click a row to scroll
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-icon"
+              aria-label="Dismiss what changed panel"
+              onClick={handleDismissWhatChanged}
+            >
+              ×
+            </button>
+          </div>
+          <p className="what-changed-lede">
+            Click a change to fly to it. Deleted items are listed but not
+            navigable — there is nothing left on the canvas.
+          </p>
+          <ul className="what-changed-list">
+            {whatChanged.model.reviewItems.map((item) => {
+              const badge = opBadge(item.change.op);
+              const key = `${item.change.op}:${item.change.id}`;
+              if (item.navigable) {
+                return (
+                  <li key={key}>
+                    <button
+                      type="button"
+                      className={`what-changed-item is-navigable ${badge.className}`}
+                      onClick={() => handleScrollToChange(item.change.id)}
+                      title={`Scroll to ${item.headline}`}
+                    >
+                      <span className="diff-item-op" aria-hidden="true">
+                        {badge.symbol}
+                      </span>
+                      <span className="diff-item-body">
+                        <span className="diff-item-headline">
+                          {item.headline}
+                        </span>
+                        {item.detail ? (
+                          <span className="diff-item-detail">{item.detail}</span>
+                        ) : null}
+                      </span>
+                    </button>
+                  </li>
+                );
+              }
+              return (
+                <li key={key}>
+                  <div
+                    className={`what-changed-item is-deleted ${badge.className}`}
+                    title="Deleted — not navigable"
+                    aria-label={`${item.headline} (deleted, not navigable)`}
+                  >
+                    <span className="diff-item-op" aria-hidden="true">
+                      {badge.symbol}
+                    </span>
+                    <span className="diff-item-body">
+                      <span className="diff-item-headline">
+                        {item.headline}
+                        <span className="what-changed-deleted-tag">
+                          deleted
+                        </span>
+                      </span>
+                      {item.detail ? (
+                        <span className="diff-item-detail">{item.detail}</span>
+                      ) : null}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          {whatChanged.model.view.appStateCount > 0 ? (
+            <p className="what-changed-appstate-note">
+              +{whatChanged.model.view.appStateCount} canvas setting
+              {whatChanged.model.view.appStateCount === 1 ? "" : "s"} changed
+              (not navigable).
+            </p>
+          ) : null}
+        </aside>
+      ) : null}
+
       <div
         className="excalidraw-host"
         data-canvas={
@@ -885,7 +1590,8 @@ export function SceneEditor({
           key={
             readOnly
               ? `${slug}:v${load.viewingVersion}`
-              : `${slug}:head:${load.headVersion}`
+              // Stable live key: remote Load must not remount (would wipe undo).
+              : `${slug}:live`
           }
           initialData={{
             elements: load.initialData.elements,
