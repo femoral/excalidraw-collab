@@ -89,6 +89,84 @@ export type FileUploadResponse = {
   created: number;
 };
 
+/** Wire shape for one history row (GET /versions). */
+export type VersionInfo = {
+  version: number;
+  parentVersion: number | null;
+  author: string;
+  message: string;
+  createdAt: string;
+  elementCount: number;
+  sceneHash: string;
+};
+
+export type VersionsPage = {
+  versions: VersionInfo[];
+  total: number;
+  limit: number;
+  offset: number;
+  headVersion: number;
+};
+
+/**
+ * Structured scene diff (GET /diff). Matches `@excalidraw-collab/core` SceneDiff.
+ * Kept as a local wire type so the web package does not depend on core at runtime
+ * for history rendering — the shape is stable and documented in PLAN.md §6.
+ */
+export type DiffSummary = {
+  added: number;
+  deleted: number;
+  updated: number;
+  reordered: number;
+};
+
+export type DiffPropDelta = {
+  key: string;
+  from: unknown;
+  to: unknown;
+};
+
+export type DiffElementChange =
+  | {
+      op: "add";
+      id: string;
+      type: string;
+      label: string | null;
+      bbox: { x: number; y: number; width: number; height: number };
+      describe: string;
+    }
+  | {
+      op: "delete";
+      id: string;
+      type: string;
+      label: string | null;
+      describe: string;
+    }
+  | {
+      op: "update";
+      id: string;
+      type: string;
+      label: string | null;
+      props: DiffPropDelta[];
+      describe: string;
+    }
+  | {
+      op: "reorder";
+      id: string;
+      type: string;
+      label: string | null;
+      from: number;
+      to: number;
+    };
+
+export type SceneDiffResponse = {
+  from?: number;
+  to?: number;
+  summary: DiffSummary;
+  elements: DiffElementChange[];
+  appState: DiffPropDelta[];
+};
+
 export type ServerErrorBody = {
   error: {
     code: string;
@@ -414,6 +492,37 @@ export function createApiClient(options: ApiClientOptions) {
       return request<{ bytes: ArrayBuffer; mimeType: string }>(
         `/api/files/${encodeURIComponent(fileId)}`,
         { binary: true },
+      );
+    },
+
+    /** Paginated version history (newest first). */
+    async listVersions(
+      slug: string,
+      opts?: { limit?: number; offset?: number },
+    ): Promise<VersionsPage> {
+      const params = new URLSearchParams();
+      if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
+      if (opts?.offset !== undefined) params.set("offset", String(opts.offset));
+      const qs = params.toString();
+      return request<VersionsPage>(
+        `/api/scenes/${encodeURIComponent(slug)}/versions${qs ? `?${qs}` : ""}`,
+      );
+    },
+
+    /**
+     * Structured JSON diff between two version refs.
+     * Refs: absolute N, "head", "head~N".
+     */
+    async getDiff(
+      slug: string,
+      from: number | string,
+      to: number | string,
+    ): Promise<SceneDiffResponse> {
+      const params = new URLSearchParams();
+      params.set("from", String(from));
+      params.set("to", String(to));
+      return request<SceneDiffResponse>(
+        `/api/scenes/${encodeURIComponent(slug)}/diff?${params}`,
       );
     },
   };

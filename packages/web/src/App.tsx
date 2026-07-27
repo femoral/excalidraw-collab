@@ -23,23 +23,29 @@ import {
   setEditorUnsavedFlag,
   UNSAVED_LEAVE_MESSAGE,
 } from "./editor-logic.ts";
+import { HistoryView } from "./HistoryView.tsx";
+import { parseVersionQuery } from "./history-logic.ts";
 import { SceneEditor } from "./SceneEditor.tsx";
 import { SceneList } from "./SceneList.tsx";
 
-function usePathname(): string {
-  const [pathname, setPathname] = useState(
-    () => window.location.pathname || "/",
-  );
+function useLocation(): { pathname: string; search: string } {
+  const [loc, setLoc] = useState(() => ({
+    pathname: window.location.pathname || "/",
+    search: window.location.search || "",
+  }));
 
   useEffect(() => {
     const onPopState = () => {
-      setPathname(window.location.pathname || "/");
+      setLoc({
+        pathname: window.location.pathname || "/",
+        search: window.location.search || "",
+      });
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
-  return pathname;
+  return loc;
 }
 
 function navigate(to: string, event?: MouseEvent<HTMLAnchorElement>) {
@@ -50,7 +56,9 @@ function navigate(to: string, event?: MouseEvent<HTMLAnchorElement>) {
     return;
   }
   event?.preventDefault();
-  if (window.location.pathname === to) return;
+
+  const current = `${window.location.pathname}${window.location.search}`;
+  if (current === to) return;
 
   if (getEditorUnsavedFlag()) {
     const ok = window.confirm(UNSAVED_LEAVE_MESSAGE);
@@ -62,33 +70,24 @@ function navigate(to: string, event?: MouseEvent<HTMLAnchorElement>) {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
-function HistoryView({ slug }: { slug: string }): ReactElement {
-  return (
-    <div className="placeholder-panel">
-      <h2>Version history</h2>
-      <p>
-        History for scene <code>{slug}</code> will load here (Phase 3).
-      </p>
-      <p>
-        <a
-          href={`/s/${encodeURIComponent(slug)}`}
-          onClick={(e) => navigate(`/s/${encodeURIComponent(slug)}`, e)}
-        >
-          Back to editor
-        </a>
-      </p>
-    </div>
-  );
-}
-
 function SceneView({
   slug,
   api,
+  search,
 }: {
   slug: string;
   api: ApiClient;
+  search: string;
 }): ReactElement {
-  return <SceneEditor slug={slug} api={api} onNavigate={navigate} />;
+  const version = parseVersionQuery(search);
+  return (
+    <SceneEditor
+      slug={slug}
+      api={api}
+      onNavigate={navigate}
+      version={version}
+    />
+  );
 }
 
 function NotFoundView({ path }: { path: string }): ReactElement {
@@ -125,7 +124,7 @@ function storage(): Storage {
 }
 
 export function App(): ReactElement {
-  const pathname = usePathname();
+  const { pathname, search } = useLocation();
   const route = matchRoute(pathname);
 
   const [auth, dispatchAuth] = useReducer(
@@ -309,10 +308,10 @@ export function App(): ReactElement {
           <SceneList api={api} onNavigate={navigate} />
         ) : null}
         {route.name === "scene" ? (
-          <SceneView slug={route.slug} api={api} />
+          <SceneView slug={route.slug} api={api} search={search} />
         ) : null}
         {route.name === "history" ? (
-          <HistoryView slug={route.slug} />
+          <HistoryView slug={route.slug} api={api} onNavigate={navigate} />
         ) : null}
         {route.name === "notFound" ? (
           <NotFoundView path={route.path} />

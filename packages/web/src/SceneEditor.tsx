@@ -40,11 +40,22 @@ import {
   type EditorSnapshot,
   type SaveIndicator,
 } from "./editor-logic.ts";
+import {
+  buildRestorePayload,
+  headEditorPath,
+  historyPath,
+  isReadOnlyVersion,
+} from "./history-logic.ts";
 
 export type SceneEditorProps = {
   slug: string;
   api: ApiClient;
   onNavigate: (path: string, event?: MouseEvent<HTMLAnchorElement>) => void;
+  /**
+   * When set, load this absolute version instead of head/draft.
+   * Past versions open read-only (no draft, no commit).
+   */
+  version?: number | null;
 };
 
 type LoadState =
@@ -58,6 +69,9 @@ type LoadState =
         files: BinaryFiles;
       };
       headVersion: number;
+      /** Absolute version currently displayed (head when live-editing). */
+      viewingVersion: number;
+      readOnly: boolean;
       draftStale: boolean;
       sceneName: string;
     };
@@ -113,6 +127,7 @@ export function SceneEditor({
   slug,
   api,
   onNavigate,
+  version = null,
 }: SceneEditorProps): ReactElement {
   const [load, setLoad] = useState<LoadState>({ kind: "loading" });
   const [saveIndicator, setSaveIndicator] = useState<SaveIndicator>("idle");
@@ -124,6 +139,7 @@ export function SceneEditor({
   const [commitMessage, setCommitMessage] = useState("");
   const [commitError, setCommitError] = useState<string | null>(null);
   const [commitBusy, setCommitBusy] = useState(false);
+  const [restoreBusy, setRestoreBusy] = useState(false);
 
   const headVersionRef = useRef(0);
   const uploadedFilesRef = useRef(new Set<string>());
@@ -133,11 +149,17 @@ export function SceneEditor({
   const coalescerRef = useRef<ReturnType<
     typeof createDebouncedCoalescer<EditorSnapshot>
   > | null>(null);
+  /** Snapshot of the loaded past version for restore-from-readonly. */
+  const loadedDocRef = useRef<{
+    elements: unknown[];
+    appState: Record<string, unknown>;
+    files: Record<string, BinaryFilePayload | undefined>;
+  } | null>(null);
 
   const commitTitleId = useId();
   const commitMessageId = useId();
 
-  // ----- load head + optional draft -----------------------------------------
+  // ----- load head + optional draft, or a specific past version -------------
 
   useEffect(() => {
     let cancelled = false;
@@ -147,13 +169,67 @@ export function SceneEditor({
     setSaveError(null);
     setFileError(null);
     setBanner(null);
+    setCommitOpen(false);
     uploadedFilesRef.current = new Set();
+    loadedDocRef.current = null;
 
     void (async () => {
       try {
-        const [meta, sceneDoc, draft] = await Promise.all([
-          api.getSceneMeta(slug),
-          api.getSceneDocument(slug),
+        const meta = await api.getSceneMeta(slug);
+        if (cancelled) return;
+
+        headVersionRef.current = meta.headVersion;
+
+        const wantVersion = version ?? null;
+        const readOnly = isReadOnlyVersion(wantVersion, meta.headVersion);
+
+        // Past version: load exactly that revision, skip draft entirely.
+        if (readOnly && wantVersion != null) {
+          const sceneDoc = await api.getSceneDocument(slug, wantVersion);
+          if (cancelled) return;
+
+          const elements =
+            (sceneDoc.elements as readonly OrderedExcalidrawElement[]) ?? [];
+          const appState = (sceneDoc.appState ?? {}) as Partial<AppState>;
+          const files = toBinaryFiles(
+            sceneDoc.files as Record<string, BinaryFilePayload> | undefined,
+          );
+          for (const id of Object.keys(files)) {
+            uploadedFilesRef.current.add(id);
+          }
+
+          loadedDocRef.current = {
+            elements: [...elements],
+            appState: { ...(appState as Record<string, unknown>) },
+            files: sceneDoc.files as Record<
+              string,
+              BinaryFilePayload | undefined
+            >,
+          };
+
+          setLoad({
+            kind: "ready",
+            initialData: { elements, appState, files },
+            headVersion: meta.headVersion,
+            viewingVersion: wantVersion,
+            readOnly: true,
+            draftStale: false,
+            sceneName: meta.name,
+          });
+          setBanner(
+            `Viewing v${wantVersion} (read-only). Restore creates a new version — history is never rewritten.`,
+          );
+          return;
+        }
+
+        // Live editor: head (or matching version) + optional draft.
+        const [sceneDoc, draft] = await Promise.all([
+          api.getSceneDocument(
+            slug,
+            wantVersion != null && wantVersion === meta.headVersion
+              ? wantVersion
+              : undefined,
+          ),
           api.getDraft(slug),
         ]);
         if (cancelled) return;
@@ -172,8 +248,6 @@ export function SceneEditor({
             updatedAt: meta.updatedAt,
           },
         );
-
-        headVersionRef.current = meta.headVersion;
 
         let elements: readonly OrderedExcalidrawElement[];
         let appState: Partial<AppState>;
@@ -234,6 +308,9 @@ export function SceneEditor({
 
         if (cancelled) return;
 
+        const viewingVersion =
+          meta.headVersion > 0 ? meta.headVersion : 0;
+
         setLoad({
           kind: "ready",
           initialData: {
@@ -242,6 +319,8 @@ export function SceneEditor({
             files,
           },
           headVersion: meta.headVersion,
+          viewingVersion,
+          readOnly: false,
           draftStale,
           sceneName: meta.name,
         });
@@ -262,9 +341,11 @@ export function SceneEditor({
     return () => {
       cancelled = true;
     };
-  }, [api, slug]);
+  }, [api, slug, version]);
 
-  // ----- debounced draft saver ----------------------------------------------
+  const readOnly = load.kind === "ready" && load.readOnly;
+
+  // ----- debounced draft saver (disabled in read-only) ----------------------
 
   const persistDraft = useCallback(
     async (snapshot: EditorSnapshot) => {
@@ -295,6 +376,11 @@ export function SceneEditor({
   );
 
   useEffect(() => {
+    if (readOnly) {
+      coalescerRef.current?.dispose();
+      coalescerRef.current = null;
+      return;
+    }
     const coalescer = createDebouncedCoalescer<EditorSnapshot>({
       delayMs: DRAFT_AUTOSAVE_MS,
       save: persistDraft,
@@ -313,16 +399,21 @@ export function SceneEditor({
       coalescer.dispose();
       coalescerRef.current = null;
     };
-  }, [persistDraft]);
+  }, [persistDraft, readOnly]);
 
   // ----- unsaved-changes guard ----------------------------------------------
 
   useEffect(() => {
+    if (readOnly) {
+      setEditorUnsavedFlag(false);
+      return;
+    }
     setEditorUnsavedFlag(hasUnsavedChanges(saveIndicator));
     return () => setEditorUnsavedFlag(false);
-  }, [saveIndicator]);
+  }, [saveIndicator, readOnly]);
 
   useEffect(() => {
+    if (readOnly) return;
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       if (hasUnsavedChanges(saveIndicator) || getEditorUnsavedFlag()) {
         event.preventDefault();
@@ -331,11 +422,11 @@ export function SceneEditor({
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [saveIndicator]);
+  }, [saveIndicator, readOnly]);
 
   const guardedNavigate = useCallback(
     (path: string, event?: MouseEvent<HTMLAnchorElement>) => {
-      if (hasUnsavedChanges(saveIndicator)) {
+      if (!readOnly && hasUnsavedChanges(saveIndicator)) {
         const ok = window.confirm(UNSAVED_LEAVE_MESSAGE);
         if (!ok) {
           event?.preventDefault();
@@ -345,7 +436,7 @@ export function SceneEditor({
       }
       onNavigate(path, event);
     },
-    [onNavigate, saveIndicator],
+    [onNavigate, saveIndicator, readOnly],
   );
 
   // ----- onChange -----------------------------------------------------------
@@ -356,6 +447,11 @@ export function SceneEditor({
       appState: AppState,
       files: BinaryFiles,
     ) => {
+      // Read-only: never draft-save or mark dirty (viewMode blocks edits).
+      if (load.kind === "ready" && load.readOnly) {
+        return;
+      }
+
       const snapshot = snapshotFromEditor(elements, appState, files);
       latestSnapshotRef.current = snapshot;
 
@@ -367,13 +463,17 @@ export function SceneEditor({
 
       coalescerRef.current?.push(snapshot);
     },
-    [],
+    [load],
   );
 
-  // ----- commit -------------------------------------------------------------
+  // ----- commit (live editor only) ------------------------------------------
 
   async function handleCommit(event: FormEvent) {
     event.preventDefault();
+    if (readOnly) {
+      setCommitError("Read-only view — switch to head to commit.");
+      return;
+    }
     const validated = validateCommitMessage(commitMessage);
     if (!validated.ok) {
       setCommitError(validated.error);
@@ -465,6 +565,49 @@ export function SceneEditor({
     }
   }
 
+  // ----- restore from read-only view ----------------------------------------
+
+  async function handleRestoreFromView() {
+    if (load.kind !== "ready" || !load.readOnly) return;
+    const restoredVersion = load.viewingVersion;
+    const ok = window.confirm(
+      `Restore v${restoredVersion} as a new version?\n\n` +
+        `This commits the content of v${restoredVersion} on top of head v${load.headVersion}. ` +
+        `Earlier versions stay in history.`,
+    );
+    if (!ok) return;
+
+    setRestoreBusy(true);
+    try {
+      const source =
+        loadedDocRef.current ?? {
+          elements: [...load.initialData.elements],
+          appState: load.initialData.appState as Record<string, unknown>,
+          files: {},
+        };
+      const body = buildRestorePayload(
+        source,
+        headVersionRef.current,
+        restoredVersion,
+      );
+      const result = await api.commitScene(slug, body);
+      setBanner(
+        `Restored v${restoredVersion} as new v${result.version}. Opening head…`,
+      );
+      // Navigate to live head so the user can continue editing.
+      onNavigate(headEditorPath(slug));
+    } catch (err) {
+      if (err instanceof ApiError && err.isUnauthorized) return;
+      setBanner(
+        err instanceof Error
+          ? err.message
+          : "Restore failed.",
+      );
+    } finally {
+      setRestoreBusy(false);
+    }
+  }
+
   // ----- render -------------------------------------------------------------
 
   if (load.kind === "loading") {
@@ -491,19 +634,35 @@ export function SceneEditor({
     );
   }
 
-  const indicatorText = saveIndicatorLabel(saveIndicator);
+  const indicatorText = readOnly ? "" : saveIndicatorLabel(saveIndicator);
 
   return (
     <div className="editor-shell">
       <div className="editor-chrome" role="status" aria-live="polite">
         <div className="editor-chrome-left">
           <span className="editor-version">
-            head v{load.headVersion}
-            {load.draftStale ? (
-              <span className="editor-stale-badge" title="Draft based on older head">
-                stale draft
-              </span>
-            ) : null}
+            {readOnly ? (
+              <>
+                v{load.viewingVersion}
+                <span className="editor-readonly-badge">read-only</span>
+                <span className="meta-sep" aria-hidden="true">
+                  ·
+                </span>
+                <span>head v{load.headVersion}</span>
+              </>
+            ) : (
+              <>
+                head v{load.headVersion}
+                {load.draftStale ? (
+                  <span
+                    className="editor-stale-badge"
+                    title="Draft based on older head"
+                  >
+                    stale draft
+                  </span>
+                ) : null}
+              </>
+            )}
           </span>
           {indicatorText ? (
             <span
@@ -523,22 +682,40 @@ export function SceneEditor({
           ) : null}
         </div>
         <div className="editor-chrome-actions">
-          <button
-            type="button"
-            className="btn btn-primary btn-sm"
-            onClick={() => {
-              setCommitError(null);
-              setCommitOpen(true);
-            }}
-          >
-            Commit turn
-          </button>
+          {readOnly ? (
+            <>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={restoreBusy}
+                onClick={() => void handleRestoreFromView()}
+              >
+                {restoreBusy ? "Restoring…" : "Restore as new version"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => guardedNavigate(headEditorPath(slug))}
+              >
+                Back to head
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => {
+                setCommitError(null);
+                setCommitOpen(true);
+              }}
+            >
+              Commit turn
+            </button>
+          )}
           <button
             type="button"
             className="btn btn-secondary btn-sm"
-            onClick={() =>
-              guardedNavigate(`/s/${encodeURIComponent(slug)}/history`)
-            }
+            onClick={() => guardedNavigate(historyPath(slug))}
           >
             History
           </button>
@@ -546,7 +723,14 @@ export function SceneEditor({
       </div>
 
       {banner ? (
-        <div className="editor-banner" role="status">
+        <div
+          className={
+            readOnly
+              ? "editor-banner editor-banner-readonly"
+              : "editor-banner"
+          }
+          role="status"
+        >
           <span>{banner}</span>
           <button
             type="button"
@@ -559,7 +743,7 @@ export function SceneEditor({
         </div>
       ) : null}
 
-      {saveError || fileError ? (
+      {!readOnly && (saveError || fileError) ? (
         <div className="editor-banner editor-banner-error" role="alert">
           <span>{fileError ?? saveError}</span>
           <button
@@ -576,8 +760,20 @@ export function SceneEditor({
         </div>
       ) : null}
 
-      <div className="excalidraw-host" data-canvas={`scene:${slug}`}>
+      <div
+        className="excalidraw-host"
+        data-canvas={
+          readOnly
+            ? `scene:${slug}:v${load.viewingVersion}`
+            : `scene:${slug}`
+        }
+      >
         <Excalidraw
+          key={
+            readOnly
+              ? `${slug}:v${load.viewingVersion}`
+              : `${slug}:head:${load.headVersion}`
+          }
           initialData={{
             elements: load.initialData.elements,
             appState: {
@@ -588,6 +784,7 @@ export function SceneEditor({
             files: load.initialData.files,
             scrollToContent: true,
           }}
+          viewModeEnabled={readOnly}
           onChange={handleChange}
           excalidrawAPI={(apiHandle) => {
             apiRef.current = apiHandle;
@@ -595,52 +792,67 @@ export function SceneEditor({
           UIOptions={{
             canvasActions: {
               // Load from disk is local-only; our persistence is server-side.
-              loadScene: true,
+              // Disable load/clear in read-only so history cannot be mutated.
+              loadScene: !readOnly,
               export: { saveFileToDisk: true },
             },
           }}
         >
           <MainMenu>
-            <MainMenu.DefaultItems.LoadScene />
+            {!readOnly ? <MainMenu.DefaultItems.LoadScene /> : null}
             <MainMenu.DefaultItems.Export />
             <MainMenu.DefaultItems.SaveAsImage />
-            <MainMenu.DefaultItems.ClearCanvas />
+            {!readOnly ? <MainMenu.DefaultItems.ClearCanvas /> : null}
             <MainMenu.Separator />
+            {!readOnly ? (
+              <MainMenu.Item
+                onSelect={() => {
+                  setCommitError(null);
+                  setCommitOpen(true);
+                }}
+              >
+                Commit turn…
+              </MainMenu.Item>
+            ) : (
+              <MainMenu.Item
+                onSelect={() => {
+                  void handleRestoreFromView();
+                }}
+              >
+                Restore as new version…
+              </MainMenu.Item>
+            )}
             <MainMenu.Item
               onSelect={() => {
-                setCommitError(null);
-                setCommitOpen(true);
-              }}
-            >
-              Commit turn…
-            </MainMenu.Item>
-            <MainMenu.Item
-              onSelect={() => {
-                guardedNavigate(`/s/${encodeURIComponent(slug)}/history`);
+                guardedNavigate(historyPath(slug));
               }}
             >
               Version history
             </MainMenu.Item>
-            {/* SEAM #23: advisory turn lock — wire when locking API lands. */}
-            <MainMenu.Item
-              onSelect={() => {
-                claimOrReleaseTurnSeam();
-                setBanner(
-                  "Turn claim/release lands with the locking API (#23). This menu item is intentionally a seam.",
-                );
-              }}
-            >
-              Claim / release turn
-            </MainMenu.Item>
+            {!readOnly ? (
+              /* SEAM #23: advisory turn lock — wire when locking API lands. */
+              <MainMenu.Item
+                onSelect={() => {
+                  claimOrReleaseTurnSeam();
+                  setBanner(
+                    "Turn claim/release lands with the locking API (#23). This menu item is intentionally a seam.",
+                  );
+                }}
+              >
+                Claim / release turn
+              </MainMenu.Item>
+            ) : null}
             <MainMenu.Separator />
-            <MainMenu.DefaultItems.ChangeCanvasBackground />
+            {!readOnly ? (
+              <MainMenu.DefaultItems.ChangeCanvasBackground />
+            ) : null}
             <MainMenu.DefaultItems.ToggleTheme />
             <MainMenu.DefaultItems.Help />
           </MainMenu>
         </Excalidraw>
       </div>
 
-      {commitOpen ? (
+      {commitOpen && !readOnly ? (
         <div
           className="modal-backdrop"
           role="presentation"
