@@ -141,3 +141,167 @@ test("deleteScene accepts 204 empty body", async () => {
   });
   await client.deleteScene("arch");
 });
+
+test("getDraft returns null on 404", async () => {
+  const client = createApiClient({
+    getToken: () => "t",
+    onUnauthorized: () => {},
+    fetchImpl: async () =>
+      new Response(
+        JSON.stringify({
+          error: { code: "NOT_FOUND", message: "no draft" },
+        }),
+        { status: 404, headers: { "content-type": "application/json" } },
+      ),
+  });
+  assert.equal(await client.getDraft("arch"), null);
+});
+
+test("putDraft PUTs elements + basedOnVersion", async () => {
+  let method = "";
+  let body: unknown;
+  let url = "";
+  const client = createApiClient({
+    getToken: () => "t",
+    onUnauthorized: () => {},
+    fetchImpl: async (input, init) => {
+      url = String(input);
+      method = String(init?.method);
+      body = JSON.parse(String(init?.body));
+      return new Response(
+        JSON.stringify({
+          elements: [],
+          appState: {},
+          fileIds: [],
+          updatedAt: "2026-01-01T00:00:00.000Z",
+          updatedBy: "me",
+          basedOnVersion: 2,
+          headVersion: 2,
+          stale: false,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    },
+  });
+
+  await client.putDraft("arch", {
+    elements: [{ id: "a" }],
+    appState: { viewBackgroundColor: "#fff" },
+    fileIds: ["abc"],
+    basedOnVersion: 2,
+  });
+  assert.equal(url, "/api/scenes/arch/draft");
+  assert.equal(method, "PUT");
+  assert.deepEqual(body, {
+    elements: [{ id: "a" }],
+    appState: { viewBackgroundColor: "#fff" },
+    fileIds: ["abc"],
+    basedOnVersion: 2,
+  });
+});
+
+test("commitScene POSTs parentVersion + message", async () => {
+  let body: unknown;
+  const client = createApiClient({
+    getToken: () => "t",
+    onUnauthorized: () => {},
+    fetchImpl: async (_input, init) => {
+      body = JSON.parse(String(init?.body));
+      return new Response(
+        JSON.stringify({
+          version: 3,
+          parentVersion: 2,
+          author: "me",
+          message: "done",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          elementCount: 1,
+          sceneHash: "h",
+          headVersion: 3,
+        }),
+        { status: 201, headers: { "content-type": "application/json" } },
+      );
+    },
+  });
+
+  const result = await client.commitScene("arch", {
+    parentVersion: 2,
+    elements: [],
+    message: "done",
+  });
+  assert.equal(result.version, 3);
+  assert.deepEqual(body, {
+    parentVersion: 2,
+    elements: [],
+    message: "done",
+  });
+});
+
+test("uploadFile POSTs BinaryFileData JSON", async () => {
+  let body: unknown;
+  const client = createApiClient({
+    getToken: () => "t",
+    onUnauthorized: () => {},
+    fetchImpl: async (_input, init) => {
+      body = JSON.parse(String(init?.body));
+      return new Response(
+        JSON.stringify({
+          fileId: "abc",
+          mimeType: "image/png",
+          byteLength: 3,
+          created: 1,
+        }),
+        { status: 201, headers: { "content-type": "application/json" } },
+      );
+    },
+  });
+
+  await client.uploadFile({
+    id: "abc",
+    mimeType: "image/png",
+    dataURL: "data:image/png;base64,aaa",
+  });
+  assert.deepEqual(body, {
+    id: "abc",
+    mimeType: "image/png",
+    dataURL: "data:image/png;base64,aaa",
+  });
+});
+
+test("getFileBytes returns binary payload", async () => {
+  const bytes = new Uint8Array([1, 2, 3]);
+  const client = createApiClient({
+    getToken: () => "t",
+    onUnauthorized: () => {},
+    fetchImpl: async () =>
+      new Response(bytes, {
+        status: 200,
+        headers: { "content-type": "image/png" },
+      }),
+  });
+  const got = await client.getFileBytes("abc");
+  assert.equal(got.mimeType, "image/png");
+  assert.equal(got.bytes.byteLength, 3);
+});
+
+test("getSceneDocument GETs /scene", async () => {
+  let url = "";
+  const client = createApiClient({
+    getToken: () => "t",
+    onUnauthorized: () => {},
+    fetchImpl: async (input) => {
+      url = String(input);
+      return new Response(
+        JSON.stringify({
+          type: "excalidraw",
+          version: 2,
+          elements: [],
+          appState: {},
+          files: {},
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    },
+  });
+  await client.getSceneDocument("arch");
+  assert.equal(url, "/api/scenes/arch/scene");
+});

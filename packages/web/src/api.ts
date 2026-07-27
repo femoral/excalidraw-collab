@@ -1,9 +1,9 @@
 /**
  * Thin HTTP client for the collab server API.
  *
- * Mirrors wire shapes from `packages/server/src/scenes.ts`. On any 401 the
- * configured `onUnauthorized` callback runs (clears token + resets UI state);
- * callers must not leave half-rendered lists on screen after that.
+ * Mirrors wire shapes from `packages/server`. On any 401 the configured
+ * `onUnauthorized` callback runs (clears token + resets UI state); callers
+ * must not leave half-rendered authenticated UI on screen after that.
  */
 
 /** Wire shape for scene list items (camelCase, matches server SceneInfo). */
@@ -24,6 +24,69 @@ export type SceneInfo = {
 
 export type SceneListResponse = {
   scenes: SceneInfo[];
+};
+
+/** Full `.excalidraw` document returned by GET /scene. */
+export type SceneDocumentResponse = {
+  type?: string;
+  version?: number;
+  elements: unknown[];
+  appState?: Record<string, unknown>;
+  files?: Record<string, BinaryFilePayload>;
+};
+
+/** Wire shape for GET/PUT draft. */
+export type DraftResponse = {
+  elements: unknown[];
+  appState: Record<string, unknown>;
+  fileIds: string[];
+  updatedAt: string;
+  updatedBy: string;
+  basedOnVersion: number;
+  headVersion: number;
+  stale: boolean;
+};
+
+export type PutDraftBody = {
+  elements: unknown[];
+  appState?: Record<string, unknown>;
+  fileIds?: string[];
+  basedOnVersion?: number;
+};
+
+export type CommitSceneBody = {
+  parentVersion: number;
+  elements: unknown[];
+  appState?: Record<string, unknown>;
+  files?: Record<string, BinaryFilePayload>;
+  message: string;
+};
+
+export type CommitSceneResponse = {
+  version: number;
+  parentVersion: number | null;
+  author: string;
+  message: string;
+  createdAt: string;
+  elementCount: number;
+  sceneHash: string;
+  headVersion: number;
+};
+
+/** Excalidraw BinaryFileData-shaped payload for /api/files and scene push. */
+export type BinaryFilePayload = {
+  id: string;
+  mimeType: string;
+  dataURL: string;
+  created?: number;
+  lastRetrieved?: number;
+};
+
+export type FileUploadResponse = {
+  fileId: string;
+  mimeType: string;
+  byteLength: number;
+  created: number;
 };
 
 export type ServerErrorBody = {
@@ -55,6 +118,14 @@ export class ApiError extends Error {
   get isUnauthorized(): boolean {
     return this.status === 401 || this.code === "UNAUTHORIZED";
   }
+
+  get isNotFound(): boolean {
+    return this.status === 404 || this.code === "NOT_FOUND";
+  }
+
+  get isConflict(): boolean {
+    return this.status === 409 || this.code === "CONFLICT";
+  }
 }
 
 function isServerErrorBody(value: unknown): value is ServerErrorBody {
@@ -83,6 +154,10 @@ export type RequestOptions = {
   body?: unknown;
   /** When true, skip attaching Authorization (unused today; reserved). */
   skipAuth?: boolean;
+  /** Override Accept / Content-Type for non-JSON bodies. */
+  headers?: Record<string, string>;
+  /** When true, return raw Response body as ArrayBuffer (binary GET). */
+  binary?: boolean;
 };
 
 /**
@@ -97,6 +172,34 @@ export function buildApiUrl(baseUrl: string, path: string): string {
   return `${base}${p}`;
 }
 
+function throwHttpError(
+  status: number,
+  statusText: string,
+  parsed: unknown,
+  onUnauthorized: () => void,
+): never {
+  if (status === 401) {
+    onUnauthorized();
+  }
+
+  if (isServerErrorBody(parsed)) {
+    throw new ApiError(
+      status,
+      parsed.error.code,
+      parsed.error.message,
+      parsed.error.details,
+    );
+  }
+
+  throw new ApiError(
+    status,
+    "ERROR",
+    typeof parsed === "string" && parsed.length > 0
+      ? parsed
+      : `HTTP ${status} ${statusText}`,
+  );
+}
+
 export function createApiClient(options: ApiClientOptions) {
   const baseUrl = options.baseUrl ?? "";
   const fetchImpl = options.fetchImpl ?? fetch;
@@ -105,8 +208,10 @@ export function createApiClient(options: ApiClientOptions) {
     path: string,
     init: RequestOptions = {},
   ): Promise<T> {
-    const headers = new Headers();
-    headers.set("Accept", "application/json");
+    const headers = new Headers(init.headers);
+    if (!headers.has("Accept")) {
+      headers.set("Accept", init.binary ? "*/*" : "application/json");
+    }
 
     if (!init.skipAuth) {
       const token = options.getToken();
@@ -117,8 +222,13 @@ export function createApiClient(options: ApiClientOptions) {
 
     let body: string | undefined;
     if (init.body !== undefined) {
-      headers.set("Content-Type", "application/json");
-      body = JSON.stringify(init.body);
+      if (!headers.has("Content-Type")) {
+        headers.set("Content-Type", "application/json");
+      }
+      body =
+        typeof init.body === "string"
+          ? init.body
+          : JSON.stringify(init.body);
     }
 
     const response = await fetchImpl(buildApiUrl(baseUrl, path), {
@@ -126,6 +236,32 @@ export function createApiClient(options: ApiClientOptions) {
       headers,
       body,
     });
+
+    if (init.binary) {
+      if (!response.ok) {
+        const text = await response.text();
+        let parsed: unknown = text;
+        if (text.length > 0) {
+          try {
+            parsed = JSON.parse(text) as unknown;
+          } catch {
+            parsed = text;
+          }
+        }
+        throwHttpError(
+          response.status,
+          response.statusText,
+          parsed,
+          options.onUnauthorized,
+        );
+      }
+      const buf = await response.arrayBuffer();
+      return {
+        bytes: buf,
+        mimeType:
+          response.headers.get("Content-Type") ?? "application/octet-stream",
+      } as T;
+    }
 
     const text = await response.text();
     let parsed: unknown = undefined;
@@ -138,25 +274,11 @@ export function createApiClient(options: ApiClientOptions) {
     }
 
     if (!response.ok) {
-      if (response.status === 401) {
-        options.onUnauthorized();
-      }
-
-      if (isServerErrorBody(parsed)) {
-        throw new ApiError(
-          response.status,
-          parsed.error.code,
-          parsed.error.message,
-          parsed.error.details,
-        );
-      }
-
-      throw new ApiError(
+      throwHttpError(
         response.status,
-        "ERROR",
-        typeof parsed === "string" && parsed.length > 0
-          ? parsed
-          : `HTTP ${response.status} ${response.statusText}`,
+        response.statusText,
+        parsed,
+        options.onUnauthorized,
       );
     }
 
@@ -191,6 +313,10 @@ export function createApiClient(options: ApiClientOptions) {
       });
     },
 
+    async getSceneMeta(slug: string): Promise<SceneInfo> {
+      return request<SceneInfo>(`/api/scenes/${encodeURIComponent(slug)}`);
+    },
+
     async renameScene(slug: string, name: string): Promise<SceneInfo> {
       return request<SceneInfo>(
         `/api/scenes/${encodeURIComponent(slug)}`,
@@ -205,6 +331,90 @@ export function createApiClient(options: ApiClientOptions) {
       await request<void>(`/api/scenes/${encodeURIComponent(slug)}`, {
         method: "DELETE",
       });
+    },
+
+    /** Full head (or versioned) scene document, files rehydrated. */
+    async getSceneDocument(
+      slug: string,
+      version?: number | string,
+    ): Promise<SceneDocumentResponse> {
+      const qs =
+        version === undefined
+          ? ""
+          : `?v=${encodeURIComponent(String(version))}`;
+      return request<SceneDocumentResponse>(
+        `/api/scenes/${encodeURIComponent(slug)}/scene${qs}`,
+      );
+    },
+
+    /**
+     * Push a committed turn. Author is taken from the token server-side.
+     * On 409 the ApiError.details carries the conflict diff.
+     */
+    async commitScene(
+      slug: string,
+      body: CommitSceneBody,
+    ): Promise<CommitSceneResponse> {
+      return request<CommitSceneResponse>(
+        `/api/scenes/${encodeURIComponent(slug)}/scene`,
+        { method: "POST", body },
+      );
+    },
+
+    async getDraft(slug: string): Promise<DraftResponse | null> {
+      try {
+        return await request<DraftResponse>(
+          `/api/scenes/${encodeURIComponent(slug)}/draft`,
+        );
+      } catch (err) {
+        if (err instanceof ApiError && err.isNotFound) {
+          return null;
+        }
+        throw err;
+      }
+    },
+
+    async putDraft(slug: string, body: PutDraftBody): Promise<DraftResponse> {
+      return request<DraftResponse>(
+        `/api/scenes/${encodeURIComponent(slug)}/draft`,
+        { method: "PUT", body },
+      );
+    },
+
+    async deleteDraft(slug: string): Promise<void> {
+      try {
+        await request<void>(
+          `/api/scenes/${encodeURIComponent(slug)}/draft`,
+          { method: "DELETE" },
+        );
+      } catch (err) {
+        // Idempotent: already-cleared draft is fine (commit clears it too).
+        if (err instanceof ApiError && err.isNotFound) {
+          return;
+        }
+        throw err;
+      }
+    },
+
+    /**
+     * Upload a BinaryFileData-shaped payload. Server verifies claimed id is
+     * SHA-1(content); non-secure-context nanoid ids fail with a clear message.
+     */
+    async uploadFile(file: BinaryFilePayload): Promise<FileUploadResponse> {
+      return request<FileUploadResponse>("/api/files", {
+        method: "POST",
+        body: file,
+      });
+    },
+
+    /** Fetch raw file bytes for rehydration into Excalidraw BinaryFiles. */
+    async getFileBytes(
+      fileId: string,
+    ): Promise<{ bytes: ArrayBuffer; mimeType: string }> {
+      return request<{ bytes: ArrayBuffer; mimeType: string }>(
+        `/api/files/${encodeURIComponent(fileId)}`,
+        { binary: true },
+      );
     },
   };
 }
