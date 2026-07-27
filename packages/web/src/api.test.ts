@@ -236,6 +236,101 @@ test("commitScene POSTs parentVersion + message", async () => {
   });
 });
 
+test("listVersions GETs paginated history", async () => {
+  let url = "";
+  const client = createApiClient({
+    getToken: () => "t",
+    onUnauthorized: () => {},
+    fetchImpl: async (input) => {
+      url = String(input);
+      return new Response(
+        JSON.stringify({
+          versions: [
+            {
+              version: 2,
+              parentVersion: 1,
+              author: "alice",
+              message: "two",
+              createdAt: "2026-01-02T00:00:00.000Z",
+              elementCount: 4,
+              sceneHash: "h2",
+            },
+          ],
+          total: 2,
+          limit: 50,
+          offset: 0,
+          headVersion: 2,
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    },
+  });
+
+  const page = await client.listVersions("arch", { limit: 10, offset: 0 });
+  assert.equal(url, "/api/scenes/arch/versions?limit=10&offset=0");
+  assert.equal(page.headVersion, 2);
+  assert.equal(page.versions[0]!.version, 2);
+});
+
+test("getDiff GETs structured SceneDiff", async () => {
+  let url = "";
+  const client = createApiClient({
+    getToken: () => "t",
+    onUnauthorized: () => {},
+    fetchImpl: async (input) => {
+      url = String(input);
+      return new Response(
+        JSON.stringify({
+          from: 1,
+          to: 2,
+          summary: { added: 1, deleted: 0, updated: 0, reordered: 0 },
+          elements: [
+            {
+              op: "add",
+              id: "a",
+              type: "rectangle",
+              label: "Box",
+              bbox: { x: 0, y: 0, width: 10, height: 10 },
+              describe: '+ rectangle "Box"',
+            },
+          ],
+          appState: [],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    },
+  });
+
+  const diff = await client.getDiff("arch", 1, 2);
+  assert.equal(url, "/api/scenes/arch/diff?from=1&to=2");
+  assert.equal(diff.summary.added, 1);
+  assert.equal(diff.elements[0]!.op, "add");
+});
+
+test("getSceneDocument passes version query", async () => {
+  let url = "";
+  const client = createApiClient({
+    getToken: () => "t",
+    onUnauthorized: () => {},
+    fetchImpl: async (input) => {
+      url = String(input);
+      return new Response(
+        JSON.stringify({
+          type: "excalidraw",
+          version: 2,
+          elements: [],
+          appState: {},
+          files: {},
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    },
+  });
+
+  await client.getSceneDocument("arch", 3);
+  assert.equal(url, "/api/scenes/arch/scene?v=3");
+});
+
 test("uploadFile POSTs BinaryFileData JSON", async () => {
   let body: unknown;
   const client = createApiClient({

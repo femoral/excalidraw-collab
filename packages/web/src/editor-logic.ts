@@ -588,3 +588,13 @@ export function turnMenuShouldClaim(
 ): boolean {
   return !isEditorLockActive(lock, nowMs);
 }
+
+/**
+ * Whether claim/release lock controls (MainMenu item + badge release) should
+ * render. Past-version view is not an editing turn, so we **hide** (not
+ * disable) the controls entirely — claiming while read-only would be
+ * misleading and must not happen.
+ */
+export function shouldShowLockControls(readOnly: boolean): boolean {
+  return !readOnly;
+}

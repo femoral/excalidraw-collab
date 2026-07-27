@@ -21,6 +21,7 @@ import {
   saveIndicatorLabel,
   selectInitialSource,
   setEditorUnsavedFlag,
+  shouldShowLockControls,
   turnMenuLabel,
   turnMenuShouldClaim,
   validateCommitMessage,
@@ -431,5 +432,12 @@ describe("isEditorLockActive / formatLockBadge / turnMenu", () => {
       ),
       false,
     );
+  });
+
+  test("read-only past-version view hides lock controls (does not claim a turn)", () => {
+    // Hide (not disable): viewing history is not editing, so claim/release
+    // must not appear at all.
+    assert.equal(shouldShowLockControls(true), false);
+    assert.equal(shouldShowLockControls(false), true);
   });
 });
