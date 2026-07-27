@@ -1,0 +1,10 @@
+node_modules
+dist
+build
+coverage
+data
+pnpm-lock.yaml
+*.tsbuildinfo
+PLAN.md
+README.md
+.parley

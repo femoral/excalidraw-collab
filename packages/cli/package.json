@@ -1,0 +1,24 @@
+{
+  "name": "@excalidraw-collab/cli",
+  "version": "0.0.0",
+  "type": "module",
+  "bin": {
+    "excalicli": "./dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "node --test dist/**/*.test.js",
+    "dev": "tsc -b --watch"
+  }
+}
