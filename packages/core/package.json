@@ -14,6 +14,10 @@
   "scripts": {
     "build": "tsc -b",
     "test": "node --test dist/**/*.test.js",
-    "dev": "tsc -b --watch"
+    "dev": "tsc -b --watch",
+    "generate-fixtures": "node --import ./scripts/register.mjs ./scripts/generate-fixtures.mjs"
+  },
+  "devDependencies": {
+    "@excalidraw/excalidraw": "0.18.1"
   }
 }
