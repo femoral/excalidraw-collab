@@ -59,6 +59,12 @@ export {
 } from "./conflict.js";
 export type { ConflictDetails, ConflictDiff } from "./conflict.js";
 export type { SceneEventResponse, WatchEvent } from "./watch.js";
+export {
+  generateCliReference,
+  CLI_REF_RELATIVE_PATH,
+  cliRefPath,
+  resolveMonorepoRoot,
+} from "./cli-ref.js";
 
 const isMain =
   process.argv[1] !== undefined &&
