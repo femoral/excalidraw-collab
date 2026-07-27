@@ -11,7 +11,9 @@ body,
   padding: 0;
 }
 
-:root {
+:root,
+[data-theme="light"] {
+  color-scheme: light;
   --bg: #f4f4f6;
   --bg-elevated: #ffffff;
   --bg-muted: #ececf0;
@@ -25,6 +27,13 @@ body,
   --accent-soft: #eeedfb;
   --danger: #c92a2a;
   --danger-soft: #fff5f5;
+  --warning-bg: #fff4e6;
+  --warning-text: #9c5b12;
+  --warning-border: #ffe8cc;
+  --success: #2b8a3e;
+  --toast-bg: #fff9db;
+  --toast-text: #5c4b00;
+  --toast-border: #ffe066;
   --focus-ring: 0 0 0 3px rgba(105, 101, 219, 0.35);
   --radius: 10px;
   --radius-sm: 6px;
@@ -35,6 +44,77 @@ body,
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   /* Thumbnail slot — wave 5 will fill this; keep dimensions stable. */
   --thumb-aspect: 16 / 10;
+  /* Dashboard tile behind always-light thumbnails (issue #38). */
+  --thumb-slot-bg: #f0f0f4;
+  --thumb-slot-bg-mid: #e6e6ec;
+  --thumb-slot-bg-end: #ececf2;
+  --thumb-image-bg: #f7f7fa;
+  /* Diff colours (history view) — WCAG AA on elevated bg */
+  --diff-add: #2b8a3e;
+  --diff-add-soft: #ebfbee;
+  --diff-delete: #c92a2a;
+  --diff-delete-soft: #fff5f5;
+  --diff-update: #e67700;
+  --diff-update-soft: #fff9db;
+  --diff-reorder: #5c5c66;
+  --diff-reorder-soft: #f1f3f5;
+  --role-from-bg: #e7f5ff;
+  --role-from-text: #1864ab;
+  --role-to-bg: #ebfbee;
+  --role-to-text: #2b8a3e;
+  --version-selected-border: #c9c6f0;
+  --banner-error-border: #ffc9c9;
+  --modal-backdrop: rgba(27, 27, 31, 0.4);
+  --input-hover-border: #a8a8b4;
+}
+
+/* Dark palette: additive override of the same custom properties. */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121214;
+  --bg-elevated: #1c1c1f;
+  --bg-muted: #27272b;
+  --border: #2e2e34;
+  --border-strong: #44444c;
+  --text: #ececf1;
+  --text-muted: #a8a8b3;
+  --text-faint: #7a7a86;
+  --accent: #8b87f0;
+  --accent-hover: #9d99f5;
+  --accent-soft: #2a2850;
+  --danger: #ff6b6b;
+  --danger-soft: #3b1a1a;
+  --warning-bg: #3d2a12;
+  --warning-text: #ffc078;
+  --warning-border: #6b4a1a;
+  --success: #69db7c;
+  --toast-bg: #3d3510;
+  --toast-text: #ffe066;
+  --toast-border: #6b5c1a;
+  --focus-ring: 0 0 0 3px rgba(139, 135, 240, 0.45);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+  /* Light thumbnails need a slightly lifted slot so they don't float on black. */
+  --thumb-slot-bg: #2a2a30;
+  --thumb-slot-bg-mid: #242428;
+  --thumb-slot-bg-end: #2e2e34;
+  --thumb-image-bg: #2a2a30;
+  --diff-add: #69db7c;
+  --diff-add-soft: #1a3320;
+  --diff-delete: #ff8787;
+  --diff-delete-soft: #3b1a1a;
+  --diff-update: #ffc078;
+  --diff-update-soft: #3d2a12;
+  --diff-reorder: #a8a8b3;
+  --diff-reorder-soft: #27272b;
+  --role-from-bg: #1a2a3d;
+  --role-from-text: #74c0fc;
+  --role-to-bg: #1a3320;
+  --role-to-text: #69db7c;
+  --version-selected-border: #4a4680;
+  --banner-error-border: #6b2a2a;
+  --modal-backdrop: rgba(0, 0, 0, 0.55);
+  --input-hover-border: #5c5c66;
 }
 
 body {
@@ -313,7 +393,7 @@ code {
 }
 
 .field-input:hover:not(:disabled) {
-  border-color: #a8a8b4;
+  border-color: var(--input-hover-border);
 }
 
 .field-input:focus-visible {
@@ -345,6 +425,7 @@ code {
    --------------------------------------------------------------------------- */
 
 .login-page {
+  position: relative;
   min-height: 100%;
   display: flex;
   align-items: center;
@@ -530,7 +611,21 @@ code {
 .banner-error {
   background: var(--danger-soft);
   color: var(--danger);
-  border: 1px solid #ffc9c9;
+  border: 1px solid var(--banner-error-border);
+}
+
+.banner-info {
+  background: var(--accent-soft);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.banner-info .banner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .banner-dismiss {
@@ -589,7 +684,12 @@ code {
   aspect-ratio: var(--thumb-aspect);
   width: 100%;
   background:
-    linear-gradient(135deg, #f0f0f4 0%, #e6e6ec 50%, #ececf2 100%);
+    linear-gradient(
+      135deg,
+      var(--thumb-slot-bg) 0%,
+      var(--thumb-slot-bg-mid) 50%,
+      var(--thumb-slot-bg-end) 100%
+    );
   display: flex;
   align-items: center;
   justify-content: center;
@@ -601,7 +701,8 @@ code {
   width: 100%;
   display: block;
   object-fit: cover;
-  background: #f7f7fa;
+  /* Thumbnails are always light content; slot bg adapts to chrome theme. */
+  background: var(--thumb-image-bg);
   border-bottom: 1px solid var(--border);
 }
 
@@ -652,8 +753,8 @@ code {
   max-width: 8rem;
   padding: 0.15rem 0.45rem;
   border-radius: 999px;
-  background: #fff4e6;
-  color: #9c5b12;
+  background: var(--warning-bg);
+  color: var(--warning-text);
   font-size: 0.7rem;
   font-weight: 600;
   line-height: 1.3;
@@ -709,7 +810,7 @@ code {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: rgba(27, 27, 31, 0.4);
+  background: var(--modal-backdrop);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -813,8 +914,8 @@ code {
   margin-left: 0.45rem;
   padding: 0.1rem 0.4rem;
   border-radius: 999px;
-  background: #fff4e6;
-  color: #9c5b12;
+  background: var(--warning-bg);
+  color: var(--warning-text);
   font-size: 0.7rem;
   font-weight: 650;
   letter-spacing: 0.01em;
@@ -827,12 +928,12 @@ code {
   max-width: 18rem;
   padding: 0.12rem 0.25rem 0.12rem 0.5rem;
   border-radius: 999px;
-  background: #fff4e6;
-  color: #9c5b12;
+  background: var(--warning-bg);
+  color: var(--warning-text);
   font-size: 0.72rem;
   font-weight: 600;
   line-height: 1.3;
-  border: 1px solid #ffe8cc;
+  border: 1px solid var(--warning-border);
 }
 
 .editor-lock-badge-text {
@@ -846,8 +947,8 @@ code {
   flex-shrink: 0;
   appearance: none;
   border: none;
-  background: rgba(156, 91, 18, 0.12);
-  color: #9c5b12;
+  background: color-mix(in srgb, var(--warning-text) 14%, transparent);
+  color: var(--warning-text);
   font: inherit;
   font-size: 0.68rem;
   font-weight: 650;
@@ -858,7 +959,7 @@ code {
 }
 
 .editor-lock-release:hover:not(:disabled) {
-  background: rgba(156, 91, 18, 0.22);
+  background: color-mix(in srgb, var(--warning-text) 24%, transparent);
 }
 
 .editor-lock-release:disabled {
@@ -880,7 +981,7 @@ code {
 }
 
 .editor-save-indicator.is-saved {
-  color: #2b8a3e;
+  color: var(--success);
 }
 
 .editor-save-indicator.is-error {
@@ -928,9 +1029,9 @@ code {
   gap: 0.65rem 1rem;
   padding: 0.55rem 0.85rem;
   font-size: 0.8125rem;
-  background: #fff9db;
-  color: #5c4b00;
-  border-bottom: 1px solid #ffe066;
+  background: var(--toast-bg);
+  color: var(--toast-text);
+  border-bottom: 1px solid var(--toast-border);
   z-index: 3;
 }
 
@@ -951,7 +1052,7 @@ code {
 .editor-banner-error {
   background: var(--danger-soft);
   color: var(--danger);
-  border-bottom-color: #ffc9c9;
+  border-bottom-color: var(--banner-error-border);
 }
 
 .editor-shell .excalidraw-host {
@@ -985,17 +1086,6 @@ code {
 /* ---------------------------------------------------------------------------
    Version history + diff
    --------------------------------------------------------------------------- */
-
-:root {
-  --diff-add: #2b8a3e;
-  --diff-add-soft: #ebfbee;
-  --diff-delete: #c92a2a;
-  --diff-delete-soft: #fff5f5;
-  --diff-update: #e67700;
-  --diff-update-soft: #fff9db;
-  --diff-reorder: #5c5c66;
-  --diff-reorder-soft: #f1f3f5;
-}
 
 .history-page {
   max-width: 72rem;
@@ -1128,7 +1218,7 @@ code {
 
 .version-row.is-selected {
   background: var(--accent-soft);
-  border-color: #c9c6f0;
+  border-color: var(--version-selected-border);
 }
 
 .version-select {
@@ -1169,7 +1259,7 @@ code {
 
 .version-row.is-selected .version-check {
   border-color: var(--accent);
-  background: #fff;
+  background: var(--bg-elevated);
 }
 
 .version-row-main {
@@ -1214,13 +1304,13 @@ code {
 }
 
 .version-role-badge.role-from {
-  background: #e7f5ff;
-  color: #1864ab;
+  background: var(--role-from-bg);
+  color: var(--role-from-text);
 }
 
 .version-role-badge.role-to {
-  background: #ebfbee;
-  color: #2b8a3e;
+  background: var(--role-to-bg);
+  color: var(--role-to-text);
 }
 
 .version-counts {
@@ -1567,17 +1657,17 @@ code {
   margin-left: 0.45rem;
   padding: 0.1rem 0.45rem;
   border-radius: 999px;
-  background: #e7f5ff;
-  color: #1864ab;
+  background: var(--role-from-bg);
+  color: var(--role-from-text);
   font-size: 0.7rem;
   font-weight: 650;
   letter-spacing: 0.01em;
 }
 
 .editor-banner-readonly {
-  background: #e7f5ff;
-  color: #1864ab;
-  border-bottom-color: #a5d8ff;
+  background: var(--role-from-bg);
+  color: var(--role-from-text);
+  border-bottom-color: var(--role-from-text);
 }
 
 /* ---------------------------------------------------------------------------
@@ -1591,16 +1681,17 @@ code {
   justify-content: space-between;
   gap: 0.85rem;
   padding: 0.65rem 0.85rem;
-  background: #fff9db;
-  border-bottom: 1px solid #ffe066;
-  color: var(--text);
+  background: var(--toast-bg);
+  border-bottom: 1px solid var(--toast-border);
+  color: var(--toast-text);
   z-index: 4;
   font-size: 0.8125rem;
 }
 
 .remote-toast-error {
   background: var(--danger-soft);
-  border-bottom-color: #ffc9c9;
+  border-bottom-color: var(--banner-error-border);
+  color: var(--danger);
 }
 
 .remote-toast-body {
@@ -1758,13 +1849,50 @@ button.what-changed-item:focus-visible {
   margin-left: 0.4rem;
   padding: 0.05rem 0.35rem;
   border-radius: 999px;
-  background: #fff;
+  background: var(--bg-elevated);
   color: var(--diff-delete);
   font-size: 0.65rem;
   font-weight: 700;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   vertical-align: middle;
+}
+
+/* ---------------------------------------------------------------------------
+   Theme toggle + mismatch hint (issue #38)
+   --------------------------------------------------------------------------- */
+
+.header-theme-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: 0.35rem;
+}
+
+.theme-toggle {
+  min-width: 2.25rem;
+}
+
+.theme-instance-btn {
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.theme-mismatch-banner {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  margin: 0;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+}
+
+.login-theme-toggle {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
 }
 
 .what-changed-appstate-note {

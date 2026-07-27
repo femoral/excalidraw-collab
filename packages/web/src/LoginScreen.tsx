@@ -5,12 +5,16 @@ import {
   type ReactElement,
 } from "react";
 import { normalizeTokenInput } from "./auth.ts";
+import type { Theme } from "./theme-logic.ts";
 
 export type LoginScreenProps = {
   /** Optional error from a failed verification attempt. */
   error: string | null;
   busy: boolean;
   onSubmit: (token: string) => void;
+  /** Resolved chrome theme (issue #38). */
+  theme?: Theme;
+  onToggleTheme?: () => void;
 };
 
 /**
@@ -21,6 +25,8 @@ export function LoginScreen({
   error,
   busy,
   onSubmit,
+  theme = "light",
+  onToggleTheme,
 }: LoginScreenProps): ReactElement {
   const inputId = useId();
   const errorId = useId();
@@ -39,9 +45,23 @@ export function LoginScreen({
   }
 
   const displayError = localError ?? error;
+  const nextTheme = theme === "dark" ? "light" : "dark";
 
   return (
     <div className="login-page">
+      {onToggleTheme ? (
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm login-theme-toggle theme-toggle"
+          onClick={onToggleTheme}
+          aria-label={
+            nextTheme === "dark" ? "Switch to dark theme" : "Switch to light theme"
+          }
+          title={nextTheme === "dark" ? "Dark theme" : "Light theme"}
+        >
+          {theme === "dark" ? "☀" : "☾"}
+        </button>
+      ) : null}
       <div className="login-card">
         <div className="login-brand">
           <span className="login-mark" aria-hidden="true">

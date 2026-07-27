@@ -119,6 +119,14 @@ export type WhoamiInfo = {
   isAdmin: boolean;
 };
 
+/**
+ * Instance theme default (GET/PUT /api/settings/theme).
+ * `null` means unset — viewers fall through to prefers-color-scheme.
+ */
+export type ThemeSettings = {
+  theme: "light" | "dark" | null;
+};
+
 /** Wire shape for one history row (GET /versions). */
 export type VersionInfo = {
   version: number;
@@ -591,6 +599,26 @@ export function createApiClient(options: ApiClientOptions) {
     /** Current token identity (author name for locks and history). */
     async whoami(): Promise<WhoamiInfo> {
       return request<WhoamiInfo>("/api/whoami");
+    },
+
+    /**
+     * Instance default theme. Unauthenticated — login screen themes itself
+     * before a token exists (issue #38).
+     */
+    async getThemeSettings(): Promise<ThemeSettings> {
+      return request<ThemeSettings>("/api/settings/theme", { skipAuth: true });
+    },
+
+    /**
+     * Publish (or clear with null) the instance theme default. Admin only.
+     */
+    async setThemeSettings(
+      theme: "light" | "dark" | null,
+    ): Promise<ThemeSettings> {
+      return request<ThemeSettings>("/api/settings/theme", {
+        method: "PUT",
+        body: { theme },
+      });
     },
 
     /**

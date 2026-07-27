@@ -125,6 +125,11 @@ export type SceneEditorProps = {
    * Past versions open read-only (no draft, no commit).
    */
   version?: number | null;
+  /**
+   * Resolved chrome/canvas theme (issue #38). Viewer preference — never
+   * taken from the scene document. Passed to `<Excalidraw theme=…>`.
+   */
+  theme?: "light" | "dark";
 };
 
 type LoadState =
@@ -185,6 +190,7 @@ export function SceneEditor({
   api,
   onNavigate,
   version = null,
+  theme = "light",
 }: SceneEditorProps): ReactElement {
   const [load, setLoad] = useState<LoadState>({ kind: "loading" });
   const [saveIndicator, setSaveIndicator] = useState<SaveIndicator>("idle");
@@ -1658,12 +1664,18 @@ export function SceneEditor({
               // Stable live key: remote Load must not remount (would wipe undo).
               : `${slug}:live`
           }
+          // Chrome and canvas always share the resolved viewer theme (issue #38).
+          // Upstream MainMenu.ToggleTheme is intentionally omitted so there is
+          // a single top-bar control; two toggles was the prior split-screen bug.
+          theme={theme}
           initialData={{
             elements: load.initialData.elements,
             appState: {
               ...load.initialData.appState,
               // Keep name in sync with scene for exports.
               name: load.sceneName,
+              // Theme is resolved at view time — never from the document.
+              theme,
             },
             files: load.initialData.files,
             scrollToContent: true,
@@ -1727,7 +1739,6 @@ export function SceneEditor({
             {!readOnly ? (
               <MainMenu.DefaultItems.ChangeCanvasBackground />
             ) : null}
-            <MainMenu.DefaultItems.ToggleTheme />
             <MainMenu.DefaultItems.Help />
           </MainMenu>
         </Excalidraw>

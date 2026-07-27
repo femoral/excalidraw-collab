@@ -152,6 +152,10 @@ export function normalizeRenderOptions(
 /**
  * Build the appState fragment passed to upstream export helpers.
  * Only sets the export-relevant keys; never invents element internals.
+ *
+ * Dark mode follows `options.darkMode` only (issue #38). Do not consult
+ * instance settings or prefers-color-scheme — server-side PNG/SVG must stay
+ * deterministic for a given request so the render cache key remains valid.
  */
 export function buildExportAppState(
   sceneAppState: Record<string, unknown> | undefined,
@@ -164,6 +168,7 @@ export function buildExportAppState(
     exportWithDarkMode: options.darkMode,
     exportScale: options.scale,
     // Match dark-mode export to the theme flag Excalidraw reads for styling.
+    // Driven solely by the request's darkMode bit — not the app chrome theme.
     ...(options.darkMode ? { theme: "dark" } : {}),
   };
 }

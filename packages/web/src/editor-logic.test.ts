@@ -272,6 +272,27 @@ describe("buildDraftPayload / buildCommitPayload", () => {
     });
     assert.deepEqual(body.files, {});
   });
+
+  test("theme is never written to commit or draft payloads (issue #38)", () => {
+    const withTheme: EditorSnapshot = {
+      ...snapshot,
+      appState: {
+        ...(snapshot.appState as object),
+        theme: "dark",
+        viewBackgroundColor: "#fff",
+      },
+    };
+    const commit = buildCommitPayload(withTheme, 1, "flip theme only");
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(commit.appState, "theme"),
+      false,
+    );
+    const draft = buildDraftPayload(withTheme, 1);
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(draft.appState, "theme"),
+      false,
+    );
+  });
 });
 
 describe("file extraction / upload sequencing", () => {
