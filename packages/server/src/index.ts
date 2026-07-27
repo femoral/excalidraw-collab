@@ -95,3 +95,12 @@ export {
   slugifyName,
   SLUG_MAX_LENGTH,
 } from "./scenes.js";
+export {
+  DiffCache,
+  DEFAULT_DIFF_CACHE_MAX,
+  diffCacheKey,
+  registerDiffRoutes,
+  SceneDiffService,
+  formatDiff,
+  isEmptyDiff,
+} from "./diff.js";

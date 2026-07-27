@@ -352,7 +352,7 @@ describe("POST/GET /api/scenes/:slug/scene", () => {
     );
   });
 
-  test("stale parentVersion returns 409 with conflict details", async () => {
+  test("stale parentVersion returns 409 with conflict details and diff", async () => {
     const dataDir = tempDataDir();
     const token = "versions-token-stale";
     const { app } = await buildVersionsApp({ dataDir, bootstrapToken: token });
@@ -381,6 +381,13 @@ describe("POST/GET /api/scenes/:slug/scene", () => {
     assert.equal(details.code, "conflict");
     assert.equal(details.head, 1);
     assert.equal(details.parentVersion, 0);
+    // Issue #17: 409 must carry parent→head diff in the same response.
+    assert.ok(details.diff, "conflict details must include diff");
+    assert.equal(details.diff.from, 0);
+    assert.equal(details.diff.to, 1);
+    assert.equal(details.diff.summary.added, 1);
+    assert.equal(details.diff.elements[0]!.op, "add");
+    assert.equal(details.diff.elements[0]!.id, "a");
   });
 
   test("rejected push does not consume a version number", async () => {
