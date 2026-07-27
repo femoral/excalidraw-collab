@@ -1,0 +1,83 @@
+/* Excalidraw fills 100% of its parent; zero-height parents render nothing. */
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: #1b1b1f;
+  background: #f5f5f7;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+.app-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid #d0d0d8;
+  background: #fff;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.app-header nav {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.app-header a {
+  color: #3b5bdb;
+  text-decoration: none;
+}
+
+.app-header a:hover {
+  text-decoration: underline;
+}
+
+.app-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+}
+
+.excalidraw-host {
+  height: 100%;
+  width: 100%;
+}
+
+.placeholder-panel {
+  padding: 1.5rem;
+  max-width: 40rem;
+}
+
+.placeholder-panel h2 {
+  margin-top: 0;
+}
+
+.placeholder-panel code {
+  font-size: 0.9em;
+}

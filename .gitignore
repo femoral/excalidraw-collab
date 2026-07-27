@@ -3,6 +3,9 @@ dist/
 build/
 *.tsbuildinfo
 
+# Excalidraw fonts copied into public/ at build/dev time (not committed)
+packages/web/public/fonts/
+
 # runtime data (sqlite db + content-addressed files)
 data/
 
