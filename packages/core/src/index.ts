@@ -1,6 +1,6 @@
 /**
  * @excalidraw-collab/core — pure TypeScript types, scene normalization,
- * validation, and (future) diff engine / scene digest.
+ * validation, scene digest, and (future) diff engine.
  * Zero runtime dependencies.
  */
 
@@ -37,12 +37,13 @@ export type {
   PushRequest,
   PushResponse,
   ConflictResponse,
-  // Diff / digest (declarations only)
+  // Diff / digest
   ElementBBox,
   PropDelta,
   ElementChange,
   SceneDiff,
   SceneDigest,
+  DigestElement,
 } from "./types.js";
 
 export {
@@ -55,3 +56,11 @@ export {
 export { splitFiles, mergeFiles } from "./files.js";
 
 export { sceneHash } from "./hash.js";
+
+export {
+  digestScene,
+  formatDigest,
+  resolveElementLabel,
+  DEFAULT_DIGEST_MAX_ELEMENTS,
+} from "./digest.js";
+export type { DigestOptions, FormatDigestOptions } from "./digest.js";
