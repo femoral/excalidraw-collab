@@ -8,6 +8,13 @@ import { pullCommand } from "./pull.js";
 import { pushCommand } from "./push.js";
 import { whoamiCommand } from "./whoami.js";
 import { tokenCommand } from "./token.js";
+import { watchCommand } from "./watch.js";
+
+/** Stream handles the dispatcher (and streaming commands) write to. */
+export type IoStreams = {
+  stdout: { write(chunk: string): void };
+  stderr: { write(chunk: string): void };
+};
 
 /** Runtime context passed into every command. */
 export type CommandContext = {
@@ -22,6 +29,16 @@ export type CommandContext = {
    * relative scene file paths. Injectable in tests; defaults to process.cwd().
    */
   cwd: string;
+  /**
+   * stdout/stderr for streaming commands (`watch` JSONL / incremental diffs).
+   * Most commands return a {@link CommandResult} instead of writing.
+   */
+  io?: IoStreams;
+  /**
+   * Abort signal for long-running commands. `watch` stops when aborted;
+   * tests inject a controller to bound the loop without SIGINT.
+   */
+  signal?: AbortSignal;
 };
 
 export type Command = {
@@ -81,3 +98,4 @@ registerCommand(lsCommand);
 registerCommand(newCommand);
 registerCommand(pullCommand);
 registerCommand(pushCommand);
+registerCommand(watchCommand);

@@ -27,6 +27,7 @@ import {
   type VersionRow,
 } from "./db.js";
 import type { SceneDiffService } from "./diff.js";
+import type { SceneEventHub } from "./events.js";
 import { AppError, ErrorCode } from "./errors.js";
 import {
   decodeDataURL,
@@ -334,6 +335,7 @@ const pushBodySchema = {
  *
  * When `diffs` is provided, 409 conflict responses include the structured
  * parent→head diff from that service (shared cache with GET /diff).
+ * When `events` is provided, successful commits notify long-poll waiters.
  */
 export async function registerVersionRoutes(
   app: FastifyInstance,
@@ -342,9 +344,11 @@ export async function registerVersionRoutes(
     store: FileStore;
     /** Shared with GET /diff so conflict diffs hit the same cache. */
     diffs?: SceneDiffService;
+    /** Notified after a successful commit (long-poll `GET /events`). */
+    events?: SceneEventHub;
   },
 ): Promise<void> {
-  const { db, store, diffs } = deps;
+  const { db, store, diffs, events } = deps;
   const authPreHandler = createAuthPreHandler(db);
 
   await app.register(
@@ -540,6 +544,9 @@ export async function registerVersionRoutes(
               details,
             );
           }
+
+          // Wake long-poll waiters without a DB poll loop.
+          events?.publish(scene.id, result.version.version);
 
           return reply.status(201).send(toPushResponse(result.version));
         },

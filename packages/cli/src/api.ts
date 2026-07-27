@@ -29,14 +29,69 @@ export type ApiFetchOptions = RequestInit & {
   config?: ResolvedConfig;
 };
 
+export type ApiFetchResult<T = unknown> = {
+  status: number;
+  body: T | undefined;
+  /** Raw response text (useful for text/plain diffs). */
+  text: string;
+};
+
+function resolveUrl(reqPath: string, server: string): string {
+  return reqPath.startsWith("http://") || reqPath.startsWith("https://")
+    ? reqPath
+    : new URL(reqPath, server.endsWith("/") ? server : `${server}/`).href;
+}
+
+function buildHeaders(
+  init: RequestInit,
+  token: string | undefined,
+  opts: { accept?: string } = {},
+): Headers {
+  const headers = new Headers(init.headers);
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  if (init.body !== undefined && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  if (!headers.has("Accept")) {
+    headers.set("Accept", opts.accept ?? "application/json");
+  }
+  return headers;
+}
+
+function throwIfNotOk(
+  response: Response,
+  body: unknown,
+  text: string,
+): void {
+  if (response.ok) return;
+  if (isServerErrorBody(body)) {
+    throw new CliError(body.error.message, {
+      code: body.error.code,
+      details: body.error.details,
+    });
+  }
+  throw new CliError(
+    typeof body === "string" && body.length > 0
+      ? body
+      : text.length > 0
+        ? text
+        : `HTTP ${response.status} ${response.statusText}`,
+    {
+      code: "ERROR",
+      details: { status: response.status, body },
+    },
+  );
+}
+
 /**
- * Typed fetch wrapper: attaches Bearer auth, JSON content-type, and unwraps
- * the server's `{ error: { code, message, details? } }` envelope into
- * {@link CliError} carrying the code (exit codes derived via errors.ts).
+ * Low-level fetch: returns HTTP status + body so callers can distinguish
+ * 204 (long-poll timeout) from 200 without a second code path.
  */
-export async function apiFetch<T = unknown>(
+export async function apiFetchResult<T = unknown>(
   options: ApiFetchOptions,
-): Promise<T> {
+): Promise<ApiFetchResult<T>> {
   const { path: reqPath, config, ...init } = options;
   const server = config?.server;
   const token = config?.token;
@@ -48,25 +103,21 @@ export async function apiFetch<T = unknown>(
     );
   }
 
-  const url = reqPath.startsWith("http://") || reqPath.startsWith("https://")
-    ? reqPath
-    : new URL(reqPath, server.endsWith("/") ? server : `${server}/`).href;
-
-  const headers = new Headers(init.headers);
-  if (token && !headers.has("Authorization")) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-  if (init.body !== undefined && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-  if (!headers.has("Accept")) {
-    headers.set("Accept", "application/json");
-  }
+  const url = resolveUrl(reqPath, server);
+  const headers = buildHeaders(init, token);
 
   let response: Response;
   try {
     response = await fetch(url, { ...init, headers });
   } catch (cause) {
+    // Abort is not an error for long-poll watch loops — rethrow as-is so
+    // the caller can treat AbortError as a clean stop.
+    if (
+      cause instanceof Error &&
+      (cause.name === "AbortError" || cause.name === "TimeoutError")
+    ) {
+      throw cause;
+    }
     throw new CliError(
       `Request failed: ${cause instanceof Error ? cause.message : String(cause)}`,
       { code: "ERROR", cause },
@@ -83,23 +134,69 @@ export async function apiFetch<T = unknown>(
     }
   }
 
-  if (!response.ok) {
-    if (isServerErrorBody(body)) {
-      throw new CliError(body.error.message, {
-        code: body.error.code,
-        details: body.error.details,
-      });
-    }
+  throwIfNotOk(response, body, text);
+  return {
+    status: response.status,
+    body: (text.length === 0 ? undefined : body) as T | undefined,
+    text,
+  };
+}
+
+/**
+ * Typed fetch wrapper: attaches Bearer auth, JSON content-type, and unwraps
+ * the server's `{ error: { code, message, details? } }` envelope into
+ * {@link CliError} carrying the code (exit codes derived via errors.ts).
+ */
+export async function apiFetch<T = unknown>(
+  options: ApiFetchOptions,
+): Promise<T> {
+  const result = await apiFetchResult<T>(options);
+  return result.body as T;
+}
+
+/**
+ * Fetch a text/plain body (e.g. `GET /diff?format=text`). Throws on non-OK.
+ */
+export async function apiFetchText(options: ApiFetchOptions): Promise<string> {
+  const { path: reqPath, config, ...init } = options;
+  const server = config?.server;
+  const token = config?.token;
+
+  if (!server) {
     throw new CliError(
-      typeof body === "string" && body.length > 0
-        ? body
-        : `HTTP ${response.status} ${response.statusText}`,
-      {
-        code: "ERROR",
-        details: { status: response.status, body },
-      },
+      "No server configured. Set EXCALICLI_SERVER or run login.",
+      { code: "USAGE" },
     );
   }
 
-  return body as T;
+  const url = resolveUrl(reqPath, server);
+  const headers = buildHeaders(init, token, { accept: "text/plain" });
+
+  let response: Response;
+  try {
+    response = await fetch(url, { ...init, headers });
+  } catch (cause) {
+    if (
+      cause instanceof Error &&
+      (cause.name === "AbortError" || cause.name === "TimeoutError")
+    ) {
+      throw cause;
+    }
+    throw new CliError(
+      `Request failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+      { code: "ERROR", cause },
+    );
+  }
+
+  const text = await response.text();
+  let body: unknown = undefined;
+  if (text.length > 0) {
+    try {
+      body = JSON.parse(text) as unknown;
+    } catch {
+      body = text;
+    }
+  }
+  throwIfNotOk(response, body, text);
+  return text;
 }

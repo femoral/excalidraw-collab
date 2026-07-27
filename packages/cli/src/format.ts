@@ -15,6 +15,11 @@ export type CommandResult = {
    * rendering of `data` is used.
    */
   human?: string;
+  /**
+   * When true, the command already wrote to stdout (e.g. JSONL stream from
+   * `watch`). The dispatcher must not emit a second JSON value / table.
+   */
+  streamed?: boolean;
 };
 
 /** Format a list of row objects as a simple aligned table. */
