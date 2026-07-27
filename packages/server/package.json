@@ -14,6 +14,11 @@
   "scripts": {
     "build": "tsc -b",
     "test": "node --test dist/**/*.test.js",
-    "dev": "tsc -b --watch"
+    "dev": "tsc -b --watch",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@fastify/static": "^10.1.2",
+    "fastify": "^5.10.0"
   }
 }
