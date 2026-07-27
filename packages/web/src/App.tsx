@@ -115,6 +115,8 @@ function routeTitle(route: Route): string {
       return route.slug;
     case "history":
       return `${route.slug} · history`;
+    case "render":
+      return "Render";
     case "notFound":
       return "Not found";
   }

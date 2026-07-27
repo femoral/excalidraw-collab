@@ -15,5 +15,8 @@
     "build": "node --eval \"const{rmSync}=require('node:fs');rmSync('dist',{recursive:true,force:true});rmSync('tsconfig.tsbuildinfo',{force:true})\" && tsc -b",
     "test": "node --test dist/**/*.test.js",
     "dev": "tsc -b --watch"
+  },
+  "dependencies": {
+    "playwright": "^1.52.0"
   }
 }
