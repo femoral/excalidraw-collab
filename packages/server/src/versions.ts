@@ -15,6 +15,7 @@ import {
   SceneValidationError,
   type BinaryFileData,
   type BinaryFiles,
+  type SceneDiff,
   type SceneDocument,
 } from "@excalidraw-collab/core";
 import type { FastifyInstance } from "fastify";
@@ -25,6 +26,7 @@ import {
   type Database,
   type VersionRow,
 } from "./db.js";
+import type { SceneDiffService } from "./diff.js";
 import { AppError, ErrorCode } from "./errors.js";
 import {
   decodeDataURL,
@@ -61,15 +63,17 @@ export type PushVersionResponse = {
 };
 
 /**
- * Conflict details attached to a 409 envelope.
- * Issue #17 will extend this with a structured `diff` field.
+ * Conflict details attached to a 409 envelope (PLAN.md §5).
+ * Carries the structured diff from `parentVersion` → `head` so an agent
+ * that is rejected knows what it missed in one round trip — no follow-up
+ * GET /diff required (and no temptation to retry with --force blindly).
  */
 export type ConflictDetails = {
   code: "conflict";
   head: number;
   parentVersion: number;
-  /** Reserved for issue #17 — omit until the diff engine is wired here. */
-  diff?: unknown;
+  /** Structured element/appState changes between parentVersion and head. */
+  diff: SceneDiff;
 };
 
 /** Canonical empty `.excalidraw` document (head_version === 0). */
@@ -327,15 +331,20 @@ const pushBodySchema = {
 
 /**
  * Register scene version routes under `/api` with Bearer auth.
+ *
+ * When `diffs` is provided, 409 conflict responses include the structured
+ * parent→head diff from that service (shared cache with GET /diff).
  */
 export async function registerVersionRoutes(
   app: FastifyInstance,
   deps: {
     db: Database;
     store: FileStore;
+    /** Shared with GET /diff so conflict diffs hit the same cache. */
+    diffs?: SceneDiffService;
   },
 ): Promise<void> {
-  const { db, store } = deps;
+  const { db, store, diffs } = deps;
   const authPreHandler = createAuthPreHandler(db);
 
   await app.register(
@@ -498,10 +507,31 @@ export async function registerVersionRoutes(
                 404,
               );
             }
+            // One-round-trip conflict: include what the agent missed so it
+            // does not have to call GET /diff (or, worse, --force) next.
+            const conflictDiff = diffs
+              ? diffs.conflictDiff(
+                  scene.id,
+                  result.parentVersion,
+                  result.head,
+                )
+              : {
+                  from: result.parentVersion,
+                  to: result.head,
+                  summary: {
+                    added: 0,
+                    deleted: 0,
+                    updated: 0,
+                    reordered: 0,
+                  },
+                  elements: [],
+                  appState: [],
+                };
             const details: ConflictDetails = {
               code: "conflict",
               head: result.head,
               parentVersion: result.parentVersion,
+              diff: conflictDiff,
             };
             throw new AppError(
               ErrorCode.CONFLICT,

@@ -15,6 +15,7 @@ import {
   errorEnvelope,
   type ErrorEnvelope,
 } from "./errors.js";
+import { registerDiffRoutes, SceneDiffService } from "./diff.js";
 import { FileStore, registerFileRoutes } from "./files.js";
 import { registerSceneRoutes } from "./scenes.js";
 import { registerTokenRoutes } from "./tokens.js";
@@ -43,6 +44,12 @@ export type BuildAppDeps = {
    * created under `config.dataDir`. Inject in tests to share a temp DATA_DIR.
    */
   fileStore?: FileStore;
+  /**
+   * Shared scene-diff service (GET /diff + 409 conflict bodies). When
+   * omitted and `db` + file store are set, a default service is created.
+   * Inject in tests to observe `computeCount` / a small cache bound.
+   */
+  diffs?: SceneDiffService;
 };
 
 function isFastifyError(err: unknown): err is FastifyError {
@@ -132,9 +139,20 @@ export async function buildApp(
         store: fileStore,
         config,
       });
+      // One DiffService for GET /diff and 409 conflict bodies so both share
+      // the same bounded immutable cache.
+      const diffs =
+        deps.diffs ?? new SceneDiffService(deps.db, fileStore);
+      app.decorate("diffs", diffs);
       await registerVersionRoutes(app, {
         db: deps.db,
         store: fileStore,
+        diffs,
+      });
+      await registerDiffRoutes(app, {
+        db: deps.db,
+        store: fileStore,
+        diffs,
       });
     }
   }
@@ -234,5 +252,7 @@ declare module "fastify" {
     db?: Database;
     /** Content-addressed file store (present when db/fileStore is configured). */
     fileStore?: FileStore;
+    /** Scene diff service (present when db/fileStore is configured). */
+    diffs?: SceneDiffService;
   }
 }
