@@ -73,6 +73,12 @@ export type DraftRow = {
   file_ids: string;
   updated_at: string;
   updated_by: string;
+  /**
+   * Scene head version the draft content is based on. Compared to
+   * `scenes.head_version` on GET so the client can see staleness without
+   * inventing its own comparison.
+   */
+  based_on_version: number;
 };
 
 export type TokenRow = {
@@ -151,6 +157,8 @@ export type UpsertDraft = {
   file_ids?: string[] | string;
   updated_at?: string;
   updated_by: string;
+  /** Defaults to 0 when omitted (empty scene / first load). */
+  based_on_version?: number;
 };
 
 export type NewToken = {
@@ -313,6 +321,16 @@ const MIGRATIONS: readonly Migration[] = [
       ALTER TABLE scenes ADD COLUMN deleted_at TEXT;
 
       CREATE INDEX idx_scenes_deleted_at ON scenes(deleted_at);
+    `,
+  },
+  {
+    id: 4,
+    name: "004_drafts_based_on_version",
+    sql: `
+      -- Track which committed head the working copy was based on so GET
+      -- /draft can report staleness explicitly (based_on_version < head).
+      -- Drafts remain one row per scene and are never versioned.
+      ALTER TABLE drafts ADD COLUMN based_on_version INTEGER NOT NULL DEFAULT 0;
     `,
   },
 ];
@@ -779,6 +797,12 @@ export class Database {
         )
         .run(newVersion, created_at, input.sceneId);
 
+      // A committed turn replaces the working copy — clear the draft so
+      // the editor does not resurrect pre-commit keystrokes as "ahead".
+      this.raw
+        .prepare(`DELETE FROM drafts WHERE scene_id = ?`)
+        .run(input.sceneId);
+
       this.raw.exec("COMMIT");
 
       const version = this.getVersion(input.sceneId, newVersion)!;
@@ -895,18 +919,24 @@ export class Database {
     const file_ids = encodeFileIds(input.file_ids);
     const elements = asBuffer(input.elements);
     const app_state = asBuffer(input.app_state);
+    const based_on_version =
+      input.based_on_version === undefined
+        ? 0
+        : Math.max(0, Math.trunc(input.based_on_version));
 
     this.raw
       .prepare(
         `INSERT INTO drafts (
-          scene_id, elements, app_state, file_ids, updated_at, updated_by
-        ) VALUES (?, ?, ?, ?, ?, ?)
+          scene_id, elements, app_state, file_ids, updated_at, updated_by,
+          based_on_version
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(scene_id) DO UPDATE SET
           elements = excluded.elements,
           app_state = excluded.app_state,
           file_ids = excluded.file_ids,
           updated_at = excluded.updated_at,
-          updated_by = excluded.updated_by`,
+          updated_by = excluded.updated_by,
+          based_on_version = excluded.based_on_version`,
       )
       .run(
         input.scene_id,
@@ -915,6 +945,7 @@ export class Database {
         file_ids,
         updated_at,
         input.updated_by,
+        based_on_version,
       );
 
     return this.getDraft(input.scene_id)!;
@@ -927,8 +958,37 @@ export class Database {
     return row ? mapDraft(row) : undefined;
   }
 
-  deleteDraft(sceneId: string): void {
-    this.raw.prepare(`DELETE FROM drafts WHERE scene_id = ?`).run(sceneId);
+  /**
+   * Delete a draft working copy. Returns true when a row was removed.
+   * Used by explicit discard; commits clear drafts inside {@link commitVersion}.
+   */
+  deleteDraft(sceneId: string): boolean {
+    const result = this.raw
+      .prepare(`DELETE FROM drafts WHERE scene_id = ?`)
+      .run(sceneId) as { changes: number };
+    return Number(result.changes) > 0;
+  }
+
+  /** Number of draft rows (optionally for one scene). Tests assert one-row upserts. */
+  countDrafts(sceneId?: string): number {
+    if (sceneId !== undefined) {
+      const row = this.raw
+        .prepare(`SELECT COUNT(*) AS n FROM drafts WHERE scene_id = ?`)
+        .get(sceneId) as { n: number };
+      return Number(row.n);
+    }
+    const row = this.raw
+      .prepare(`SELECT COUNT(*) AS n FROM drafts`)
+      .get() as { n: number };
+    return Number(row.n);
+  }
+
+  /**
+   * Truncate the WAL into the main DB file so size assertions in tests are
+   * not skewed by uncheckpointed frames. No-op-ish on :memory:.
+   */
+  checkpointWal(): void {
+    this.raw.exec(`PRAGMA wal_checkpoint(TRUNCATE)`);
   }
 
   // -------------------------------------------------------------------------
@@ -1132,6 +1192,7 @@ function mapDraft(row: Record<string, unknown>): DraftRow {
     file_ids: String(row.file_ids ?? "[]"),
     updated_at: String(row.updated_at),
     updated_by: String(row.updated_by),
+    based_on_version: Number(row.based_on_version ?? 0),
   };
 }
 

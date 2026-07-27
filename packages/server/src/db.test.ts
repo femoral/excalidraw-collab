@@ -45,7 +45,7 @@ function testConfig(overrides: Partial<Config> = {}): Config {
 }
 
 describe("Database migrations", () => {
-  test("fresh DATA_DIR creates full schema via migrations 001–003", () => {
+  test("fresh DATA_DIR creates full schema via migrations 001–004", () => {
     const dataDir = tempDataDir();
     const db = openDatabase(dataDir);
     try {
@@ -60,13 +60,15 @@ describe("Database migrations", () => {
       ]);
 
       const migrations = db.listMigrations();
-      assert.equal(migrations.length, 3);
+      assert.equal(migrations.length, 4);
       assert.equal(migrations[0]!.id, 1);
       assert.equal(migrations[0]!.name, "001_initial_schema");
       assert.equal(migrations[1]!.id, 2);
       assert.equal(migrations[1]!.name, "002_token_admin_and_meta");
       assert.equal(migrations[2]!.id, 3);
       assert.equal(migrations[2]!.name, "003_scenes_soft_delete");
+      assert.equal(migrations[3]!.id, 4);
+      assert.equal(migrations[3]!.name, "004_drafts_based_on_version");
       assert.equal(typeof migrations[0]!.applied_at, "string");
 
       // File-backed path is under DATA_DIR.
@@ -80,7 +82,7 @@ describe("Database migrations", () => {
     const dataDir = tempDataDir();
     const db1 = openDatabase(dataDir);
     const first = db1.listMigrations();
-    assert.equal(first.length, 3);
+    assert.equal(first.length, 4);
     db1.close();
 
     // Re-open same directory — migrate runs again.
@@ -88,7 +90,7 @@ describe("Database migrations", () => {
     try {
       db2.migrateAgain();
       const second = db2.listMigrations();
-      assert.equal(second.length, 3);
+      assert.equal(second.length, 4);
       assert.equal(second[0]!.id, first[0]!.id);
       assert.equal(second[0]!.name, first[0]!.name);
       assert.equal(second[0]!.applied_at, first[0]!.applied_at);
@@ -96,6 +98,8 @@ describe("Database migrations", () => {
       assert.equal(second[1]!.applied_at, first[1]!.applied_at);
       assert.equal(second[2]!.id, first[2]!.id);
       assert.equal(second[2]!.applied_at, first[2]!.applied_at);
+      assert.equal(second[3]!.id, first[3]!.id);
+      assert.equal(second[3]!.applied_at, first[3]!.applied_at);
 
       // Schema still intact; insert still works.
       db2.insertScene({
@@ -317,9 +321,39 @@ describe("typed data-access layer", () => {
         elements: gzipJson([{ id: "e2", type: "text" }]),
         app_state: appStateBlob,
         updated_by: "human",
+        based_on_version: 1,
       });
       assert.equal(draft.updated_by, "human");
+      assert.equal(draft.based_on_version, 1);
       assert.equal(db.getDraft(scene.id)?.scene_id, scene.id);
+      assert.equal(db.getDraft(scene.id)?.based_on_version, 1);
+      assert.equal(db.countDrafts(), 1);
+
+      // Upsert overwrites the single row (never inserts a second).
+      db.upsertDraft({
+        scene_id: scene.id,
+        elements: gzipJson([{ id: "e3", type: "text" }]),
+        app_state: appStateBlob,
+        updated_by: "human",
+        based_on_version: 1,
+      });
+      assert.equal(db.countDrafts(scene.id), 1);
+
+      // commitVersion clears the draft in the same transaction.
+      const committed = db.commitVersion({
+        sceneId: scene.id,
+        parentVersion: 1,
+        author: "agent",
+        message: "clears draft",
+        elements: elementsBlob,
+        app_state: appStateBlob,
+        file_ids: [],
+        element_count: 1,
+        scene_hash: "hash-2",
+      });
+      assert.equal(committed.ok, true);
+      assert.equal(db.getDraft(scene.id), undefined);
+      assert.equal(db.countDrafts(), 0);
 
       const tokenHash = hashToken("secret-token-value");
       const token = db.insertToken({

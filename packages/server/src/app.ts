@@ -15,6 +15,7 @@ import {
   errorEnvelope,
   type ErrorEnvelope,
 } from "./errors.js";
+import { registerDraftRoutes } from "./drafts.js";
 import { FileStore, registerFileRoutes } from "./files.js";
 import { registerSceneRoutes } from "./scenes.js";
 import { registerTokenRoutes } from "./tokens.js";
@@ -126,6 +127,7 @@ export async function buildApp(
     seedBootstrapToken(deps.db, config.bootstrapToken);
     await registerTokenRoutes(app, deps.db);
     await registerSceneRoutes(app, deps.db);
+    await registerDraftRoutes(app, { db: deps.db });
     if (fileStore) {
       await registerFileRoutes(app, {
         db: deps.db,

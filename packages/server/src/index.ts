@@ -95,3 +95,9 @@ export {
   slugifyName,
   SLUG_MAX_LENGTH,
 } from "./scenes.js";
+export {
+  registerDraftRoutes,
+  toDraftResponse,
+  type DraftResponse,
+  type PutDraftResponse,
+} from "./drafts.js";
