@@ -1,0 +1,34 @@
+# Local production stack: one service, bind-mounted data directory.
+#
+# From the repo root:
+#   docker compose -f docker/compose.yaml up --build
+# Or from this directory:
+#   docker compose up --build
+#
+# Set BOOTSTRAP_TOKEN before first start (creates the admin token).
+# Example:
+#   BOOTSTRAP_TOKEN=dev-admin docker compose -f docker/compose.yaml up --build
+
+name: excalidraw-collab
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: excalidraw-collab:local
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      PORT: "3000"
+      DATA_DIR: /data
+      BOOTSTRAP_TOKEN: ${BOOTSTRAP_TOKEN:-}
+      RENDER_WORKER: ${RENDER_WORKER:-on}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Baked into the image as defaults; listed here for clarity/overrides.
+      SERVE_STATIC: "true"
+      STATIC_ROOT: /app/public
+    volumes:
+      # Relative to this compose file → repo-root ./data
+      - ../data:/data
+    restart: unless-stopped

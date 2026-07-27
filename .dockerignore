@@ -1,0 +1,34 @@
+# VCS / editor
+.git
+.github
+.grok
+.parley
+.agents
+**/.DS_Store
+
+# Dependencies and build outputs (rebuilt inside the image)
+node_modules
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+coverage
+playwright-report
+test-results
+
+# Runtime data and secrets
+data
+.excalidraw-collab
+.env
+.env.*
+!**/.env.example
+
+# Dev / docs noise not needed for the image build
+**/*.md
+!packages/**/README.md
+.prettierignore
+.prettierrc
+.editorconfig
+.nvmrc
+
+# Host-side CLI local state
+**/.excalidraw-collab
