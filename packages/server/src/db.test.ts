@@ -45,13 +45,14 @@ function testConfig(overrides: Partial<Config> = {}): Config {
 }
 
 describe("Database migrations", () => {
-  test("fresh DATA_DIR creates full schema via migration 001", () => {
+  test("fresh DATA_DIR creates full schema via migrations 001 and 002", () => {
     const dataDir = tempDataDir();
     const db = openDatabase(dataDir);
     try {
       const tables = db.listUserTables();
       assert.deepEqual(tables.sort(), [
         "drafts",
+        "meta",
         "scenes",
         "schema_migrations",
         "tokens",
@@ -59,9 +60,11 @@ describe("Database migrations", () => {
       ]);
 
       const migrations = db.listMigrations();
-      assert.equal(migrations.length, 1);
+      assert.equal(migrations.length, 2);
       assert.equal(migrations[0]!.id, 1);
       assert.equal(migrations[0]!.name, "001_initial_schema");
+      assert.equal(migrations[1]!.id, 2);
+      assert.equal(migrations[1]!.name, "002_token_admin_and_meta");
       assert.equal(typeof migrations[0]!.applied_at, "string");
 
       // File-backed path is under DATA_DIR.
@@ -75,7 +78,7 @@ describe("Database migrations", () => {
     const dataDir = tempDataDir();
     const db1 = openDatabase(dataDir);
     const first = db1.listMigrations();
-    assert.equal(first.length, 1);
+    assert.equal(first.length, 2);
     db1.close();
 
     // Re-open same directory — migrate runs again.
@@ -83,10 +86,12 @@ describe("Database migrations", () => {
     try {
       db2.migrateAgain();
       const second = db2.listMigrations();
-      assert.equal(second.length, 1);
+      assert.equal(second.length, 2);
       assert.equal(second[0]!.id, first[0]!.id);
       assert.equal(second[0]!.name, first[0]!.name);
       assert.equal(second[0]!.applied_at, first[0]!.applied_at);
+      assert.equal(second[1]!.id, first[1]!.id);
+      assert.equal(second[1]!.applied_at, first[1]!.applied_at);
 
       // Schema still intact; insert still works.
       db2.insertScene({
@@ -236,9 +241,16 @@ describe("typed data-access layer", () => {
         id: "tok-1",
         name: "admin",
         token_hash: tokenHash,
+        is_admin: true,
       });
       assert.equal(db.getTokenByHash(tokenHash)?.name, "admin");
       assert.equal(token.last_used_at, null);
+      assert.equal(token.is_admin, true);
+      assert.equal(db.insertToken({
+        id: "tok-2",
+        name: "agent",
+        token_hash: hashToken("agent-secret"),
+      }).is_admin, false);
       db.touchToken(token.id);
       assert.equal(typeof db.getTokenById(token.id)?.last_used_at, "string");
     } finally {

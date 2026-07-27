@@ -28,6 +28,7 @@ async function main(): Promise<void> {
 
   const app = await buildApp({
     config,
+    db,
     readinessCheck: () => db.isHealthy(),
   });
 

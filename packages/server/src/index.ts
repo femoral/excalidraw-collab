@@ -4,6 +4,15 @@
  */
 export { buildApp, type BuildAppDeps, type ReadinessCheck } from "./app.js";
 export {
+  ADMIN_TOKEN_NAME,
+  authorFromIdentity,
+  generateTokenSecret,
+  isAdminIdentity,
+  seedBootstrapToken,
+  tokenHashesEqual,
+  type RequestIdentity,
+} from "./auth.js";
+export {
   loadConfig,
   ConfigError,
   type Config,
@@ -27,10 +36,12 @@ export {
   nowIso,
   DB_FILENAME,
   BUSY_TIMEOUT_MS,
+  META_BOOTSTRAP_COMPLETED,
   type SceneRow,
   type VersionRow,
   type DraftRow,
   type TokenRow,
+  type MetaRow,
   type SchemaMigrationRow,
   type NewScene,
   type NewVersion,
@@ -38,3 +49,4 @@ export {
   type NewToken,
   type OpenDatabaseOptions,
 } from "./db.js";
+export type { TokenCreated, TokenInfo } from "./tokens.js";

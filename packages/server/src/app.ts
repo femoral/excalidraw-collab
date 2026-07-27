@@ -6,13 +6,16 @@ import Fastify, {
   type FastifyServerOptions,
 } from "fastify";
 import fastifyStatic from "@fastify/static";
+import { seedBootstrapToken } from "./auth.js";
 import { type Config, loadConfig } from "./config.js";
+import type { Database } from "./db.js";
 import {
   AppError,
   ErrorCode,
   errorEnvelope,
   type ErrorEnvelope,
 } from "./errors.js";
+import { registerTokenRoutes } from "./tokens.js";
 
 /** Injectable readiness probe; issue #5 will plug SQLite reachability here. */
 export type ReadinessCheck = () => boolean | Promise<boolean>;
@@ -27,6 +30,11 @@ export type BuildAppDeps = {
   readinessCheck?: ReadinessCheck;
   /** Extra Fastify options (tests typically pass `{ logger: false }`). */
   fastifyOpts?: FastifyServerOptions;
+  /**
+   * Open database handle. When provided, bootstrap runs and `/api/tokens`
+   * is registered. Health probes work without it (unit tests of the shell).
+   */
+  db?: Database;
 };
 
 function isFastifyError(err: unknown): err is FastifyError {
@@ -64,6 +72,9 @@ export async function buildApp(
   // Stash config for plugins/routes that need it later without closing over a
   // different object. Later issues can decorate more services here.
   app.decorate("config", config);
+  if (deps.db) {
+    app.decorate("db", deps.db);
+  }
 
   registerErrorHandlers(app, config);
 
@@ -87,6 +98,12 @@ export async function buildApp(
     }
     return { status: "ready" };
   });
+
+  if (deps.db) {
+    // First-boot admin seed (no-op when already bootstrapped or token empty).
+    seedBootstrapToken(deps.db, config.bootstrapToken);
+    await registerTokenRoutes(app, deps.db);
+  }
 
   if (config.serveStatic) {
     await registerStatic(app, config);
@@ -175,9 +192,11 @@ async function registerStatic(
   });
 }
 
-// Augment Fastify with the config decoration so later issues type-check cleanly.
+// Augment Fastify with decorations so later issues type-check cleanly.
 declare module "fastify" {
   interface FastifyInstance {
     config: Config;
+    /** Present when `buildApp` was given a `db` handle. */
+    db?: Database;
   }
 }
