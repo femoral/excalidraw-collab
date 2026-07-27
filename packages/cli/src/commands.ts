@@ -3,6 +3,7 @@ import { formatTable } from "./format.js";
 import type { ResolvedConfig } from "./config.js";
 import { describeCommand } from "./describe.js";
 import { diffCommand } from "./diff.js";
+import { exportCommand } from "./export.js";
 import { loginCommand } from "./login.js";
 import { logCommand } from "./log.js";
 import { lsCommand } from "./ls.js";
@@ -16,8 +17,9 @@ import { watchCommand } from "./watch.js";
 
 /** Stream handles the dispatcher (and streaming commands) write to. */
 export type IoStreams = {
-  stdout: { write(chunk: string): void };
-  stderr: { write(chunk: string): void };
+  /** Accepts strings or binary (export `-o -` PNG/SVG). */
+  stdout: { write(chunk: string | Uint8Array): void };
+  stderr: { write(chunk: string | Uint8Array): void };
 };
 
 /** Runtime context passed into every command. */
@@ -76,7 +78,6 @@ export const CLI_VERSION = "0.0.0";
 
 /**
  * Stub command that exercises both human-table and `--json` output modes.
- * Later issues add watch, lock, export.
  */
 const versionCommand: Command = {
   name: "version",
@@ -107,3 +108,4 @@ registerCommand(watchCommand);
 registerCommand(diffCommand);
 registerCommand(describeCommand);
 registerCommand(logCommand);
+registerCommand(exportCommand);

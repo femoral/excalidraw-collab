@@ -200,3 +200,74 @@ export async function apiFetchText(options: ApiFetchOptions): Promise<string> {
   throwIfNotOk(response, body, text);
   return text;
 }
+
+/** Result of a successful binary (image) fetch. */
+export type ApiBinaryResult = {
+  bytes: Uint8Array;
+  contentType: string | null;
+  status: number;
+};
+
+/**
+ * Fetch a binary body (PNG/SVG render endpoints). On non-OK responses, still
+ * parses a JSON error envelope when present so {@link CliError} carries the
+ * server code and `details.reason` for render-unavailable cases.
+ */
+export async function apiFetchBinary(
+  options: ApiFetchOptions,
+): Promise<ApiBinaryResult> {
+  const { path: reqPath, config, ...init } = options;
+  const server = config?.server;
+  const token = config?.token;
+
+  if (!server) {
+    throw new CliError(
+      "No server configured. Set EXCALICLI_SERVER or run login.",
+      { code: "USAGE" },
+    );
+  }
+
+  const url = resolveUrl(reqPath, server);
+  const headers = buildHeaders(init, token, {
+    accept: "image/png, image/svg+xml, application/json",
+  });
+
+  let response: Response;
+  try {
+    response = await fetch(url, { ...init, headers });
+  } catch (cause) {
+    if (
+      cause instanceof Error &&
+      (cause.name === "AbortError" || cause.name === "TimeoutError")
+    ) {
+      throw cause;
+    }
+    throw new CliError(
+      `Request failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+      { code: "ERROR", cause },
+    );
+  }
+
+  if (!response.ok) {
+    // Error responses are JSON envelopes — read as text so we can unwrap.
+    const text = await response.text();
+    let body: unknown = undefined;
+    if (text.length > 0) {
+      try {
+        body = JSON.parse(text) as unknown;
+      } catch {
+        body = text;
+      }
+    }
+    throwIfNotOk(response, body, text);
+    // throwIfNotOk always throws when !ok; keep TS happy.
+    throw new CliError(`HTTP ${response.status}`, { code: "ERROR" });
+  }
+
+  const buffer = new Uint8Array(await response.arrayBuffer());
+  return {
+    bytes: buffer,
+    contentType: response.headers.get("content-type"),
+    status: response.status,
+  };
+}

@@ -21,10 +21,16 @@ export {
   toErrorEnvelope,
 } from "./errors.js";
 export type { ServerErrorCode, ErrorEnvelope, ExitCodeValue } from "./errors.js";
-export { apiFetch, apiFetchResult, apiFetchText } from "./api.js";
+export {
+  apiFetch,
+  apiFetchResult,
+  apiFetchText,
+  apiFetchBinary,
+} from "./api.js";
 export type {
   ApiFetchOptions,
   ApiFetchResult,
+  ApiBinaryResult,
   ServerErrorBody,
 } from "./api.js";
 export { formatTable, formatHuman, formatJson } from "./format.js";
