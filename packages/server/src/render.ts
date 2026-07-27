@@ -176,18 +176,28 @@ export class SceneRenderService {
 
     const scene = this.loadSceneForRender(key.sceneId, key.version, head);
     this.renderCount += 1;
-    const result = await this.worker.render({
-      scene: {
-        elements: scene.elements,
-        appState: scene.appState as Record<string, unknown> | undefined,
-        files: scene.files ?? null,
-      },
-      format: key.format,
-      options: {
-        scale: key.options.scale,
-        darkMode: key.options.dark,
-      },
-    });
+    let result: {
+      bytes: Uint8Array;
+      mimeType: "image/png" | "image/svg+xml";
+      format: RenderFormat;
+    };
+    try {
+      result = await this.worker.render({
+        scene: {
+          elements: scene.elements,
+          appState: scene.appState as Record<string, unknown> | undefined,
+          files: scene.files ?? null,
+        },
+        format: key.format,
+        options: {
+          scale: key.options.scale,
+          darkMode: key.options.dark,
+        },
+      });
+    } catch (err) {
+      // Optional Playwright missing → same 501 family as RENDER_WORKER=off.
+      throw mapWorkerRenderError(err);
+    }
 
     const bytes = Buffer.from(result.bytes);
     this.cache.put(key, bytes);
@@ -241,13 +251,64 @@ export class SceneRenderService {
   }
 }
 
-/** Actionable 501 when RENDER_WORKER is off. */
+/** Why render is unavailable — surfaced in the 501 envelope `details`. */
+export type RenderUnavailableReason = "disabled" | "not_installed";
+
+/**
+ * Actionable 501 when RENDER_WORKER is off.
+ * `details.reason` is `"disabled"` so operators can distinguish from a
+ * render-free image that skipped optional Playwright.
+ */
 export function renderWorkerDisabledError(): AppError {
   return new AppError(
     ErrorCode.NOT_IMPLEMENTED,
-    "PNG/SVG rendering is disabled (RENDER_WORKER=off). Set RENDER_WORKER=on and ensure Chromium is available (e.g. playwright install chromium) to enable render endpoints.",
+    "PNG/SVG rendering is not available: RENDER_WORKER=off. Set RENDER_WORKER=on and ensure Playwright/Chromium are installed (optional dependency of @excalidraw-collab/render) to enable render endpoints.",
     501,
+    { reason: "disabled" satisfies RenderUnavailableReason },
   );
+}
+
+/**
+ * Actionable 501 when Playwright was not installed (optionalDependency
+ * skipped). Same status/code as {@link renderWorkerDisabledError}; only
+ * `details.reason` differs (`"not_installed"`).
+ */
+export function renderWorkerNotInstalledError(
+  causeMessage?: string,
+): AppError {
+  const details: {
+    reason: RenderUnavailableReason;
+    cause?: string;
+  } = { reason: "not_installed" };
+  if (causeMessage && causeMessage.length > 0) {
+    details.cause = causeMessage;
+  }
+  return new AppError(
+    ErrorCode.NOT_IMPLEMENTED,
+    "PNG/SVG rendering is not available: Playwright is not installed. This deployment was built without render support (optional dependency skipped — e.g. pnpm install --no-optional). Install optional dependencies or rebuild with Playwright, then set RENDER_WORKER=on.",
+    501,
+    details,
+  );
+}
+
+/**
+ * Map a worker failure into an HTTP-facing error. `NOT_INSTALLED` becomes
+ * 501; other errors rethrow unchanged (AppError) or as INTERNAL.
+ */
+export function mapWorkerRenderError(err: unknown): never {
+  if (err instanceof AppError) throw err;
+  if (isRenderNotInstalledError(err)) {
+    const message = err instanceof Error ? err.message : undefined;
+    throw renderWorkerNotInstalledError(message);
+  }
+  throw err;
+}
+
+/** Duck-type RenderError from @excalidraw-collab/render (no static import of Playwright). */
+export function isRenderNotInstalledError(err: unknown): boolean {
+  if (err === null || typeof err !== "object") return false;
+  const e = err as { name?: string; code?: string };
+  return e.name === "RenderError" && e.code === "NOT_INSTALLED";
 }
 
 /** Default scale when `?scale=` is omitted. */

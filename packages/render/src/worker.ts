@@ -1,16 +1,19 @@
 /**
  * Playwright-backed render worker.
  *
- * This module is the only place that imports `playwright`. Callers must load
- * it via dynamic `import()` so `RENDER_WORKER=off` never pulls Chromium in.
+ * Playwright is loaded only via {@link loadPlaywright} (dynamic import) so:
+ *   - `RENDER_WORKER=off` never pulls this module in at all (callers use
+ *     `openRenderWorker`, which skips `./worker.js`)
+ *   - a deployment that skipped optionalDependencies fails with a clean
+ *     {@link RenderError} `NOT_INSTALLED` instead of `ERR_MODULE_NOT_FOUND`
  */
-import {
-  chromium,
-  type Browser,
-  type BrowserContext,
-  type BrowserServer,
-  type Page,
+import type {
+  Browser,
+  BrowserContext,
+  BrowserServer,
+  Page,
 } from "playwright";
+import { loadPlaywright } from "./playwright-loader.js";
 import {
   RENDER_MSG,
   type PageRenderRequest,
@@ -203,6 +206,9 @@ export function createRenderWorker(
         browserServer = null;
         browserPid = null;
       }
+
+      // Dynamic import: optionalDependency may be absent in render-free images.
+      const { chromium } = await loadPlaywright();
 
       // launchServer exposes the OS process so recovery tests can SIGKILL it;
       // plain launch() no longer surfaces process() on the Browser type.

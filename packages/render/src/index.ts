@@ -1,9 +1,12 @@
 /**
  * @excalidraw-collab/render — optional headless Chromium export worker.
  *
- * Playwright is a runtime dependency of this package but is only *imported*
- * when the worker is actually enabled. With `RENDER_WORKER=off` (default for
- * the server, and the explicit opt-out), nothing from Playwright is loaded.
+ * Playwright is an **optionalDependency**: production images can
+ * `pnpm install --no-optional` and never download the browser stack. It is
+ * only *imported* when the worker is enabled and a render actually runs.
+ * With `RENDER_WORKER=off` (default for the server), nothing from Playwright
+ * is loaded. When Playwright is missing, callers get {@link RenderError}
+ * with code `NOT_INSTALLED` — never a raw `ERR_MODULE_NOT_FOUND`.
  *
  * Usage:
  *   import { isRenderWorkerEnabled, openRenderWorker } from "@excalidraw-collab/render";
@@ -14,6 +17,7 @@
  */
 
 export {
+  PLAYWRIGHT_NOT_INSTALLED_MESSAGE,
   RenderError,
   type RenderFormat,
   type RenderOptions,
@@ -25,6 +29,13 @@ export {
 } from "./types.js";
 
 export { RENDER_MSG } from "./protocol.js";
+
+export {
+  isPlaywrightModuleNotFound,
+  loadPlaywright,
+  setPlaywrightImporterForTests,
+  type PlaywrightModule,
+} from "./playwright-loader.js";
 
 /**
  * Whether the render worker should be loaded for this process.

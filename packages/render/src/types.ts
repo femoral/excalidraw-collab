@@ -68,7 +68,9 @@ export class RenderError extends Error {
     | "BROWSER_CLOSED"
     | "RENDER_FAILED"
     | "INVALID_REQUEST"
-    | "DISABLED";
+    | "DISABLED"
+    /** Playwright package missing (optionalDependency skipped at install). */
+    | "NOT_INSTALLED";
 
   constructor(
     code: RenderError["code"],
@@ -80,3 +82,13 @@ export class RenderError extends Error {
     this.code = code;
   }
 }
+
+/**
+ * Actionable message when the Playwright package is not on disk
+ * (`optionalDependencies` skipped, e.g. `pnpm install --no-optional`).
+ */
+export const PLAYWRIGHT_NOT_INSTALLED_MESSAGE =
+  "Playwright is not installed. This deployment was built without render support " +
+  "(optional dependency skipped — e.g. pnpm install --no-optional). " +
+  "Install optional dependencies (or rebuild with Playwright) and set RENDER_WORKER=on " +
+  "to enable PNG/SVG rendering.";

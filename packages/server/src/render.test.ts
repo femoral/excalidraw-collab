@@ -345,7 +345,7 @@ describe("parse helpers", () => {
 });
 
 describe("GET /api/scenes/:slug/render.{png,svg}", () => {
-  test("RENDER_WORKER=off returns 501 with actionable message and never calls a worker", async () => {
+  test("RENDER_WORKER=off returns 501 with details.reason=disabled and never calls a worker", async () => {
     const dataDir = tempDataDir();
     const token = "bootstrap-render-off";
     const spy = createMockWorker();
@@ -368,8 +368,10 @@ describe("GET /api/scenes/:slug/render.{png,svg}", () => {
       assert.equal(res.statusCode, 501, res.body);
       const body = res.json() as ErrorEnvelope;
       assert.equal(body.error.code, ErrorCode.NOT_IMPLEMENTED);
+      assert.match(body.error.message, /not available/i);
       assert.match(body.error.message, /RENDER_WORKER/i);
       assert.match(body.error.message, /off/i);
+      assert.deepEqual(body.error.details, { reason: "disabled" });
     }
     assert.equal(spy.callCount, 0);
   });
@@ -402,8 +404,59 @@ describe("GET /api/scenes/:slug/render.{png,svg}", () => {
       headers: bearer(token),
     });
     assert.equal(res.statusCode, 501);
+    const body = res.json() as ErrorEnvelope;
+    assert.equal(body.error.code, ErrorCode.NOT_IMPLEMENTED);
+    assert.deepEqual(body.error.details, { reason: "disabled" });
     assert.equal(app.renders?.worker, null);
     assert.equal(app.renders?.renderCount, 0);
+  });
+
+  test("missing Playwright (worker NOT_INSTALLED) returns 501 with details.reason=not_installed", async () => {
+    const dataDir = tempDataDir();
+    const token = "bootstrap-render-no-pw";
+    // Simulate optionalDependency skipped: worker raises the same shape as
+    // @excalidraw-collab/render's RenderError NOT_INSTALLED (no uninstall).
+    const missingPwWorker: SceneRenderWorker = {
+      async render() {
+        const err = new Error(
+          "Playwright is not installed. This deployment was built without render support.",
+        );
+        err.name = "RenderError";
+        (err as Error & { code: string }).code = "NOT_INSTALLED";
+        throw err;
+      },
+      async close() {
+        // no-op
+      },
+    };
+    const { app, renders } = await buildRenderApp({
+      dataDir,
+      bootstrapToken: token,
+      renderWorker: missingPwWorker,
+      renderWorkerMode: "on",
+    });
+
+    await createSceneWithVersion(app, token, "no-pw");
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/scenes/no-pw/render.png",
+      headers: bearer(token),
+    });
+    assert.equal(res.statusCode, 501, res.body);
+    const body = res.json() as ErrorEnvelope;
+    assert.equal(body.error.code, ErrorCode.NOT_IMPLEMENTED);
+    assert.match(body.error.message, /not available/i);
+    assert.match(body.error.message, /Playwright is not installed/i);
+    assert.match(body.error.message, /optional|no-optional|without render/i);
+    assert.equal(
+      (body.error.details as { reason?: string } | undefined)?.reason,
+      "not_installed",
+    );
+    // Must not surface a raw module-resolution failure as the message.
+    assert.doesNotMatch(body.error.message, /ERR_MODULE_NOT_FOUND/);
+    // Worker was invoked once (cache miss) then mapped to 501 — not a hang.
+    assert.equal(renders.renderCount, 1);
   });
 
   test("second request for same version+options is served from cache without invoking the worker", async () => {
