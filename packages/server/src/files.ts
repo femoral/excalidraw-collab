@@ -10,6 +10,31 @@
  *   files/<fileId>.json  sidecar { mimeType, created }
  *
  * Dedup is free: putting the same content twice writes one object.
+ *
+ * ---------------------------------------------------------------------------
+ * Upstream nanoid fallback — do not "fix" by accepting unverified ids
+ * ---------------------------------------------------------------------------
+ * `generateIdFromFile` is approximately:
+ *
+ *   try {
+ *     const hash = await crypto.subtle.digest("SHA-1", bytes);
+ *     return bytesToHexString(hash);          // 40-char lowercase hex
+ *   } catch {
+ *     return nanoid(40);                      // random, NOT a content hash
+ *   }
+ *
+ * `window.crypto.subtle` is undefined outside a **secure context** (HTTPS or
+ * localhost). A homelab deploy over plain HTTP on a LAN IP therefore hits the
+ * catch path for every pasted image and gets a random 40-char id that is not
+ * necessarily hex and never matches SHA-1(content).
+ *
+ * We deliberately refuse those uploads. Content-addressing only works if the
+ * id describes the bytes; accepting nanoid ids would re-store every "same"
+ * image under a new key and break the 20-version/3 MB footprint goal.
+ * Instead we reject with a distinct error (`reason: "non_secure_context_nanoid"`)
+ * that tells the operator to serve the app over HTTPS or from localhost so
+ * SubtleCrypto is available. A well-formed hex id that simply does not match
+ * the content is a different failure (`reason: "content_hash_mismatch"`).
  */
 import { createHash } from "node:crypto";
 import {
@@ -49,6 +74,30 @@ export const SIDECAR_SUFFIX = ".json";
  * @see generateIdFromFile in @excalidraw/excalidraw
  */
 export const FILE_ID_HEX_RE = /^[0-9a-f]{40}$/;
+
+/**
+ * Error `details.reason` when the claimed id is 40-char hex but does not
+ * equal SHA-1(content) — corruption, client bug, or intentional spoof.
+ */
+export const FILE_ID_REASON_HASH_MISMATCH = "content_hash_mismatch" as const;
+
+/**
+ * Error `details.reason` when the claimed id is not 40-char hex at all.
+ * Strong signal that Excalidraw fell back to `nanoid(40)` because
+ * `window.crypto.subtle` was unavailable (non-secure context).
+ */
+export const FILE_ID_REASON_NON_SECURE_NANOID =
+  "non_secure_context_nanoid" as const;
+
+export type FileIdMismatchReason =
+  | typeof FILE_ID_REASON_HASH_MISMATCH
+  | typeof FILE_ID_REASON_NON_SECURE_NANOID;
+
+export type FileIdMismatchDetails = {
+  reason: FileIdMismatchReason;
+  claimed: string;
+  computed: string;
+};
 
 /** Long-lived immutable cache for content-addressed GET responses. */
 export const IMMUTABLE_CACHE_CONTROL =
@@ -162,6 +211,49 @@ function assertValidFileId(fileId: string): void {
   }
 }
 
+/**
+ * Reject a claimed fileId that does not equal the computed content hash.
+ * Splits well-formed-hex mismatch from non-hex (nanoid / non-secure context)
+ * so operators get an actionable message instead of a silent upload failure.
+ *
+ * Never accept the claimed id as authoritative — verification stays strict.
+ */
+export function claimedFileIdMismatchError(
+  claimed: string,
+  computed: string,
+): AppError {
+  if (!FILE_ID_HEX_RE.test(claimed)) {
+    const details: FileIdMismatchDetails = {
+      reason: FILE_ID_REASON_NON_SECURE_NANOID,
+      claimed,
+      computed,
+    };
+    return new AppError(
+      ErrorCode.VALIDATION,
+      "claimed fileId is not a content hash (expected 40-char lowercase SHA-1 hex). " +
+        "Excalidraw's generateIdFromFile falls back to nanoid(40) when " +
+        "window.crypto.subtle is unavailable — common when the app is served " +
+        "over plain HTTP on a LAN address. Serve the app over HTTPS or from " +
+        "localhost so SubtleCrypto works; do not expect the server to accept " +
+        "random (non-hash) file ids.",
+      400,
+      details,
+    );
+  }
+
+  const details: FileIdMismatchDetails = {
+    reason: FILE_ID_REASON_HASH_MISMATCH,
+    claimed,
+    computed,
+  };
+  return new AppError(
+    ErrorCode.VALIDATION,
+    "fileId does not match content hash",
+    400,
+    details,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // FileStore
 // ---------------------------------------------------------------------------
@@ -237,15 +329,7 @@ export class FileStore {
     const fileId = hashFileContent(bytes);
     if (input.claimedFileId !== undefined) {
       if (input.claimedFileId !== fileId) {
-        throw new AppError(
-          ErrorCode.VALIDATION,
-          "fileId does not match content hash",
-          400,
-          {
-            claimed: input.claimedFileId,
-            computed: fileId,
-          },
-        );
+        throw claimedFileIdMismatchError(input.claimedFileId, fileId);
       }
     }
 
@@ -572,9 +656,8 @@ async function handleUpload(
       typeof claimedHeader === "string" && claimedHeader.length > 0
         ? claimedHeader
         : undefined;
-    if (claimedFileId !== undefined) {
-      assertValidFileId(claimedFileId);
-    }
+    // Do not pre-filter non-hex ids here: put() rejects with the
+    // non_secure_context_nanoid vs content_hash_mismatch distinction.
     const result = store.put({
       bytes: body,
       mimeType: contentType || "application/octet-stream",
@@ -612,18 +695,10 @@ async function handleUpload(
       throw new AppError(ErrorCode.VALIDATION, "dataURL is required", 400);
     }
 
-    // Validate claimed id shape early for clearer errors.
-    if (!FILE_ID_HEX_RE.test(body.id)) {
-      throw new AppError(
-        ErrorCode.VALIDATION,
-        `fileId must be a 40-char lowercase SHA-1 hex digest; got ${JSON.stringify(body.id)}`,
-        400,
-      );
-    }
-
     const decoded = decodeDataURL(body.dataURL);
     // Prefer the explicit mimeType field when present; dataURL header is fallback.
     const mimeType = body.mimeType || decoded.mimeType;
+    // Claimed id verified in put() with distinct mismatch reasons (see module header).
     const result = store.put({
       bytes: decoded.bytes,
       mimeType,

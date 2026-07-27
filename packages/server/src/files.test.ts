@@ -24,10 +24,13 @@ import { AppError, ErrorCode, type ErrorEnvelope } from "./errors.js";
 import {
   FileStore,
   FILES_SUBDIR,
+  FILE_ID_REASON_HASH_MISMATCH,
+  FILE_ID_REASON_NON_SECURE_NANOID,
   gcUnreferencedFiles,
   hashFileContent,
   IMMUTABLE_CACHE_CONTROL,
   SIDECAR_SUFFIX,
+  type FileIdMismatchDetails,
 } from "./files.js";
 
 const tempDirs: string[] = [];
@@ -173,18 +176,56 @@ describe("FileStore put/get/dedup", () => {
     assert.equal(got.mimeType, "image/png");
   });
 
-  test("rejects mismatched claimed fileId", () => {
+  test("rejects well-formed hex fileId that does not match content hash", () => {
     const store = new FileStore(tempDataDir(), 1024 * 1024);
+    const wrongHex = "a".repeat(40);
     assert.throws(
       () =>
         store.put({
           bytes: PNG_BYTES,
           mimeType: "image/png",
-          claimedFileId: "a".repeat(40),
+          claimedFileId: wrongHex,
         }),
       (err: unknown) => {
-        assert.ok(err instanceof Error);
+        assert.ok(err instanceof AppError);
+        assert.equal(err.code, ErrorCode.VALIDATION);
+        assert.equal(err.statusCode, 400);
         assert.match(err.message, /does not match content hash/);
+        const details = err.details as FileIdMismatchDetails;
+        assert.equal(details.reason, FILE_ID_REASON_HASH_MISMATCH);
+        assert.equal(details.claimed, wrongHex);
+        assert.equal(details.computed, PNG_FILE_ID);
+        return true;
+      },
+    );
+  });
+
+  test("rejects non-hex nanoid-like fileId with non-secure-context guidance", () => {
+    const store = new FileStore(tempDataDir(), 1024 * 1024);
+    // nanoid alphabet is URL-safe (A-Za-z0-9_-) — not pure hex. Length 40
+    // matches generateIdFromFile's `nanoid(40)` fallback.
+    const nanoidLike = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-AB";
+    assert.equal(nanoidLike.length, 40);
+    assert.ok(!/^[0-9a-f]{40}$/.test(nanoidLike));
+
+    assert.throws(
+      () =>
+        store.put({
+          bytes: PNG_BYTES,
+          mimeType: "image/png",
+          claimedFileId: nanoidLike,
+        }),
+      (err: unknown) => {
+        assert.ok(err instanceof AppError);
+        assert.equal(err.code, ErrorCode.VALIDATION);
+        assert.equal(err.statusCode, 400);
+        assert.match(err.message, /nanoid/i);
+        assert.match(err.message, /HTTPS|localhost/i);
+        assert.match(err.message, /crypto\.subtle|SubtleCrypto/i);
+        const details = err.details as FileIdMismatchDetails;
+        assert.equal(details.reason, FILE_ID_REASON_NON_SECURE_NANOID);
+        assert.equal(details.claimed, nanoidLike);
+        assert.equal(details.computed, PNG_FILE_ID);
         return true;
       },
     );
@@ -331,19 +372,23 @@ describe("HTTP /api/files", () => {
     const env = bad.json() as ErrorEnvelope;
     assert.equal(env.error.code, ErrorCode.VALIDATION);
     assert.match(env.error.message, /does not match content hash/);
+    const details = env.error.details as FileIdMismatchDetails;
+    assert.equal(details.reason, FILE_ID_REASON_HASH_MISMATCH);
+    assert.equal(details.computed, PNG_FILE_ID);
   });
 
-  test("mismatched JSON fileId is rejected", async () => {
+  test("JSON hex fileId that mismatches content → content_hash_mismatch", async () => {
     const dataDir = tempDataDir();
     const token = "bootstrap-files-token-4";
     const { app } = await buildFilesApp({ dataDir, bootstrapToken: token });
+    const wrongHex = "c".repeat(40);
 
     const res = await app.inject({
       method: "POST",
       url: "/api/files",
       headers: { ...bearer(token), "content-type": "application/json" },
       payload: {
-        id: "c".repeat(40),
+        id: wrongHex,
         mimeType: "image/png",
         dataURL: PNG_DATA_URL,
       },
@@ -352,6 +397,40 @@ describe("HTTP /api/files", () => {
     const env = res.json() as ErrorEnvelope;
     assert.equal(env.error.code, ErrorCode.VALIDATION);
     assert.match(env.error.message, /does not match content hash/);
+    const details = env.error.details as FileIdMismatchDetails;
+    assert.equal(details.reason, FILE_ID_REASON_HASH_MISMATCH);
+    assert.equal(details.claimed, wrongHex);
+    assert.equal(details.computed, PNG_FILE_ID);
+  });
+
+  test("JSON non-hex (nanoid) fileId → non_secure_context_nanoid + HTTPS hint", async () => {
+    const dataDir = tempDataDir();
+    const token = "bootstrap-files-token-4b";
+    const { app } = await buildFilesApp({ dataDir, bootstrapToken: token });
+    // 40 chars, nanoid alphabet — not SHA-1 hex.
+    const nanoidLike = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-AB";
+    assert.equal(nanoidLike.length, 40);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/files",
+      headers: { ...bearer(token), "content-type": "application/json" },
+      payload: {
+        id: nanoidLike,
+        mimeType: "image/png",
+        dataURL: PNG_DATA_URL,
+      },
+    });
+    assert.equal(res.statusCode, 400);
+    const env = res.json() as ErrorEnvelope;
+    assert.equal(env.error.code, ErrorCode.VALIDATION);
+    assert.match(env.error.message, /nanoid/i);
+    assert.match(env.error.message, /HTTPS|localhost/i);
+    assert.match(env.error.message, /crypto\.subtle|SubtleCrypto/i);
+    const details = env.error.details as FileIdMismatchDetails;
+    assert.equal(details.reason, FILE_ID_REASON_NON_SECURE_NANOID);
+    assert.equal(details.claimed, nanoidLike);
+    assert.equal(details.computed, PNG_FILE_ID);
   });
 
   test("oversized upload is rejected cleanly (not a crash)", async () => {
