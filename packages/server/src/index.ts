@@ -161,8 +161,13 @@ export {
 } from "./drafts.js";
 export {
   EVENTS_TIMEOUT_MS,
+  GLOBAL_EVENT_BUFFER_LIMIT,
   registerEventRoutes,
   SceneEventHub,
+  type GlobalSceneEvent,
+  type MultiplexedEventsResponse,
+  type PublishLockDetail,
+  type PublishVersionDetail,
   type SceneEventResponse,
 } from "./events.js";
 export {

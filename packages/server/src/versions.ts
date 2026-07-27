@@ -32,6 +32,7 @@ import {
 import type { SceneDiffService } from "./diff.js";
 import type { SceneEventHub } from "./events.js";
 import { AppError, ErrorCode } from "./errors.js";
+import { toLock } from "./scenes.js";
 import {
   decodeDataURL,
   FILE_ID_HEX_RE,
@@ -782,7 +783,14 @@ export async function registerVersionRoutes(
               { from: head, to: result.version.version },
             );
 
-            events?.publish(scene.id, result.version.version);
+            const locked = db.getSceneById(scene.id);
+            events?.publishVersion({
+              sceneId: scene.id,
+              slug: scene.slug,
+              headVersion: result.version.version,
+              version: toVersionInfo(result.version),
+              lock: locked ? toLock(locked) : null,
+            });
 
             const body: PushVersionResponse & MergePushExtras = {
               ...toPushResponse(result.version),
@@ -869,7 +877,14 @@ export async function registerVersionRoutes(
           }
 
           // Wake long-poll waiters without a DB poll loop.
-          events?.publish(scene.id, result.version.version);
+          const locked = db.getSceneById(scene.id);
+          events?.publishVersion({
+            sceneId: scene.id,
+            slug: scene.slug,
+            headVersion: result.version.version,
+            version: toVersionInfo(result.version),
+            lock: locked ? toLock(locked) : null,
+          });
 
           return reply.status(201).send(toPushResponse(result.version));
         },

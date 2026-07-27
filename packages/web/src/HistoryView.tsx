@@ -8,6 +8,7 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
   type MouseEvent,
@@ -21,6 +22,7 @@ import {
   type VersionInfo,
 } from "./api.ts";
 import {
+  appendRemoteVersion,
   buildRestorePayload,
   elementHeadline,
   formatChangeCounts,
@@ -33,13 +35,25 @@ import {
   prioritizeDiff,
   resolveDiffRange,
   selectionRole,
+  shouldAppendRemoteVersion,
   toggleVersionSelection,
   totalChangeCount,
   versionEditorPath,
+  versionInfoFromSceneEvent,
   type DiffSection,
   type DiffViewItem,
   type PrioritizedDiffView,
 } from "./history-logic.ts";
+import {
+  initialPollState,
+  pollAdvanceSince,
+  pollBeginWait,
+  pollNextDelayMs,
+  pollOnError,
+  pollOnEvent,
+  pollOnTimeout,
+  pollStop,
+} from "./what-changed-logic.ts";
 
 export type HistoryViewProps = {
   slug: string;
@@ -91,13 +105,22 @@ export function HistoryView({
 
   const titleId = useId();
 
+  /** Per-scene long-poll cursor (head version watermark). */
+  const pollSinceRef = useRef(0);
+  const selfNameRef = useRef<string | null>(null);
+  const headVersionRef = useRef(0);
+
   // ----- load timeline ------------------------------------------------------
 
   const loadTimeline = useCallback(async () => {
     setTimeline({ kind: "loading" });
     setRestoreError(null);
     try {
-      const page = await api.listVersions(slug, { limit: 100, offset: 0 });
+      const [page, who] = await Promise.all([
+        api.listVersions(slug, { limit: 100, offset: 0 }),
+        api.whoami().catch(() => null),
+      ]);
+      selfNameRef.current = who?.name ?? null;
       const versions = orderVersionsNewestFirst(page.versions);
 
       // Per-commit change counts (parent → version). Bounded parallelism.
@@ -123,6 +146,8 @@ export function HistoryView({
         ),
       );
 
+      headVersionRef.current = page.headVersion;
+      pollSinceRef.current = page.headVersion;
       setTimeline({
         kind: "ready",
         versions,
@@ -142,6 +167,127 @@ export function HistoryView({
   useEffect(() => {
     void loadTimeline();
   }, [loadTimeline]);
+
+  // ----- long-poll: append remote versions without moving selection ---------
+
+  useEffect(() => {
+    if (timeline.kind !== "ready") return;
+
+    let cancelled = false;
+    const ac = new AbortController();
+    let poll = initialPollState(pollSinceRef.current);
+
+    const sleep = (ms: number) =>
+      new Promise<void>((resolve) => {
+        const t = window.setTimeout(() => resolve(), ms);
+        ac.signal.addEventListener(
+          "abort",
+          () => {
+            window.clearTimeout(t);
+            resolve();
+          },
+          { once: true },
+        );
+      });
+
+    void (async () => {
+      while (!cancelled && !ac.signal.aborted) {
+        poll = pollAdvanceSince(poll, pollSinceRef.current);
+        const delay = pollNextDelayMs(poll);
+        if (delay === Number.POSITIVE_INFINITY) break;
+        if (delay > 0) {
+          await sleep(delay);
+          if (cancelled || ac.signal.aborted) break;
+        }
+
+        poll = pollBeginWait(poll);
+        try {
+          const event = await api.getSceneEvents(slug, pollSinceRef.current, {
+            signal: ac.signal,
+          });
+          if (cancelled || ac.signal.aborted) break;
+
+          if (!event) {
+            poll = pollOnTimeout(poll);
+            continue;
+          }
+
+          const to =
+            typeof event.headVersion === "number"
+              ? event.headVersion
+              : event.version;
+          if (!Number.isInteger(to) || to <= pollSinceRef.current) {
+            poll = pollOnTimeout(poll);
+            continue;
+          }
+
+          poll = pollOnEvent(poll, to);
+          pollSinceRef.current = to;
+
+          const self = selfNameRef.current;
+          if (
+            !shouldAppendRemoteVersion(event, {
+              selfName: self,
+              currentHead: headVersionRef.current,
+            })
+          ) {
+            // Self-authored or already known — advance head watermark only.
+            if (to > headVersionRef.current) {
+              headVersionRef.current = to;
+              setTimeline((s) =>
+                s.kind === "ready" ? { ...s, headVersion: to } : s,
+              );
+            }
+            continue;
+          }
+
+          const info = versionInfoFromSceneEvent(event);
+          headVersionRef.current = to;
+
+          // Fetch parent→version change counts for the new row (non-fatal).
+          let countLabel = "";
+          try {
+            const d = await api.getDiff(
+              slug,
+              parentRefForVersion(info),
+              info.version,
+            );
+            countLabel = formatChangeCounts(d.summary);
+          } catch {
+            countLabel = "";
+          }
+          if (cancelled || ac.signal.aborted) break;
+
+          setTimeline((s) => {
+            if (s.kind !== "ready") return s;
+            const appended = appendRemoteVersion(s.versions, info);
+            return {
+              kind: "ready",
+              versions: appended.versions,
+              total: Math.max(s.total, appended.total),
+              headVersion: Math.max(s.headVersion, appended.headVersion, to),
+              commitCounts: {
+                ...s.commitCounts,
+                [info.version]: countLabel,
+              },
+            };
+          });
+          // Intentionally leave `selected` and `diff` untouched.
+        } catch (err) {
+          if (cancelled || ac.signal.aborted) break;
+          if (err instanceof Error && err.name === "AbortError") break;
+          if (err instanceof ApiError && err.isUnauthorized) break;
+          poll = pollOnError(poll);
+        }
+      }
+      poll = pollStop(poll);
+    })();
+
+    return () => {
+      cancelled = true;
+      ac.abort();
+    };
+  }, [api, slug, timeline.kind]);
 
   // ----- load diff when pair resolves ---------------------------------------
 

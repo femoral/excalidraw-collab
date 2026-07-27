@@ -17,6 +17,7 @@ import { openDatabase, type Database } from "./db.js";
 import {
   EVENTS_TIMEOUT_MS,
   SceneEventHub,
+  type MultiplexedEventsResponse,
   type SceneEventResponse,
 } from "./events.js";
 import { ErrorCode, type ErrorEnvelope } from "./errors.js";
@@ -441,5 +442,328 @@ describe("GET /api/scenes/:slug/events", () => {
 
   test("default timeout constant is 30 seconds", () => {
     assert.equal(EVENTS_TIMEOUT_MS, 30_000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Multiplexed GET /api/events?since=N (issue #37)
+// ---------------------------------------------------------------------------
+
+describe("GET /api/events (multiplexed)", () => {
+  const token = "events-mux-bootstrap-token";
+
+  test("since cursor: returns buffered events past since immediately", async () => {
+    const dataDir = tempDataDir();
+    const { app } = await buildEventsApp({
+      dataDir,
+      bootstrapToken: token,
+      eventsTimeoutMs: 5_000,
+    });
+    await createScene(app, token, "Arch", "arch");
+    await createScene(app, token, "Flow", "flow");
+    await pushVersion(app, token, "arch", 0, [rect("a")], "arch-v1");
+    await pushVersion(app, token, "flow", 0, [rect("b")], "flow-v1");
+    await pushVersion(app, token, "arch", 1, [rect("a"), rect("c")], "arch-v2");
+
+    const t0 = Date.now();
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/events?since=0",
+      headers: bearer(token),
+    });
+    const elapsed = Date.now() - t0;
+
+    assert.equal(res.statusCode, 200, res.body);
+    assert.ok(elapsed < 300, `expected immediate 200, took ${elapsed}ms`);
+    const body = res.json() as MultiplexedEventsResponse;
+    assert.ok(body.events.length >= 3, `expected ≥3 events, got ${body.events.length}`);
+    assert.equal(body.cursor, body.events[body.events.length - 1]!.seq);
+    // Events are ordered by ascending seq.
+    for (let i = 1; i < body.events.length; i++) {
+      assert.ok(body.events[i]!.seq > body.events[i - 1]!.seq);
+    }
+    const slugs = new Set(body.events.map((e) => e.slug));
+    assert.ok(slugs.has("arch"));
+    assert.ok(slugs.has("flow"));
+    const lastArch = [...body.events].reverse().find((e) => e.slug === "arch");
+    assert.ok(lastArch);
+    assert.equal(lastArch!.kind, "version");
+    assert.equal(lastArch!.headVersion, 2);
+    assert.equal(lastArch!.message, "arch-v2");
+  });
+
+  test("since cursor: advancing past last seq yields empty or wait", async () => {
+    const dataDir = tempDataDir();
+    const { app } = await buildEventsApp({
+      dataDir,
+      bootstrapToken: token,
+      eventsTimeoutMs: 50,
+    });
+    await createScene(app, token, "Arch", "arch");
+    await pushVersion(app, token, "arch", 0, [rect("a")], "v1");
+
+    const first = await app.inject({
+      method: "GET",
+      url: "/api/events?since=0",
+      headers: bearer(token),
+    });
+    assert.equal(first.statusCode, 200, first.body);
+    const { cursor } = first.json() as MultiplexedEventsResponse;
+    assert.ok(cursor >= 1);
+
+    // since == cursor: nothing new → 204 timeout.
+    const t0 = Date.now();
+    const idle = await app.inject({
+      method: "GET",
+      url: `/api/events?since=${cursor}`,
+      headers: bearer(token),
+    });
+    const elapsed = Date.now() - t0;
+    assert.equal(idle.statusCode, 204, idle.body);
+    assert.ok(elapsed >= 40, `timeout too early: ${elapsed}ms`);
+  });
+
+  test("since cursor resync when client is ahead of hub (restart)", async () => {
+    const dataDir = tempDataDir();
+    const { app } = await buildEventsApp({
+      dataDir,
+      bootstrapToken: token,
+      eventsTimeoutMs: 5_000,
+    });
+    await createScene(app, token, "Arch", "arch");
+
+    const t0 = Date.now();
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/events?since=999999",
+      headers: bearer(token),
+    });
+    const elapsed = Date.now() - t0;
+    assert.equal(res.statusCode, 200, res.body);
+    assert.ok(elapsed < 300, `resync should be immediate, took ${elapsed}ms`);
+    const body = res.json() as MultiplexedEventsResponse;
+    assert.equal(body.events.length, 0);
+    assert.equal(body.cursor, 0);
+  });
+
+  test("notify path: in-flight multiplexed poll resolves on push", async () => {
+    const dataDir = tempDataDir();
+    const { app } = await buildEventsApp({
+      dataDir,
+      bootstrapToken: token,
+      eventsTimeoutMs: 5_000,
+    });
+    await createScene(app, token, "Arch", "arch");
+    await pushVersion(app, token, "arch", 0, [rect("a")], "initial");
+
+    // Establish cursor.
+    const boot = await app.inject({
+      method: "GET",
+      url: "/api/events?since=0",
+      headers: bearer(token),
+    });
+    assert.equal(boot.statusCode, 200, boot.body);
+    const { cursor } = boot.json() as MultiplexedEventsResponse;
+
+    const pending = app.inject({
+      method: "GET",
+      url: `/api/events?since=${cursor}`,
+      headers: bearer(token),
+    });
+    await new Promise<void>((r) => setImmediate(r));
+    await new Promise<void>((r) => setImmediate(r));
+
+    const t0 = Date.now();
+    await pushVersion(app, token, "arch", 1, [rect("a"), rect("b")], "second");
+    const res = await pending;
+    const elapsed = Date.now() - t0;
+
+    assert.equal(res.statusCode, 200, res.body);
+    assert.ok(elapsed < 1000, `mux notify should react within 1s, took ${elapsed}ms`);
+    const body = res.json() as MultiplexedEventsResponse;
+    assert.ok(body.events.length >= 1);
+    assert.ok(body.cursor > cursor);
+    const ev = body.events[body.events.length - 1]!;
+    assert.equal(ev.kind, "version");
+    assert.equal(ev.slug, "arch");
+    assert.equal(ev.headVersion, 2);
+    assert.equal(ev.message, "second");
+  });
+
+  test("lock claim/release appear on the multiplexed stream", async () => {
+    const dataDir = tempDataDir();
+    const { app } = await buildEventsApp({
+      dataDir,
+      bootstrapToken: token,
+      eventsTimeoutMs: 5_000,
+    });
+    await createScene(app, token, "Arch", "arch");
+
+    // Park a waiter at cursor 0 before any events exist.
+    const pending = app.inject({
+      method: "GET",
+      url: "/api/events?since=0",
+      headers: bearer(token),
+    });
+    await new Promise<void>((r) => setImmediate(r));
+    await new Promise<void>((r) => setImmediate(r));
+
+    const claim = await app.inject({
+      method: "POST",
+      url: "/api/scenes/arch/lock",
+      headers: bearer(token),
+      payload: { ttl: 120 },
+    });
+    assert.equal(claim.statusCode, 200, claim.body);
+
+    const res = await pending;
+    assert.equal(res.statusCode, 200, res.body);
+    const body = res.json() as MultiplexedEventsResponse;
+    const lockEv = body.events.find((e) => e.kind === "lock");
+    assert.ok(lockEv, "expected a lock event");
+    assert.equal(lockEv!.slug, "arch");
+    assert.ok(lockEv!.lock);
+    assert.equal(lockEv!.lock!.holder, "admin");
+    assert.equal(lockEv!.actor, "admin");
+
+    // Release fans out too.
+    const cursor2 = body.cursor;
+    const pending2 = app.inject({
+      method: "GET",
+      url: `/api/events?since=${cursor2}`,
+      headers: bearer(token),
+    });
+    await new Promise<void>((r) => setImmediate(r));
+    await new Promise<void>((r) => setImmediate(r));
+
+    const rel = await app.inject({
+      method: "DELETE",
+      url: "/api/scenes/arch/lock",
+      headers: bearer(token),
+    });
+    assert.equal(rel.statusCode, 204, rel.body);
+    const res2 = await pending2;
+    assert.equal(res2.statusCode, 200, res2.body);
+    const body2 = res2.json() as MultiplexedEventsResponse;
+    const unlockEv = body2.events.find((e) => e.kind === "lock");
+    assert.ok(unlockEv);
+    assert.equal(unlockEv!.lock, null);
+  });
+
+  test("per-scene endpoint still works unchanged alongside multiplexed", async () => {
+    const dataDir = tempDataDir();
+    const { app } = await buildEventsApp({
+      dataDir,
+      bootstrapToken: token,
+      eventsTimeoutMs: 5_000,
+    });
+    await createScene(app, token, "Arch", "arch");
+    await pushVersion(app, token, "arch", 0, [rect("a")], "v1");
+
+    const perScene = await app.inject({
+      method: "GET",
+      url: "/api/scenes/arch/events?since=0",
+      headers: bearer(token),
+    });
+    assert.equal(perScene.statusCode, 200, perScene.body);
+    const pe = perScene.json() as SceneEventResponse;
+    assert.equal(pe.headVersion, 1);
+    assert.equal(pe.message, "v1");
+
+    const mux = await app.inject({
+      method: "GET",
+      url: "/api/events?since=0",
+      headers: bearer(token),
+    });
+    assert.equal(mux.statusCode, 200, mux.body);
+    const me = mux.json() as MultiplexedEventsResponse;
+    assert.ok(me.events.some((e) => e.kind === "version" && e.slug === "arch"));
+  });
+
+  test("missing since → 400 VALIDATION", async () => {
+    const dataDir = tempDataDir();
+    const { app } = await buildEventsApp({
+      dataDir,
+      bootstrapToken: token,
+    });
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/events",
+      headers: bearer(token),
+    });
+    assert.equal(res.statusCode, 400);
+    const body = res.json() as ErrorEnvelope;
+    assert.equal(body.error.code, ErrorCode.VALIDATION);
+  });
+
+  test("unauthenticated → 401", async () => {
+    const dataDir = tempDataDir();
+    const { app } = await buildEventsApp({
+      dataDir,
+      bootstrapToken: token,
+    });
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/events?since=0",
+    });
+    assert.equal(res.statusCode, 401);
+  });
+});
+
+describe("SceneEventHub global waiters", () => {
+  test("waitGlobal resolves immediately when buffer is past since", async () => {
+    const hub = new SceneEventHub();
+    hub.publishVersion({
+      sceneId: "s1",
+      slug: "arch",
+      headVersion: 1,
+      version: {
+        version: 1,
+        parentVersion: null,
+        author: "a",
+        message: "m",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        elementCount: 1,
+        sceneHash: "h",
+        thumbnailFileId: null,
+      },
+      lock: null,
+    });
+    const t0 = Date.now();
+    const batch = await hub.waitGlobal(0, { timeoutMs: 5_000 });
+    const elapsed = Date.now() - t0;
+    assert.ok(batch);
+    assert.equal(batch!.length, 1);
+    assert.equal(batch![0]!.slug, "arch");
+    assert.ok(elapsed < 200);
+    assert.equal(hub.globalWaiterCount, 0);
+  });
+
+  test("publishLock wakes global waiters without scene waiters", async () => {
+    const hub = new SceneEventHub();
+    const scenePending = hub.wait("s1", 0, {
+      timeoutMs: 80,
+      getHead: () => 0,
+    });
+    const globalPending = hub.waitGlobal(0, { timeoutMs: 5_000 });
+    await Promise.resolve();
+    assert.equal(hub.waiterCount, 1);
+    assert.equal(hub.globalWaiterCount, 1);
+
+    hub.publishLock({
+      sceneId: "s1",
+      slug: "arch",
+      headVersion: 0,
+      lock: { holder: "agent", expiresAt: "2099-01-01T00:00:00.000Z" },
+      actor: "agent",
+    });
+
+    const global = await globalPending;
+    assert.ok(global);
+    assert.equal(global![0]!.kind, "lock");
+    assert.equal(global![0]!.lock?.holder, "agent");
+
+    const scene = await scenePending;
+    assert.equal(scene, null, "lock must not wake per-scene version waiters");
   });
 });

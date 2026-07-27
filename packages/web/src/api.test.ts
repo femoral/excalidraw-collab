@@ -448,6 +448,61 @@ test("getSceneEvents returns null on 204 timeout", async () => {
   assert.equal(await client.getSceneEvents("arch", 2), null);
 });
 
+test("getEvents multiplexed long-poll returns cursor + events", async () => {
+  let url = "";
+  let signalPassed = false;
+  const ac = new AbortController();
+  const client = createApiClient({
+    getToken: () => "t",
+    onUnauthorized: () => {},
+    fetchImpl: async (input, init) => {
+      url = String(input);
+      signalPassed = init?.signal === ac.signal;
+      return new Response(
+        JSON.stringify({
+          cursor: 12,
+          events: [
+            {
+              seq: 12,
+              sceneId: "s1",
+              slug: "arch",
+              kind: "version",
+              headVersion: 4,
+              version: 4,
+              author: "agent",
+              message: "pushed",
+              createdAt: "2026-01-01T00:00:00.000Z",
+              elementCount: 2,
+              sceneHash: "h4",
+              thumbnailFileId: null,
+              lock: null,
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    },
+  });
+
+  const batch = await client.getEvents(7, { signal: ac.signal });
+  assert.equal(url, "/api/events?since=7");
+  assert.equal(signalPassed, true);
+  assert.ok(batch);
+  assert.equal(batch!.cursor, 12);
+  assert.equal(batch!.events.length, 1);
+  assert.equal(batch!.events[0]!.slug, "arch");
+  assert.equal(batch!.events[0]!.kind, "version");
+});
+
+test("getEvents returns null on 204 timeout", async () => {
+  const client = createApiClient({
+    getToken: () => "t",
+    onUnauthorized: () => {},
+    fetchImpl: async () => new Response(null, { status: 204 }),
+  });
+  assert.equal(await client.getEvents(3), null);
+});
+
 test("mergeScene POSTs to /scene?merge=true (issue #29 seam)", async () => {
   let url = "";
   let method = "";

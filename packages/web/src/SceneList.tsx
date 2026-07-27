@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useRef,
   useState,
   type FormEvent,
   type MouseEvent,
@@ -9,12 +10,15 @@ import {
 } from "react";
 import { ApiError, type ApiClient, type SceneInfo } from "./api.ts";
 import {
+  applyGlobalEventsToList,
   buildCreatePayload,
   buildRenamePayload,
   formatUpdatedAt,
   headAuthorLabel,
   isLockActive,
+  lockExpiryDelayMs,
   reduceSceneList,
+  shouldApplyGlobalEvent,
   versionCount,
   type SceneListStatus,
 } from "./scenes-logic.ts";
@@ -22,6 +26,16 @@ import {
   loadSceneThumbnail,
   type ThumbnailDisplay,
 } from "./thumbnail-logic.ts";
+import {
+  initialPollState,
+  pollAdvanceSince,
+  pollBeginWait,
+  pollNextDelayMs,
+  pollOnError,
+  pollOnEvent,
+  pollOnTimeout,
+  pollStop,
+} from "./what-changed-logic.ts";
 
 export type SceneListProps = {
   api: ApiClient;
@@ -59,12 +73,23 @@ export function SceneList({
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  /** Multiplexed event cursor (global seq, not a version number). */
+  const pollSinceRef = useRef(0);
+  const selfNameRef = useRef<string | null>(null);
+  /** Unknown-scene events force a full list reload instead of a patch. */
+  const needsFullReloadRef = useRef(false);
+
   const load = useCallback(async () => {
     setList((s) => reduceSceneList(s, { type: "load_start" }));
     setActionError(null);
     try {
-      const scenes = await api.listScenes();
+      const [scenes, who] = await Promise.all([
+        api.listScenes(),
+        api.whoami().catch(() => null),
+      ]);
+      selfNameRef.current = who?.name ?? null;
       setList(reduceSceneList({ kind: "idle" }, { type: "load_success", scenes }));
+      needsFullReloadRef.current = false;
     } catch (err) {
       if (err instanceof ApiError && err.isUnauthorized) {
         setList(reduceSceneList({ kind: "idle" }, { type: "unauthorized" }));
@@ -82,6 +107,122 @@ export function SceneList({
   useEffect(() => {
     void load();
   }, [load]);
+
+  // ----- multiplexed long-poll (one connection for all scenes) --------------
+
+  useEffect(() => {
+    if (list.kind !== "ready") return;
+
+    let cancelled = false;
+    const ac = new AbortController();
+    let poll = initialPollState(pollSinceRef.current);
+
+    const sleep = (ms: number) =>
+      new Promise<void>((resolve) => {
+        const t = window.setTimeout(() => resolve(), ms);
+        ac.signal.addEventListener(
+          "abort",
+          () => {
+            window.clearTimeout(t);
+            resolve();
+          },
+          { once: true },
+        );
+      });
+
+    void (async () => {
+      while (!cancelled && !ac.signal.aborted) {
+        if (needsFullReloadRef.current) {
+          needsFullReloadRef.current = false;
+          try {
+            const scenes = await api.listScenes();
+            if (cancelled || ac.signal.aborted) break;
+            setList((s) =>
+              reduceSceneList(s, { type: "replace", scenes }),
+            );
+          } catch (err) {
+            if (cancelled || ac.signal.aborted) break;
+            if (err instanceof ApiError && err.isUnauthorized) {
+              onUnauthorized?.();
+              break;
+            }
+            poll = pollOnError(poll);
+            continue;
+          }
+        }
+
+        poll = pollAdvanceSince(poll, pollSinceRef.current);
+        const delay = pollNextDelayMs(poll);
+        if (delay === Number.POSITIVE_INFINITY) break;
+        if (delay > 0) {
+          await sleep(delay);
+          if (cancelled || ac.signal.aborted) break;
+        }
+
+        poll = pollBeginWait(poll);
+        try {
+          const batch = await api.getEvents(pollSinceRef.current, {
+            signal: ac.signal,
+          });
+          if (cancelled || ac.signal.aborted) break;
+
+          if (!batch) {
+            poll = pollOnTimeout(poll);
+            continue;
+          }
+
+          const nextCursor =
+            typeof batch.cursor === "number" && batch.cursor >= 0
+              ? batch.cursor
+              : pollSinceRef.current;
+          poll = pollOnEvent(poll, nextCursor);
+          pollSinceRef.current = nextCursor;
+
+          if (!batch.events || batch.events.length === 0) {
+            // Cursor resync (empty batch) — nothing to apply.
+            continue;
+          }
+
+          const self = selfNameRef.current;
+          setList((s) => {
+            if (s.kind !== "ready") return s;
+            const { scenes, changed } = applyGlobalEventsToList(
+              s.scenes,
+              batch.events,
+              self,
+            );
+            // Events for unknown slugs (created elsewhere) need a full reload.
+            const known = new Set(s.scenes.map((sc) => sc.slug));
+            const unknown = batch.events.some(
+              (e) =>
+                Boolean(e.slug) &&
+                !known.has(e.slug) &&
+                shouldApplyGlobalEvent(e, self),
+            );
+            if (unknown) {
+              needsFullReloadRef.current = true;
+            }
+            if (!changed) return s;
+            return reduceSceneList(s, { type: "replace", scenes });
+          });
+        } catch (err) {
+          if (cancelled || ac.signal.aborted) break;
+          if (err instanceof Error && err.name === "AbortError") break;
+          if (err instanceof ApiError && err.isUnauthorized) {
+            onUnauthorized?.();
+            break;
+          }
+          poll = pollOnError(poll);
+        }
+      }
+      poll = pollStop(poll);
+    })();
+
+    return () => {
+      cancelled = true;
+      ac.abort();
+    };
+  }, [api, list.kind, onUnauthorized]);
 
   async function handleCreate(event: FormEvent) {
     event.preventDefault();
@@ -421,7 +562,6 @@ function SceneCard({
   onRename: () => void;
   onDelete: () => void;
 }): ReactElement {
-  const locked = isLockActive(scene.lock);
   const href = `/s/${encodeURIComponent(scene.slug)}`;
   const versions = versionCount(scene);
   const author = headAuthorLabel(scene);
@@ -471,6 +611,18 @@ function SceneCard({
     };
   }, [api, scene.slug, scene.headVersion, scene.thumbnailFileId]);
 
+  // Client-side lock TTL: clear the badge when expiresAt elapses without a
+  // server event (locks are advisory and expire with no commit).
+  const [lockNow, setLockNow] = useState(() => Date.now());
+  useEffect(() => {
+    const delay = lockExpiryDelayMs(scene.lock, Date.now());
+    if (delay === null) return;
+    const t = window.setTimeout(() => setLockNow(Date.now()), delay);
+    return () => window.clearTimeout(t);
+  }, [scene.lock, scene.lock?.expiresAt]);
+
+  const lockLive = isLockActive(scene.lock, lockNow);
+
   return (
     <article className="scene-card">
       <a
@@ -501,7 +653,7 @@ function SceneCard({
               {scene.name}
             </a>
           </h3>
-          {locked && scene.lock ? (
+          {lockLive && scene.lock ? (
             <span
               className="lock-badge"
               title={`Turn held by ${scene.lock.holder}`}

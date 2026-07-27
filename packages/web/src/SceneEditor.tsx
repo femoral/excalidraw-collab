@@ -45,6 +45,7 @@ import {
   draftFingerprint,
   filesNeedingUpload,
   formatFileUploadError,
+  editorLockExpiryDelayMs,
   formatLockBadge,
   getEditorUnsavedFlag,
   hasUnsavedChanges,
@@ -53,7 +54,10 @@ import {
   saveIndicatorLabel,
   selectInitialSource,
   setEditorUnsavedFlag,
+  shouldApplyRemoteLock,
   shouldShowLockControls,
+  shouldShowRemoteUpdateToast,
+  shouldUpdateChromeHead,
   turnMenuLabel,
   turnMenuShouldClaim,
   UNSAVED_LEAVE_MESSAGE,
@@ -221,8 +225,12 @@ export function SceneEditor({
   const [chromeHeadVersion, setChromeHeadVersion] = useState(0);
 
   const headVersionRef = useRef(0);
-  /** Long-poll cursor — advanced on commit and remote Load so we don't re-toast ourselves. */
+  /** Scene head watermark (commit / Load); kept for applyRemoteDocument paths. */
   const pollSinceRef = useRef(0);
+  /** Multiplexed global event cursor (`GET /api/events?since=N`). */
+  const globalCursorRef = useRef(0);
+  /** Last observed remote head for toast suppression (not commit parent). */
+  const observedHeadRef = useRef(0);
   const uploadedFilesRef = useRef(new Set<string>());
   const latestSnapshotRef = useRef<EditorSnapshot | null>(null);
   const hydratingRef = useRef(true);
@@ -265,6 +273,8 @@ export function SceneEditor({
     loadedDocRef.current = null;
     applyingRemoteRef.current = false;
     savedFingerprintRef.current = null;
+    globalCursorRef.current = 0;
+    observedHeadRef.current = 0;
 
     void (async () => {
       try {
@@ -286,6 +296,7 @@ export function SceneEditor({
         );
         headVersionRef.current = meta.headVersion;
         pollSinceRef.current = meta.headVersion;
+        observedHeadRef.current = meta.headVersion;
         setChromeHeadVersion(meta.headVersion);
 
         const wantVersion = version ?? null;
@@ -624,14 +635,24 @@ export function SceneEditor({
     [load],
   );
 
-  // ----- long-poll for remote commits while the tab is open -----------------
+  // ----- long-poll for remote commits + lock chrome while the tab is open --
+  // Uses multiplexed GET /api/events so lock claim/release (no version) still
+  // reaches this surface. Cursor is a global seq; scene version watermark is
+  // kept separately for toast/self-suppression.
 
   useEffect(() => {
     if (readOnly || load.kind !== "ready") return;
 
+    // Align watermarks with the loaded head once the editor is ready.
+    observedHeadRef.current = Math.max(
+      observedHeadRef.current,
+      headVersionRef.current,
+      pollSinceRef.current,
+    );
+
     let cancelled = false;
     const ac = new AbortController();
-    let poll = initialPollState(pollSinceRef.current);
+    let poll = initialPollState(globalCursorRef.current);
 
     const sleep = (ms: number) =>
       new Promise<void>((resolve) => {
@@ -648,8 +669,7 @@ export function SceneEditor({
 
     void (async () => {
       while (!cancelled && !ac.signal.aborted) {
-        // Keep the pure state machine's since in sync with commits / Load.
-        poll = pollAdvanceSince(poll, pollSinceRef.current);
+        poll = pollAdvanceSince(poll, globalCursorRef.current);
 
         const delay = pollNextDelayMs(poll);
         if (delay === Number.POSITIVE_INFINITY) break;
@@ -660,44 +680,114 @@ export function SceneEditor({
 
         poll = pollBeginWait(poll);
         try {
-          const event = await api.getSceneEvents(slug, pollSinceRef.current, {
+          const batch = await api.getEvents(globalCursorRef.current, {
             signal: ac.signal,
           });
           if (cancelled || ac.signal.aborted) break;
 
-          if (!event) {
+          if (!batch) {
             poll = pollOnTimeout(poll);
             continue;
           }
 
-          const from = pollSinceRef.current;
-          const to =
-            typeof event.headVersion === "number"
-              ? event.headVersion
-              : event.version;
+          const nextCursor =
+            typeof batch.cursor === "number" && batch.cursor >= 0
+              ? batch.cursor
+              : globalCursorRef.current;
+          poll = pollOnEvent(poll, nextCursor);
+          globalCursorRef.current = nextCursor;
 
-          if (!Number.isInteger(to) || to <= from) {
-            poll = pollOnTimeout(poll);
-            continue;
-          }
-
-          poll = pollOnEvent(poll, to);
-          // Advance the poll cursor so we do not re-deliver the same event.
-          // Do NOT touch headVersionRef here — that is the local commit parent
-          // and only moves on our own commit or an explicit Load/Merge.
-          pollSinceRef.current = to;
-
-          // Suppress toast for our own commits (we already advanced after push).
           const self = selfNameRef.current;
-          if (self && event.author === self) {
-            // Our commit already updated headVersionRef / chrome; just mark seen.
-            markSceneSeen(window.localStorage, slug, to);
-            continue;
-          }
+          const mine = batch.events.filter((e) => e.slug === slug);
 
-          setRemoteToast((s) =>
-            toastShow(s, toastFromSceneEvent(from, event)),
-          );
+          for (const event of mine) {
+            if (event.kind === "lock") {
+              if (
+                shouldApplyRemoteLock(event, { selfName: self })
+              ) {
+                const nextLock =
+                  event.lock && isEditorLockActive(event.lock)
+                    ? event.lock
+                    : null;
+                setLock(nextLock);
+              }
+              continue;
+            }
+
+            // version
+            const from = observedHeadRef.current;
+            const to =
+              typeof event.headVersion === "number"
+                ? event.headVersion
+                : typeof event.version === "number"
+                  ? event.version
+                  : from;
+
+            if (!Number.isInteger(to) || to <= 0) continue;
+
+            // Always keep lock badge in sync when the event carries it.
+            if (
+              event.lock !== undefined &&
+              shouldApplyRemoteLock(
+                { actor: event.author, kind: "version" },
+                { selfName: self },
+              )
+            ) {
+              // Version commits by others (or lock-cleared by holder push)
+              // should refresh the badge; self version already handled on push.
+              if (!(self && event.author === self)) {
+                const nextLock =
+                  event.lock && isEditorLockActive(event.lock)
+                    ? event.lock
+                    : null;
+                setLock(nextLock);
+              }
+            }
+
+            if (to <= observedHeadRef.current) continue;
+            observedHeadRef.current = to;
+            // Keep legacy pollSinceRef in sync for commit/Load paths.
+            pollSinceRef.current = Math.max(pollSinceRef.current, to);
+
+            if (
+              shouldUpdateChromeHead(
+                { headVersion: to, author: event.author },
+                { selfName: self },
+              )
+            ) {
+              setChromeHeadVersion(to);
+            }
+
+            // Suppress toast for our own commits.
+            if (
+              !shouldShowRemoteUpdateToast(
+                {
+                  headVersion: to,
+                  author: event.author ?? "",
+                },
+                {
+                  localHead: headVersionRef.current,
+                  selfName: self,
+                },
+              )
+            ) {
+              markSceneSeen(window.localStorage, slug, to);
+              continue;
+            }
+
+            setRemoteToast((s) =>
+              toastShow(
+                s,
+                toastFromSceneEvent(from, {
+                  version: event.version ?? to,
+                  author: event.author ?? "unknown",
+                  message: event.message ?? "",
+                  createdAt: event.createdAt ?? new Date().toISOString(),
+                  headVersion: to,
+                }),
+              ),
+            );
+          }
         } catch (err) {
           if (cancelled || ac.signal.aborted) break;
           if (err instanceof Error && err.name === "AbortError") break;
@@ -713,6 +803,19 @@ export function SceneEditor({
       ac.abort();
     };
   }, [api, slug, readOnly, load.kind]);
+
+  // Client-side lock TTL expiry (no commit / no server event).
+  useEffect(() => {
+    if (readOnly || load.kind !== "ready") return;
+    const delay = editorLockExpiryDelayMs(lock);
+    if (delay === null) return;
+    const t = window.setTimeout(() => {
+      setLock((current) =>
+        current && !isEditorLockActive(current) ? null : current,
+      );
+    }, delay);
+    return () => window.clearTimeout(t);
+  }, [lock, readOnly, load.kind]);
 
   // ----- scroll-to-element from what-changed panel --------------------------
 
@@ -791,6 +894,7 @@ export function SceneEditor({
 
     headVersionRef.current = opts.toVersion;
     pollSinceRef.current = opts.toVersion;
+    observedHeadRef.current = opts.toVersion;
     setChromeHeadVersion(opts.toVersion);
     setLoad((prev) =>
       prev.kind === "ready"
@@ -1059,8 +1163,9 @@ export function SceneEditor({
 
       const next = postCommitState(result.headVersion);
       headVersionRef.current = next.headVersion;
-      // Advance poll cursor before the events hub notifies us of our own push.
+      // Advance watermarks before the events hub notifies us of our own push.
       pollSinceRef.current = next.headVersion;
+      observedHeadRef.current = next.headVersion;
       setChromeHeadVersion(next.headVersion);
       markSceneSeen(window.localStorage, slug, next.headVersion);
       setSaveIndicator(next.saveIndicator);

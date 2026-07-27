@@ -650,3 +650,84 @@ export function isReadOnlyVersion(
   if (headVersion <= 0) return false;
   return viewingVersion !== headVersion;
 }
+
+// ---------------------------------------------------------------------------
+// Live history refresh (issue #37)
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether a scene event should append to the open history timeline.
+ * Suppress self-authored commits (restore/commit already refreshed locally).
+ */
+export function shouldAppendRemoteVersion(
+  event: { author: string; headVersion: number },
+  opts: { selfName: string | null; currentHead: number },
+): boolean {
+  if (!Number.isInteger(event.headVersion) || event.headVersion <= 0) {
+    return false;
+  }
+  if (event.headVersion <= opts.currentHead) return false;
+  if (opts.selfName && event.author === opts.selfName) return false;
+  return true;
+}
+
+/**
+ * Prepend a newly arrived version to a newest-first timeline without
+ * touching the caller's selection/diff state.
+ * Idempotent when the version is already present.
+ */
+export function appendRemoteVersion(
+  versions: readonly VersionInfo[],
+  incoming: VersionInfo,
+): {
+  versions: VersionInfo[];
+  headVersion: number;
+  total: number;
+  added: boolean;
+} {
+  const existing = versions.find((v) => v.version === incoming.version);
+  if (existing) {
+    const headVersion = versions.reduce(
+      (max, v) => Math.max(max, v.version),
+      incoming.version,
+    );
+    return {
+      versions: [...versions],
+      headVersion,
+      total: versions.length,
+      added: false,
+    };
+  }
+  const next = orderVersionsNewestFirst([...versions, incoming]);
+  const headVersion = next.reduce((max, v) => Math.max(max, v.version), 0);
+  return {
+    versions: next,
+    headVersion,
+    total: next.length,
+    added: true,
+  };
+}
+
+/** Build a VersionInfo from a scene event response (per-scene long-poll). */
+export function versionInfoFromSceneEvent(event: {
+  version: number;
+  parentVersion: number | null;
+  author: string;
+  message: string;
+  createdAt: string;
+  elementCount: number;
+  sceneHash: string;
+  thumbnailFileId?: string | null;
+  headVersion?: number;
+}): VersionInfo {
+  return {
+    version: event.version,
+    parentVersion: event.parentVersion,
+    author: event.author,
+    message: event.message,
+    createdAt: event.createdAt,
+    elementCount: event.elementCount,
+    sceneHash: event.sceneHash,
+    thumbnailFileId: event.thumbnailFileId ?? null,
+  };
+}

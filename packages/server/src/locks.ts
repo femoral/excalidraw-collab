@@ -12,6 +12,7 @@
 import type { FastifyInstance } from "fastify";
 import { authorFromIdentity, createAuthPreHandler } from "./auth.js";
 import type { Database } from "./db.js";
+import type { SceneEventHub } from "./events.js";
 import { AppError, ErrorCode } from "./errors.js";
 import { isSceneLockActive, toLock, type SceneInfo } from "./scenes.js";
 
@@ -59,10 +60,13 @@ function lockInfoFromScene(
 
 /**
  * Register lock claim/release routes under `/api` with Bearer auth.
+ * When `events` is provided, claim/release fan out on the multiplexed stream
+ * so dashboard/open-scene lock badges stay live without a version commit.
  */
 export async function registerLockRoutes(
   app: FastifyInstance,
   db: Database,
+  events?: SceneEventHub,
 ): Promise<void> {
   const authPreHandler = createAuthPreHandler(db);
 
@@ -147,6 +151,13 @@ export async function registerLockRoutes(
           }
 
           const lock = toLock(updated, nowMs)!;
+          events?.publishLock({
+            sceneId: scene.id,
+            slug: scene.slug,
+            headVersion: updated.head_version,
+            lock: lockInfoFromScene(lock),
+            actor: holder,
+          });
           return reply.status(200).send(lockInfoFromScene(lock));
         },
       );
@@ -169,7 +180,19 @@ export async function registerLockRoutes(
             );
           }
 
+          const identity = request.auth;
+          const actor = identity
+            ? authorFromIdentity(identity)
+            : scene.lock_holder ?? "unknown";
+
           db.setSceneLock(scene.id, null, null);
+          events?.publishLock({
+            sceneId: scene.id,
+            slug: scene.slug,
+            headVersion: scene.head_version,
+            lock: null,
+            actor,
+          });
           return reply.status(204).send();
         },
       );

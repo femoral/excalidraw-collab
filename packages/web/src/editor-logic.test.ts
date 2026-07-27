@@ -12,6 +12,7 @@ import {
   draftFingerprint,
   filesNeedingUpload,
   formatFileUploadError,
+  editorLockExpiryDelayMs,
   formatLockBadge,
   formatRemoteUpdateToast,
   getEditorUnsavedFlag,
@@ -23,8 +24,10 @@ import {
   saveIndicatorLabel,
   selectInitialSource,
   setEditorUnsavedFlag,
+  shouldApplyRemoteLock,
   shouldShowLockControls,
   shouldShowRemoteUpdateToast,
+  shouldUpdateChromeHead,
   turnMenuLabel,
   turnMenuShouldClaim,
   validateCommitMessage,
@@ -499,6 +502,50 @@ describe("remote update toast", () => {
         { localHead: 5, selfName: "admin" },
       ),
       true,
+    );
+  });
+
+  test("shouldUpdateChromeHead suppresses self-authored", () => {
+    assert.equal(
+      shouldUpdateChromeHead(
+        { headVersion: 6, author: "admin" },
+        { selfName: "admin" },
+      ),
+      false,
+    );
+    assert.equal(
+      shouldUpdateChromeHead(
+        { headVersion: 6, author: "agent" },
+        { selfName: "admin" },
+      ),
+      true,
+    );
+  });
+
+  test("shouldApplyRemoteLock suppresses self actor", () => {
+    assert.equal(
+      shouldApplyRemoteLock({ actor: "admin" }, { selfName: "admin" }),
+      false,
+    );
+    assert.equal(
+      shouldApplyRemoteLock({ actor: "agent" }, { selfName: "admin" }),
+      true,
+    );
+    assert.equal(
+      shouldApplyRemoteLock({}, { selfName: "admin" }),
+      true,
+    );
+  });
+
+  test("editorLockExpiryDelayMs", () => {
+    const now = Date.parse("2026-06-01T12:00:00.000Z");
+    assert.equal(editorLockExpiryDelayMs(null, now), null);
+    assert.equal(
+      editorLockExpiryDelayMs(
+        { holder: "a", expiresAt: "2026-06-01T12:00:10.000Z" },
+        now,
+      ),
+      10_000,
     );
   });
 });

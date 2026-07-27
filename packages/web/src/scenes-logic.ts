@@ -3,7 +3,7 @@
  * Kept free of React so `node:test` can cover them without a browser harness.
  */
 
-import type { SceneInfo } from "./api.ts";
+import type { GlobalSceneEvent, SceneInfo } from "./api.ts";
 
 /** Max slug length (mirrors server SLUG_MAX_LENGTH). */
 export const SLUG_MAX_LENGTH = 64;
@@ -214,4 +214,137 @@ export function buildRenamePayload(
     return { ok: false, error: "Name is too long." };
   }
   return { ok: true, name };
+}
+
+// ---------------------------------------------------------------------------
+// Live refresh from multiplexed events (issue #37)
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether a multiplexed event should drive a dashboard UI update.
+ * Self-authored version commits and lock changes are suppressed — the
+ * acting surface already updated local state (or the author is this tab's
+ * identity and a re-fetch would only echo).
+ */
+export function shouldApplyGlobalEvent(
+  event: Pick<GlobalSceneEvent, "kind" | "author" | "actor">,
+  selfName: string | null,
+): boolean {
+  if (!selfName) return true;
+  if (event.kind === "version") {
+    return event.author !== selfName;
+  }
+  // lock
+  if (event.actor && event.actor === selfName) return false;
+  return true;
+}
+
+/**
+ * Patch a scene row from a multiplexed event. Returns null when the event
+ * does not target a known scene (caller may refetch the full list).
+ *
+ * Version events update head metadata; lock events update only the badge.
+ * Expired locks are cleared when `nowMs` is past `expiresAt`.
+ */
+export function applyGlobalEventToScene(
+  scene: SceneInfo,
+  event: GlobalSceneEvent,
+  nowMs: number = Date.now(),
+): SceneInfo {
+  if (scene.slug !== event.slug && scene.id !== event.sceneId) {
+    return scene;
+  }
+
+  if (event.kind === "lock") {
+    const lock = normalizeLock(event.lock, nowMs);
+    return { ...scene, lock };
+  }
+
+  // version
+  const lock =
+    event.lock !== undefined
+      ? normalizeLock(event.lock, nowMs)
+      : scene.lock && isLockActive(scene.lock, nowMs)
+        ? scene.lock
+        : null;
+
+  return {
+    ...scene,
+    headVersion:
+      typeof event.headVersion === "number"
+        ? event.headVersion
+        : scene.headVersion,
+    elementCount:
+      typeof event.elementCount === "number"
+        ? event.elementCount
+        : scene.elementCount,
+    headAuthor:
+      typeof event.author === "string" ? event.author : scene.headAuthor,
+    updatedAt:
+      typeof event.createdAt === "string" ? event.createdAt : scene.updatedAt,
+    thumbnailFileId:
+      event.thumbnailFileId !== undefined
+        ? event.thumbnailFileId
+        : scene.thumbnailFileId,
+    lock,
+  };
+}
+
+function normalizeLock(
+  lock: SceneInfo["lock"],
+  nowMs: number,
+): SceneInfo["lock"] {
+  if (!lock) return null;
+  return isLockActive(lock, nowMs) ? lock : null;
+}
+
+/**
+ * Apply a batch of multiplexed events to a ready scene list.
+ * Returns the next list state and whether any row changed.
+ */
+export function applyGlobalEventsToList(
+  scenes: readonly SceneInfo[],
+  events: readonly GlobalSceneEvent[],
+  selfName: string | null,
+  nowMs: number = Date.now(),
+): { scenes: SceneInfo[]; changed: boolean } {
+  let next = [...scenes];
+  let changed = false;
+
+  for (const event of events) {
+    if (!shouldApplyGlobalEvent(event, selfName)) continue;
+    const idx = next.findIndex(
+      (s) => s.slug === event.slug || s.id === event.sceneId,
+    );
+    if (idx < 0) {
+      // Unknown scene (created elsewhere) — signal caller to refetch.
+      changed = true;
+      continue;
+    }
+    const updated = applyGlobalEventToScene(next[idx]!, event, nowMs);
+    if (updated !== next[idx]) {
+      next[idx] = updated;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    next = sortScenesByUpdatedAt(next);
+  }
+  return { scenes: next, changed };
+}
+
+/**
+ * Ms until a lock expires, or null when free / unparseable / already expired.
+ * Used to schedule a client-side badge clear with no server event.
+ */
+export function lockExpiryDelayMs(
+  lock: SceneInfo["lock"],
+  nowMs: number = Date.now(),
+): number | null {
+  if (!lock?.expiresAt) return null;
+  const expires = Date.parse(lock.expiresAt);
+  if (Number.isNaN(expires)) return null;
+  const delay = expires - nowMs;
+  return delay > 0 ? delay : 0;
 }
