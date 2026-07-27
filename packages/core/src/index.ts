@@ -1,6 +1,7 @@
 /**
- * @excalidraw-collab/core — pure TypeScript types, (future) diff engine,
- * scene digest, and validation. Zero runtime dependencies.
+ * @excalidraw-collab/core — pure TypeScript types, scene normalization,
+ * validation, and (future) diff engine / scene digest.
+ * Zero runtime dependencies.
  */
 
 export type {
@@ -43,3 +44,14 @@ export type {
   SceneDiff,
   SceneDigest,
 } from "./types.js";
+
+export {
+  normalizeScene,
+  pickAppState,
+  SceneValidationError,
+  PERSISTED_APP_STATE_KEYS,
+} from "./normalize.js";
+
+export { splitFiles, mergeFiles } from "./files.js";
+
+export { sceneHash } from "./hash.js";
