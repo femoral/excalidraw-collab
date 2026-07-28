@@ -15,11 +15,33 @@ dependency. Upgrades are a version bump plus the
 | Doc | Audience |
 |---|---|
 | [docs/cli.md](./docs/cli.md) | Full `excali` reference (generated from the CLI parsers) |
-| [packages/cli/skills/excalidraw-collab](./packages/cli/skills/excalidraw-collab) | Agent skill — turn loop, conflicts, exit codes (install with `excali skills install`) |
+| `excali skills install` | Agent skill — turn loop, conflicts, exit codes (bundled with the CLI) |
 | [docs/upgrade-excalidraw.md](./docs/upgrade-excalidraw.md) | Bumping `@excalidraw/excalidraw` |
 | [docs/release.md](./docs/release.md) | Publishing the CLI to npm |
 | [PLAN.md](./PLAN.md) | Architecture, data model, HTTP API |
 | [deploy/README.md](./deploy/README.md) | Kubernetes / kustomize |
+
+## Install the CLI
+
+Node 24+ required. Installs a single binary, `excali`:
+
+```sh
+npm install -g @excalidraw-collab/cli
+# or: pnpm add -g @excalidraw-collab/cli
+```
+
+Run it without installing:
+
+```sh
+npx @excalidraw-collab/cli --help
+```
+
+Then point it at a server (see the quickstart below for standing one up):
+
+```sh
+excali login --server https://excali.example.com --token "$TOKEN"
+excali whoami
+```
 
 ## Quickstart (Docker Compose)
 
@@ -36,15 +58,8 @@ Data is bind-mounted at `./data` (relative to the repo root).
 
 ### Mint a token and use the CLI
 
-The bootstrap token is already an admin credential. Install the CLI from npm
-(Node 24+):
-
-```sh
-npm install -g @excalidraw-collab/cli   # provides the `excali` command
-```
-
-Working from a clone instead? `pnpm install && pnpm build`, then
-`alias excali='node packages/cli/bin/excali'`.
+The bootstrap token is already an admin credential. With the CLI installed
+(see [Install the CLI](#install-the-cli)):
 
 ```sh
 excali login --server http://localhost:3000 --token "$BOOTSTRAP_TOKEN"
