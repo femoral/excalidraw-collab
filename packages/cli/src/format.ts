@@ -42,10 +42,7 @@ export function formatTable(
   if (rows.length === 0) {
     return "(empty)\n";
   }
-  const cols =
-    columns && columns.length > 0
-      ? [...columns]
-      : Object.keys(rows[0] ?? {});
+  const cols = columns && columns.length > 0 ? [...columns] : Object.keys(rows[0] ?? {});
   if (cols.length === 0) {
     return "(empty)\n";
   }
@@ -63,13 +60,10 @@ export function formatTable(
     return JSON.stringify(v);
   };
 
-  const widths = cols.map((c) =>
-    Math.max(c.length, ...rows.map((r) => stringify(r[c]).length)),
-  );
+  const widths = cols.map((c) => Math.max(c.length, ...rows.map((r) => stringify(r[c]).length)));
 
   const pad = (s: string, w: number) => s.padEnd(w, " ");
-  const line = (cells: string[]) =>
-    cells.map((cell, i) => pad(cell, widths[i] ?? 0)).join("  ");
+  const line = (cells: string[]) => cells.map((cell, i) => pad(cell, widths[i] ?? 0)).join("  ");
 
   const header = line(cols);
   const sep = widths.map((w) => "-".repeat(w)).join("  ");
@@ -97,16 +91,18 @@ export function formatHuman(data: unknown): string {
     const obj = data as Record<string, unknown>;
     const keys = Object.keys(obj);
     // Single-level key/value object → two-column table
-    if (keys.every((k) => {
-      const v = obj[k];
-      return (
-        v === null ||
-        v === undefined ||
-        typeof v === "string" ||
-        typeof v === "number" ||
-        typeof v === "boolean"
-      );
-    })) {
+    if (
+      keys.every((k) => {
+        const v = obj[k];
+        return (
+          v === null ||
+          v === undefined ||
+          typeof v === "string" ||
+          typeof v === "number" ||
+          typeof v === "boolean"
+        );
+      })
+    ) {
       return formatTable(
         keys.map((k) => ({ key: k, value: obj[k] })),
         ["key", "value"],

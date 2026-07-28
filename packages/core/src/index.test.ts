@@ -83,13 +83,7 @@ function listExcalidrawFiles(dir: string): string[] {
   return out.sort();
 }
 
-const IGNORE_PROPS = new Set([
-  "version",
-  "versionNonce",
-  "updated",
-  "seed",
-  "index",
-]);
+const IGNORE_PROPS = new Set(["version", "versionNonce", "updated", "seed", "index"]);
 
 function elementMap(elements: readonly ExcalidrawElement[]): Map<string, ExcalidrawElement> {
   return new Map(elements.map((e) => [e.id, e]));
@@ -229,14 +223,9 @@ describe("fixture corpus", () => {
     const texts = doc.elements.filter((e) => e.type === "text");
     assert.ok(texts.length >= 2);
     for (const t of texts) {
-      assert.ok(
-        "containerId" in t && t.containerId,
-        `text ${t.id} should have containerId`,
-      );
+      assert.ok("containerId" in t && t.containerId, `text ${t.id} should have containerId`);
     }
-    const containers = doc.elements.filter(
-      (e) => e.type === "rectangle" || e.type === "ellipse",
-    );
+    const containers = doc.elements.filter((e) => e.type === "rectangle" || e.type === "ellipse");
     for (const c of containers) {
       const bounds = c.boundElements ?? [];
       assert.ok(
@@ -273,10 +262,7 @@ describe("fixture corpus", () => {
     assert.ok("fileId" in img && img.fileId, "image.fileId");
     const fileId = img.fileId as string;
     assert.ok(doc.files[fileId], `files[${fileId}] present`);
-    assert.ok(
-      String(doc.files[fileId]!.dataURL).startsWith("data:image/"),
-      "dataURL is image",
-    );
+    assert.ok(String(doc.files[fileId]!.dataURL).startsWith("data:image/"), "dataURL is image");
   });
 });
 
@@ -336,10 +322,7 @@ describe("fixture pairs", () => {
           const bNote = bMap.get("note-1");
           const aNote = aMap.get("note-1");
           assert.ok(bNote && aNote && bNote.type === "text" && aNote.type === "text");
-          assert.notEqual(
-            (bNote as { text: string }).text,
-            (aNote as { text: string }).text,
-          );
+          assert.notEqual((bNote as { text: string }).text, (aNote as { text: string }).text);
           break;
         }
         case "rebind": {
@@ -364,11 +347,7 @@ describe("fixture pairs", () => {
           const aOrder = after.elements.map((e) => e.id);
           assert.notDeepEqual(bOrder, aOrder, "array order changes");
           // Same element set (by id), ignoring churn props
-          assert.deepEqual(
-            [...bMap.keys()].sort(),
-            [...aMap.keys()].sort(),
-            "same element ids",
-          );
+          assert.deepEqual([...bMap.keys()].sort(), [...aMap.keys()].sort(), "same element ids");
           for (const id of bMap.keys()) {
             const diffs = propDiffs(bMap.get(id)!, aMap.get(id)!);
             // reorder should not change meaningful props (index is ignored)

@@ -1,5 +1,5 @@
 /**
- * `excalicli describe SLUG [--version N] [--json] [--verbose]`
+ * `excali describe SLUG [--version N] [--json] [--verbose]`
  *
  * Fetches the scene document from the server and prints a text outline via
  * core's `digestScene` / `formatDigest` — agents cannot see a canvas.
@@ -20,7 +20,7 @@ import type { SceneInfo } from "./ls.js";
 function requireAuth(ctx: CommandContext): void {
   if (!ctx.config.server || !ctx.config.token) {
     throw new CliError(
-      "No server/token configured. Set EXCALICLI_SERVER and EXCALICLI_TOKEN, or run `excalicli login`.",
+      "No server/token configured. Set EXCALI_SERVER and EXCALI_TOKEN, or run `excali login`.",
       { code: "USAGE" },
     );
   }
@@ -52,14 +52,13 @@ function parseDescribeArgs(args: string[]): {
 
   if (positionals.length === 0) {
     throw new UsageError(
-      "describe requires SLUG\n\n" +
-        "Usage: excalicli describe SLUG [--version N] [--verbose]",
+      "describe requires SLUG\n\n" + "Usage: excali describe SLUG [--version N] [--verbose]",
     );
   }
   if (positionals.length > 1) {
     throw new UsageError(
       `unexpected arguments: ${positionals.slice(1).join(" ")}\n\n` +
-        "Usage: excalicli describe SLUG [--version N] [--verbose]",
+        "Usage: excali describe SLUG [--version N] [--verbose]",
     );
   }
 
@@ -87,9 +86,7 @@ function parseDescribeArgs(args: string[]): {
 
 async function runDescribe(ctx: CommandContext): Promise<CommandResult> {
   requireAuth(ctx);
-  const { slug, version: requestedVersion, verbose } = parseDescribeArgs(
-    ctx.args,
-  );
+  const { slug, version: requestedVersion, verbose } = parseDescribeArgs(ctx.args);
 
   // Resolve the version number for the JSON payload (GET /scene does not
   // return it in the body).
@@ -106,9 +103,7 @@ async function runDescribe(ctx: CommandContext): Promise<CommandResult> {
   }
 
   const qs =
-    requestedVersion !== undefined
-      ? `?v=${encodeURIComponent(String(requestedVersion))}`
-      : "";
+    requestedVersion !== undefined ? `?v=${encodeURIComponent(String(requestedVersion))}` : "";
   const scene = await apiFetch<SceneDocument>({
     path: `/api/scenes/${encodeURIComponent(slug)}/scene${qs}`,
     method: "GET",
@@ -133,10 +128,9 @@ async function runDescribe(ctx: CommandContext): Promise<CommandResult> {
 
 export const describeCommand: Command = {
   name: "describe",
-  description:
-    "Print a text outline of a scene (frames, elements, edges) for agents",
+  description: "Print a text outline of a scene (frames, elements, edges) for agents",
   usage:
-    "excalicli describe SLUG [--version N] [--verbose] [--json]\n\n" +
+    "excali describe SLUG [--version N] [--verbose] [--json]\n\n" +
     "  --version N   Describe a specific version instead of head\n" +
     "  --verbose     Include element ids in the outline\n" +
     "Default output is compact; use --verbose for ids.",

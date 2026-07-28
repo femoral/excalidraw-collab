@@ -121,10 +121,7 @@ describe("tokenHashesEqual / identity helpers", () => {
     };
     assert.equal(authorFromIdentity(identity), "agent-x");
     assert.equal(isAdminIdentity(identity), false);
-    assert.equal(
-      isAdminIdentity({ tokenId: "a", name: ADMIN_TOKEN_NAME, isAdmin: true }),
-      true,
-    );
+    assert.equal(isAdminIdentity({ tokenId: "a", name: ADMIN_TOKEN_NAME, isAdmin: true }), true);
   });
 
   test("generateTokenSecret returns a non-empty base64url string", () => {
@@ -230,10 +227,7 @@ describe("bootstrap", () => {
       headers: bearer(agent.token),
     });
     assert.equal(asAgent.statusCode, 403);
-    assert.equal(
-      (asAgent.json() as ErrorEnvelope).error.code,
-      ErrorCode.FORBIDDEN,
-    );
+    assert.equal((asAgent.json() as ErrorEnvelope).error.code, ErrorCode.FORBIDDEN);
   });
 
   test("bootstrap flag survives a DB-only restore (no filesystem marker)", async () => {
@@ -337,10 +331,7 @@ describe("Bearer auth rejection", () => {
       headers: bearer(bootstrapSecret),
     });
     assert.equal(reuse.statusCode, 401);
-    assert.equal(
-      (reuse.json() as ErrorEnvelope).error.code,
-      ErrorCode.UNAUTHORIZED,
-    );
+    assert.equal((reuse.json() as ErrorEnvelope).error.code, ErrorCode.UNAUTHORIZED);
   });
 });
 
@@ -388,21 +379,12 @@ describe("token lifecycle", () => {
     assert.equal(listBody.tokens.length, 2);
     const raw = list.body;
     assert.ok(!raw.includes(created.token), "list must not contain mint secret");
-    assert.ok(
-      !raw.includes(bootstrapSecret),
-      "list must not contain bootstrap secret",
-    );
+    assert.ok(!raw.includes(bootstrapSecret), "list must not contain bootstrap secret");
     assert.ok(!raw.includes("token_hash"), "list must not contain hash field");
     for (const t of listBody.tokens) {
       assert.equal("token" in t, false);
       assert.equal("token_hash" in t, false);
-      assert.ok(
-        "id" in t &&
-          "name" in t &&
-          "createdAt" in t &&
-          "lastUsed" in t &&
-          "isAdmin" in t,
-      );
+      assert.ok("id" in t && "name" in t && "createdAt" in t && "lastUsed" in t && "isAdmin" in t);
     }
     const byName = Object.fromEntries(listBody.tokens.map((t) => [t.name, t]));
     assert.equal(byName[ADMIN_TOKEN_NAME]!.isAdmin, true);
@@ -419,10 +401,7 @@ describe("token lifecycle", () => {
       payload: { name: "other" },
     });
     assert.equal(forbidden.statusCode, 403);
-    assert.equal(
-      (forbidden.json() as ErrorEnvelope).error.code,
-      ErrorCode.FORBIDDEN,
-    );
+    assert.equal((forbidden.json() as ErrorEnvelope).error.code, ErrorCode.FORBIDDEN);
 
     const forbiddenList = await app.inject({
       method: "GET",
@@ -447,10 +426,7 @@ describe("token lifecycle", () => {
       headers: bearer(created.token),
     });
     assert.equal(after.statusCode, 401);
-    assert.equal(
-      (after.json() as ErrorEnvelope).error.code,
-      ErrorCode.UNAUTHORIZED,
-    );
+    assert.equal((after.json() as ErrorEnvelope).error.code, ErrorCode.UNAUTHORIZED);
   });
 
   test("token named admin without is_admin is not treated as admin", async () => {
@@ -485,10 +461,7 @@ describe("token lifecycle", () => {
       headers: bearer(fakeSecret),
     });
     assert.equal(res.statusCode, 403);
-    assert.equal(
-      (res.json() as ErrorEnvelope).error.code,
-      ErrorCode.FORBIDDEN,
-    );
+    assert.equal((res.json() as ErrorEnvelope).error.code, ErrorCode.FORBIDDEN);
   });
 
   test("POST /api/tokens can mint an admin when isAdmin is requested", async () => {
@@ -566,10 +539,7 @@ describe("token lifecycle", () => {
       headers: bearer(bootstrapSecret),
     });
     assert.equal(res.statusCode, 404);
-    assert.equal(
-      (res.json() as ErrorEnvelope).error.code,
-      ErrorCode.NOT_FOUND,
-    );
+    assert.equal((res.json() as ErrorEnvelope).error.code, ErrorCode.NOT_FOUND);
   });
 
   test("duplicate token name returns 409", async () => {
@@ -601,10 +571,7 @@ describe("token lifecycle", () => {
       payload: { name: "dup" },
     });
     assert.equal(second.statusCode, 409);
-    assert.equal(
-      (second.json() as ErrorEnvelope).error.code,
-      ErrorCode.CONFLICT,
-    );
+    assert.equal((second.json() as ErrorEnvelope).error.code, ErrorCode.CONFLICT);
   });
 });
 
@@ -669,9 +636,6 @@ describe("GET /api/whoami", () => {
     });
     const res = await app.inject({ method: "GET", url: "/api/whoami" });
     assert.equal(res.statusCode, 401);
-    assert.equal(
-      (res.json() as ErrorEnvelope).error.code,
-      ErrorCode.UNAUTHORIZED,
-    );
+    assert.equal((res.json() as ErrorEnvelope).error.code, ErrorCode.UNAUTHORIZED);
   });
 });

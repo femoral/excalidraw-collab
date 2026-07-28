@@ -442,9 +442,7 @@ export class SceneEventHub {
     }
   }
 
-  private appendGlobal(
-    partial: Omit<GlobalSceneEvent, "seq">,
-  ): GlobalSceneEvent {
+  private appendGlobal(partial: Omit<GlobalSceneEvent, "seq">): GlobalSceneEvent {
     this.latestSeq += 1;
     const event: GlobalSceneEvent = { ...partial, seq: this.latestSeq };
     this.buffer.push(event);
@@ -474,11 +472,7 @@ function unrefTimer(timer: ReturnType<typeof setTimeout>): void {
 
 function parseSince(raw: unknown): number {
   if (raw === undefined || raw === null || raw === "") {
-    throw new AppError(
-      ErrorCode.VALIDATION,
-      'query parameter "since" is required',
-      400,
-    );
+    throw new AppError(ErrorCode.VALIDATION, 'query parameter "since" is required', 400);
   }
   const n = typeof raw === "number" ? raw : Number(String(raw).trim());
   if (!Number.isInteger(n) || n < 0) {
@@ -510,13 +504,10 @@ function eventBody(
  * Enrich a buffered multiplexed event from the live DB when the publisher
  * left slug empty (two-arg `publish`) or when we want current lock truth.
  */
-function enrichGlobalEvent(
-  db: Database,
-  event: GlobalSceneEvent,
-): GlobalSceneEvent | null {
+function enrichGlobalEvent(db: Database, event: GlobalSceneEvent): GlobalSceneEvent | null {
   const scene =
     event.slug.length > 0
-      ? db.getSceneBySlug(event.slug) ?? db.getSceneById(event.sceneId)
+      ? (db.getSceneBySlug(event.slug) ?? db.getSceneById(event.sceneId))
       : db.getSceneById(event.sceneId);
   if (!scene) return null;
 
@@ -533,11 +524,7 @@ function enrichGlobalEvent(
   }
 
   // Version event: prefer buffered payload; fill gaps from DB.
-  if (
-    event.version !== undefined &&
-    event.author !== undefined &&
-    event.slug.length > 0
-  ) {
+  if (event.version !== undefined && event.author !== undefined && event.slug.length > 0) {
     return {
       ...event,
       slug: scene.slug,
@@ -631,9 +618,7 @@ export async function registerEventRoutes(
             .map((e) => enrichGlobalEvent(db, e))
             .filter((e): e is GlobalSceneEvent => e !== null);
           const cursor =
-            enriched.length > 0
-              ? enriched[enriched.length - 1]!.seq
-              : events.latestCursor;
+            enriched.length > 0 ? enriched[enriched.length - 1]!.seq : events.latestCursor;
           const body: MultiplexedEventsResponse = { cursor, events: enriched };
           return body;
         }
@@ -663,9 +648,7 @@ export async function registerEventRoutes(
           .map((e) => enrichGlobalEvent(db, e))
           .filter((e): e is GlobalSceneEvent => e !== null);
         const cursor =
-          enriched.length > 0
-            ? enriched[enriched.length - 1]!.seq
-            : events.latestCursor;
+          enriched.length > 0 ? enriched[enriched.length - 1]!.seq : events.latestCursor;
         const body: MultiplexedEventsResponse = { cursor, events: enriched };
         return body;
       });
@@ -680,19 +663,13 @@ export async function registerEventRoutes(
         const { slug } = request.params;
         const scene = db.getSceneBySlug(slug);
         if (!scene) {
-          throw new AppError(
-            ErrorCode.NOT_FOUND,
-            `scene not found: ${slug}`,
-            404,
-          );
+          throw new AppError(ErrorCode.NOT_FOUND, `scene not found: ${slug}`, 404);
         }
 
         const since = parseSince(request.query.since);
         const sceneId = scene.id;
 
-        const loadHeadEvent = (
-          head: number,
-        ): SceneEventResponse | null => {
+        const loadHeadEvent = (head: number): SceneEventResponse | null => {
           if (head <= 0) return null;
           const row = db.getVersion(sceneId, head);
           if (!row) return null;

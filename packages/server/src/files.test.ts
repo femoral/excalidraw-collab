@@ -15,11 +15,7 @@ import { afterEach, describe, test } from "node:test";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "./app.js";
 import { loadConfig, type Config } from "./config.js";
-import {
-  gzipJson,
-  openDatabase,
-  type Database,
-} from "./db.js";
+import { gzipJson, openDatabase, type Database } from "./db.js";
 import { AppError, ErrorCode, type ErrorEnvelope } from "./errors.js";
 import {
   FileStore,
@@ -329,14 +325,9 @@ describe("HTTP /api/files", () => {
 
     // Assert on-disk state, not just the response.
     const filesDir = path.join(dataDir, FILES_SUBDIR);
-    const contentFiles = readdirSync(filesDir).filter((n) =>
-      /^[0-9a-f]{40}$/.test(n),
-    );
+    const contentFiles = readdirSync(filesDir).filter((n) => /^[0-9a-f]{40}$/.test(n));
     assert.deepEqual(contentFiles, [PNG_FILE_ID]);
-    assert.equal(
-      statSync(path.join(filesDir, PNG_FILE_ID)).size,
-      PNG_BYTES.byteLength,
-    );
+    assert.equal(statSync(path.join(filesDir, PNG_FILE_ID)).size, PNG_BYTES.byteLength);
     assert.equal(store.totalContentBytes(), PNG_BYTES.byteLength);
   });
 
@@ -467,9 +458,7 @@ describe("HTTP /api/files", () => {
     // Must not have stored anything.
     const filesDir = path.join(dataDir, FILES_SUBDIR);
     if (existsSync(filesDir)) {
-      const contentFiles = readdirSync(filesDir).filter((n) =>
-        /^[0-9a-f]{40}$/.test(n),
-      );
+      const contentFiles = readdirSync(filesDir).filter((n) => /^[0-9a-f]{40}$/.test(n));
       assert.equal(contentFiles.length, 0);
     }
   });
@@ -648,9 +637,7 @@ describe("GC helper", () => {
     assert.ok(store.exists(recentId));
 
     // Sidecar for old is gone too.
-    assert.ok(
-      !existsSync(path.join(dataDir, FILES_SUBDIR, oldId + SIDECAR_SUFFIX)),
-    );
+    assert.ok(!existsSync(path.join(dataDir, FILES_SUBDIR, oldId + SIDECAR_SUFFIX)));
   });
 
   test("thumbnail_file_id anchors files for GC (not only file_ids)", () => {

@@ -1,5 +1,5 @@
 /**
- * `excalicli whoami` — print the token's identity (the name that appears as
+ * `excali whoami` — print the token's identity (the name that appears as
  * `author` in version history).
  */
 import { apiFetch } from "./api.js";
@@ -16,7 +16,7 @@ export type WhoamiData = {
 async function runWhoami(ctx: CommandContext): Promise<CommandResult> {
   if (!ctx.config.server || !ctx.config.token) {
     throw new CliError(
-      "No server/token configured. Set EXCALICLI_SERVER and EXCALICLI_TOKEN, or run `excalicli login`.",
+      "No server/token configured. Set EXCALI_SERVER and EXCALI_TOKEN, or run `excali login`.",
       { code: "USAGE" },
     );
   }
@@ -40,8 +40,7 @@ async function runWhoami(ctx: CommandContext): Promise<CommandResult> {
 
 export const whoamiCommand: Command = {
   name: "whoami",
-  description:
-    "Print the token's identity — the name that will appear as author in history",
-  usage: "excalicli whoami [--json]",
+  description: "Print the token's identity — the name that will appear as author in history",
+  usage: "excali whoami [--json]",
   run: runWhoami,
 };

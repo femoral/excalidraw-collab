@@ -52,12 +52,7 @@ import {
   writeSync,
 } from "node:fs";
 import path from "node:path";
-import type {
-  FastifyInstance,
-  FastifyReply,
-  FastifyRequest,
-  preHandlerHookHandler,
-} from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
 import { createAuthPreHandler } from "./auth.js";
 import type { Config } from "./config.js";
 import type { Database } from "./db.js";
@@ -86,12 +81,10 @@ export const FILE_ID_REASON_HASH_MISMATCH = "content_hash_mismatch" as const;
  * Strong signal that Excalidraw fell back to `nanoid(40)` because
  * `window.crypto.subtle` was unavailable (non-secure context).
  */
-export const FILE_ID_REASON_NON_SECURE_NANOID =
-  "non_secure_context_nanoid" as const;
+export const FILE_ID_REASON_NON_SECURE_NANOID = "non_secure_context_nanoid" as const;
 
 export type FileIdMismatchReason =
-  | typeof FILE_ID_REASON_HASH_MISMATCH
-  | typeof FILE_ID_REASON_NON_SECURE_NANOID;
+  typeof FILE_ID_REASON_HASH_MISMATCH | typeof FILE_ID_REASON_NON_SECURE_NANOID;
 
 export type FileIdMismatchDetails = {
   reason: FileIdMismatchReason;
@@ -100,8 +93,7 @@ export type FileIdMismatchDetails = {
 };
 
 /** Long-lived immutable cache for content-addressed GET responses. */
-export const IMMUTABLE_CACHE_CONTROL =
-  "public, max-age=31536000, immutable";
+export const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
 
 export type FileSidecar = {
   mimeType: string;
@@ -167,19 +159,11 @@ export function decodeDataURL(dataURL: string): {
   bytes: Buffer;
 } {
   if (typeof dataURL !== "string" || !dataURL.startsWith("data:")) {
-    throw new AppError(
-      ErrorCode.VALIDATION,
-      "dataURL must be a data: URL string",
-      400,
-    );
+    throw new AppError(ErrorCode.VALIDATION, "dataURL must be a data: URL string", 400);
   }
   const comma = dataURL.indexOf(",");
   if (comma < 0) {
-    throw new AppError(
-      ErrorCode.VALIDATION,
-      "dataURL is missing payload",
-      400,
-    );
+    throw new AppError(ErrorCode.VALIDATION, "dataURL is missing payload", 400);
   }
   const header = dataURL.slice(5, comma); // after "data:"
   const payload = dataURL.slice(comma + 1);
@@ -192,11 +176,7 @@ export function decodeDataURL(dataURL: string): {
       ? Buffer.from(payload, "base64")
       : Buffer.from(decodeURIComponent(payload), "utf8");
   } catch {
-    throw new AppError(
-      ErrorCode.VALIDATION,
-      "dataURL payload could not be decoded",
-      400,
-    );
+    throw new AppError(ErrorCode.VALIDATION, "dataURL payload could not be decoded", 400);
   }
   return { mimeType, bytes };
 }
@@ -218,10 +198,7 @@ function assertValidFileId(fileId: string): void {
  *
  * Never accept the claimed id as authoritative — verification stays strict.
  */
-export function claimedFileIdMismatchError(
-  claimed: string,
-  computed: string,
-): AppError {
+export function claimedFileIdMismatchError(claimed: string, computed: string): AppError {
   if (!FILE_ID_HEX_RE.test(claimed)) {
     const details: FileIdMismatchDetails = {
       reason: FILE_ID_REASON_NON_SECURE_NANOID,
@@ -246,12 +223,7 @@ export function claimedFileIdMismatchError(
     claimed,
     computed,
   };
-  return new AppError(
-    ErrorCode.VALIDATION,
-    "fileId does not match content hash",
-    400,
-    details,
-  );
+  return new AppError(ErrorCode.VALIDATION, "fileId does not match content hash", 400, details);
 }
 
 // ---------------------------------------------------------------------------
@@ -301,11 +273,7 @@ export class FileStore {
   }): PutFileResult {
     const { bytes, mimeType } = input;
     if (!Buffer.isBuffer(bytes)) {
-      throw new AppError(
-        ErrorCode.BAD_REQUEST,
-        "file body must be binary",
-        400,
-      );
+      throw new AppError(ErrorCode.BAD_REQUEST, "file body must be binary", 400);
     }
     if (bytes.byteLength > this.maxFileBytes) {
       throw new AppError(
@@ -319,11 +287,7 @@ export class FileStore {
       );
     }
     if (typeof mimeType !== "string" || mimeType.length === 0) {
-      throw new AppError(
-        ErrorCode.VALIDATION,
-        "mimeType is required",
-        400,
-      );
+      throw new AppError(ErrorCode.VALIDATION, "mimeType is required", 400);
     }
 
     const fileId = hashFileContent(bytes);
@@ -339,10 +303,7 @@ export class FileStore {
 
     if (!alreadyThere) {
       // Atomic write: temp file in the same directory, then rename.
-      const tmpPath = path.join(
-        this.rootDir,
-        `.${fileId}.${process.pid}.${Date.now()}.tmp`,
-      );
+      const tmpPath = path.join(this.rootDir, `.${fileId}.${process.pid}.${Date.now()}.tmp`);
       try {
         const fd = openSync(tmpPath, "w");
         try {
@@ -442,15 +403,8 @@ export class FileStore {
    * Does not touch drafts — only the provided reference set matters.
    */
   gc(options: GcOptions): GcResult {
-    if (
-      !Number.isFinite(options.olderThanDays) ||
-      options.olderThanDays < 0
-    ) {
-      throw new AppError(
-        ErrorCode.VALIDATION,
-        "olderThanDays must be a non-negative number",
-        400,
-      );
+    if (!Number.isFinite(options.olderThanDays) || options.olderThanDays < 0) {
+      throw new AppError(ErrorCode.VALIDATION, "olderThanDays must be a non-negative number", 400);
     }
 
     const referenced =
@@ -475,9 +429,7 @@ export class FileStore {
       let created = 0;
       if (existsSync(sidecarPath)) {
         try {
-          const raw = JSON.parse(
-            readFileSync(sidecarPath, "utf8"),
-          ) as Partial<FileSidecar>;
+          const raw = JSON.parse(readFileSync(sidecarPath, "utf8")) as Partial<FileSidecar>;
           if (typeof raw.created === "number" && Number.isFinite(raw.created)) {
             created = raw.created;
           } else {
@@ -595,34 +547,23 @@ export async function registerFileRoutes(
         },
       );
 
-      api.get<{ Params: { fileId: string } }>(
-        "/files/:fileId",
-        async (request, reply) => {
-          const { fileId } = request.params;
-          if (!FILE_ID_HEX_RE.test(fileId)) {
-            throw new AppError(
-              ErrorCode.NOT_FOUND,
-              `file not found: ${fileId}`,
-              404,
-            );
-          }
-          const stored = store.get(fileId);
-          if (!stored) {
-            throw new AppError(
-              ErrorCode.NOT_FOUND,
-              `file not found: ${fileId}`,
-              404,
-            );
-          }
-          return reply
-            .status(200)
-            .header("Content-Type", stored.mimeType)
-            .header("Content-Length", stored.byteLength)
-            .header("Cache-Control", IMMUTABLE_CACHE_CONTROL)
-            .header("ETag", `"${fileId}"`)
-            .send(stored.bytes);
-        },
-      );
+      api.get<{ Params: { fileId: string } }>("/files/:fileId", async (request, reply) => {
+        const { fileId } = request.params;
+        if (!FILE_ID_HEX_RE.test(fileId)) {
+          throw new AppError(ErrorCode.NOT_FOUND, `file not found: ${fileId}`, 404);
+        }
+        const stored = store.get(fileId);
+        if (!stored) {
+          throw new AppError(ErrorCode.NOT_FOUND, `file not found: ${fileId}`, 404);
+        }
+        return reply
+          .status(200)
+          .header("Content-Type", stored.mimeType)
+          .header("Content-Length", stored.byteLength)
+          .header("Cache-Control", IMMUTABLE_CACHE_CONTROL)
+          .header("ETag", `"${fileId}"`)
+          .send(stored.bytes);
+      });
     },
     { prefix: "/api" },
   );
@@ -633,29 +574,17 @@ async function handleUpload(
   reply: FastifyReply,
   store: FileStore,
 ): Promise<unknown> {
-  const contentType = (request.headers["content-type"] ?? "")
-    .split(";")[0]!
-    .trim()
-    .toLowerCase();
+  const contentType = (request.headers["content-type"] ?? "").split(";")[0]!.trim().toLowerCase();
 
   // --- Raw bytes path ---
-  if (
-    contentType === "application/octet-stream" ||
-    contentType.startsWith("image/")
-  ) {
+  if (contentType === "application/octet-stream" || contentType.startsWith("image/")) {
     const body = request.body;
     if (!Buffer.isBuffer(body)) {
-      throw new AppError(
-        ErrorCode.BAD_REQUEST,
-        "raw upload body must be binary",
-        400,
-      );
+      throw new AppError(ErrorCode.BAD_REQUEST, "raw upload body must be binary", 400);
     }
     const claimedHeader = request.headers["x-file-id"];
     const claimedFileId =
-      typeof claimedHeader === "string" && claimedHeader.length > 0
-        ? claimedHeader
-        : undefined;
+      typeof claimedHeader === "string" && claimedHeader.length > 0 ? claimedHeader : undefined;
     // Do not pre-filter non-hex ids here: put() rejects with the
     // non_secure_context_nanoid vs content_hash_mismatch distinction.
     const result = store.put({
@@ -672,18 +601,10 @@ async function handleUpload(
   }
 
   // --- JSON BinaryFileData path ---
-  if (
-    contentType === "application/json" ||
-    contentType === "" ||
-    contentType.endsWith("+json")
-  ) {
+  if (contentType === "application/json" || contentType === "" || contentType.endsWith("+json")) {
     const body = request.body as BinaryFileDataBody | undefined;
     if (body === null || typeof body !== "object" || Array.isArray(body)) {
-      throw new AppError(
-        ErrorCode.VALIDATION,
-        "JSON body must be a BinaryFileData object",
-        400,
-      );
+      throw new AppError(ErrorCode.VALIDATION, "JSON body must be a BinaryFileData object", 400);
     }
     if (typeof body.id !== "string" || body.id.length === 0) {
       throw new AppError(ErrorCode.VALIDATION, "id is required", 400);

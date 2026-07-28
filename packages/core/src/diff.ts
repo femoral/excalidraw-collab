@@ -50,13 +50,7 @@ export type DiffScenesOptions = {
  * - `index`: fractional z-order repaired by restore(); array order is
  *   authoritative and reorder is reported as its own op
  */
-const IGNORED_PROPS = new Set([
-  "version",
-  "versionNonce",
-  "updated",
-  "seed",
-  "index",
-]);
+const IGNORED_PROPS = new Set(["version", "versionNonce", "updated", "seed", "index"]);
 
 // Property groups → readable verbs
 const MOVE_PROPS = new Set(["x", "y", "angle"]);
@@ -151,10 +145,7 @@ function textOf(el: ExcalidrawElement): string | null {
  * - container → bound text element's `text` (via boundElements or containerId)
  * - arrow → edge form `"A" → "B"` (bindings resolved to labels)
  */
-function resolveLabel(
-  el: ExcalidrawElement,
-  byId: Map<string, ExcalidrawElement>,
-): string | null {
+function resolveLabel(el: ExcalidrawElement, byId: Map<string, ExcalidrawElement>): string | null {
   if (el.type === "text") {
     return textOf(el);
   }
@@ -202,10 +193,7 @@ function bindingTargetId(binding: unknown): string | null {
   return typeof id === "string" && id.length > 0 ? id : null;
 }
 
-function labelForId(
-  id: string | null,
-  byId: Map<string, ExcalidrawElement>,
-): string | null {
+function labelForId(id: string | null, byId: Map<string, ExcalidrawElement>): string | null {
   if (id == null) return null;
   const el = byId.get(id);
   if (!el) return id; // dangling ref — fall back to raw id
@@ -235,10 +223,7 @@ function quoteLabel(label: string | null): string {
 // Prop diffs + classification
 // ---------------------------------------------------------------------------
 
-function collectPropDeltas(
-  before: ExcalidrawElement,
-  after: ExcalidrawElement,
-): PropDelta[] {
+function collectPropDeltas(before: ExcalidrawElement, after: ExcalidrawElement): PropDelta[] {
   const a = asRecord(before);
   const b = asRecord(after);
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
@@ -255,14 +240,7 @@ function collectPropDeltas(
   return deltas;
 }
 
-type Verb =
-  | "moved"
-  | "resized"
-  | "restyled"
-  | "text edited"
-  | "rebound"
-  | "grouped"
-  | "locked";
+type Verb = "moved" | "resized" | "restyled" | "text edited" | "rebound" | "grouped" | "locked";
 
 function hasAny(keys: Set<string>, group: Set<string>): boolean {
   for (const k of group) {
@@ -421,10 +399,7 @@ function describeUpdate(
   return body ? `~ ${subject}  ${body}` : `~ ${subject}`;
 }
 
-function formatSubject(
-  type: ExcalidrawElement["type"] | string,
-  label: string | null,
-): string {
+function formatSubject(type: ExcalidrawElement["type"] | string, label: string | null): string {
   if (label == null) return String(type);
   // Arrow labels already include the quoted edge form.
   if (type === "arrow" || type === "line") {
@@ -435,18 +410,12 @@ function formatSubject(
   return `${type} ${quoteLabel(label)}`;
 }
 
-function describeAdd(
-  el: ExcalidrawElement,
-  label: string | null,
-): string {
+function describeAdd(el: ExcalidrawElement, label: string | null): string {
   const subject = formatSubject(el.type, label);
   return `+ ${subject}  ${fmtBBox(bboxOf(el))}`;
 }
 
-function describeDelete(
-  el: ExcalidrawElement,
-  label: string | null,
-): string {
+function describeDelete(el: ExcalidrawElement, label: string | null): string {
   const subject = formatSubject(el.type, label);
   return `- ${subject}`;
 }
@@ -468,12 +437,8 @@ function detectReorders(
   beforeById: Map<string, ExcalidrawElement>,
   afterById: Map<string, ExcalidrawElement>,
 ): Extract<ElementChange, { op: "reorder" }>[] {
-  const beforeShared = beforeEls.filter(
-    (el) => isLive(el) && isLive(afterById.get(el.id)),
-  );
-  const afterShared = afterEls.filter(
-    (el) => isLive(el) && isLive(beforeById.get(el.id)),
-  );
+  const beforeShared = beforeEls.filter((el) => isLive(el) && isLive(afterById.get(el.id)));
+  const afterShared = afterEls.filter((el) => isLive(el) && isLive(beforeById.get(el.id)));
 
   const beforeOrder = beforeShared.map((el) => el.id);
   const afterOrder = afterShared.map((el) => el.id);
@@ -529,21 +494,20 @@ function detectReorders(
  * `name` is deliberately absent from this table — its upstream default is
  * `null`, so a real scene name is a real change and must still be reported.
  */
-export const APP_STATE_DEFAULTS: Readonly<Record<string, unknown>> =
-  Object.freeze({
-    viewBackgroundColor: "#ffffff",
-    gridSize: 20,
-    gridStep: 5,
-    gridModeEnabled: false,
-    exportBackground: true,
-    exportWithDarkMode: false,
-    exportScale: 1,
-    exportEmbedScene: false,
-    frameRendering: { enabled: true, clip: true, name: true, outline: true },
-    // theme is viewer-only (issue #38): still listed so historical absent-vs-
-    // default diffs stay quiet if a stored blob still carries theme: "light".
-    theme: "light",
-  });
+export const APP_STATE_DEFAULTS: Readonly<Record<string, unknown>> = Object.freeze({
+  viewBackgroundColor: "#ffffff",
+  gridSize: 20,
+  gridStep: 5,
+  gridModeEnabled: false,
+  exportBackground: true,
+  exportWithDarkMode: false,
+  exportScale: 1,
+  exportEmbedScene: false,
+  frameRendering: { enabled: true, clip: true, name: true, outline: true },
+  // theme is viewer-only (issue #38): still listed so historical absent-vs-
+  // default diffs stay quiet if a stored blob still carries theme: "light".
+  theme: "light",
+});
 
 /**
  * True when `value` is exactly what upstream would have supplied for a key
@@ -557,10 +521,7 @@ function isImpliedDefault(key: string, value: unknown): boolean {
   );
 }
 
-function diffAppState(
-  a: SceneDocument["appState"],
-  b: SceneDocument["appState"],
-): PropDelta[] {
+function diffAppState(a: SceneDocument["appState"], b: SceneDocument["appState"]): PropDelta[] {
   const left = pickAppState(a) as Record<string, unknown>;
   const right = pickAppState(b) as Record<string, unknown>;
   const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
@@ -659,15 +620,7 @@ export function diffScenes(
         type: el.type,
         label,
         props: meaningful,
-        describe: describeUpdate(
-          el,
-          label,
-          meaningful,
-          verbs,
-          prev!,
-          beforeById,
-          afterById,
-        ),
+        describe: describeUpdate(el, label, meaningful, verbs, prev!, beforeById, afterById),
       });
     }
   }
@@ -733,9 +686,7 @@ export function formatDiff(diff: SceneDiff): string {
   // Version header only when *both* ends are known. Partial/missing versions
   // would be misleading (and "v0" is not a real version in our scheme).
   const hasVersions = diff.from !== undefined && diff.to !== undefined;
-  const header = hasVersions
-    ? `v${diff.from} → v${diff.to}   ${countStr}`
-    : countStr;
+  const header = hasVersions ? `v${diff.from} → v${diff.to}   ${countStr}` : countStr;
 
   const lines: string[] = [header];
 
@@ -746,9 +697,7 @@ export function formatDiff(diff: SceneDiff): string {
   if (diff.appState.length > 0) {
     lines.push("appState:");
     for (const p of diff.appState) {
-      lines.push(
-        `  ${p.key}: ${formatAppStateValue(p.from)} → ${formatAppStateValue(p.to)}`,
-      );
+      lines.push(`  ${p.key}: ${formatAppStateValue(p.from)} → ${formatAppStateValue(p.to)}`);
     }
   }
 

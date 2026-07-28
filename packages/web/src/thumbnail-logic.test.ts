@@ -49,9 +49,7 @@ test("COMMIT_THUMBNAIL_STEPS uploads thumbnail before commit_scene", () => {
   const commitIdx = COMMIT_THUMBNAIL_STEPS.indexOf("commit_scene");
   assert.ok(thumbIdx >= 0);
   assert.ok(commitIdx > thumbIdx);
-  assert.ok(
-    COMMIT_THUMBNAIL_STEPS.indexOf("export_thumbnail") < thumbIdx,
-  );
+  assert.ok(COMMIT_THUMBNAIL_STEPS.indexOf("export_thumbnail") < thumbIdx);
 });
 
 test("withThumbnailFileId omits key when missing", () => {
@@ -70,10 +68,7 @@ test("thumbnailFileIdForCommit only returns success ids", () => {
     thumbnailFileIdForCommit({ ok: true, fileId: "deadbeef".repeat(5) }),
     "deadbeef".repeat(5),
   );
-  assert.equal(
-    thumbnailFileIdForCommit({ ok: false, reason: "export_failed" }),
-    undefined,
-  );
+  assert.equal(thumbnailFileIdForCommit({ ok: false, reason: "export_failed" }), undefined);
 });
 
 test("attachThumbnailForCommit: happy path upload before return", async () => {
@@ -184,8 +179,7 @@ function makeDeps(overrides: Partial<ThumbnailLoadDeps> = {}): ThumbnailLoadDeps
     getRenderPng: async () => {
       throw new Error("getRenderPng not stubbed");
     },
-    createObjectUrl: (bytes, mimeType) =>
-      `blob:${mimeType}:${bytes.byteLength}`,
+    createObjectUrl: (bytes, mimeType) => `blob:${mimeType}:${bytes.byteLength}`,
     ...overrides,
   };
 }
@@ -334,8 +328,5 @@ test("loadSceneThumbnail: uploaded missing falls back to render", async () => {
 
 test("path helpers encode slug and version", () => {
   assert.equal(thumbnailFilePath("ab"), "/api/files/ab");
-  assert.equal(
-    thumbnailRenderPath("my scene", 12),
-    "/api/scenes/my%20scene/render.png?v=12",
-  );
+  assert.equal(thumbnailRenderPath("my scene", 12), "/api/scenes/my%20scene/render.png?v=12");
 });

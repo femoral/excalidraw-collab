@@ -7,11 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, test } from "node:test";
-import {
-  buildApp,
-  openDatabase,
-  type Database,
-} from "@excalidraw-collab/server";
+import { buildApp, openDatabase, type Database } from "@excalidraw-collab/server";
 import { run } from "./dispatch.js";
 import { ExitCode } from "./errors.js";
 
@@ -45,16 +41,12 @@ function capture() {
     },
     get stdout() {
       return stdoutChunks
-        .map((c) =>
-          typeof c === "string" ? c : Buffer.from(c).toString("utf8"),
-        )
+        .map((c) => (typeof c === "string" ? c : Buffer.from(c).toString("utf8")))
         .join("");
     },
     get stdoutBytes() {
       return Buffer.concat(
-        stdoutChunks.map((c) =>
-          typeof c === "string" ? Buffer.from(c, "utf8") : Buffer.from(c),
-        ),
+        stdoutChunks.map((c) => (typeof c === "string" ? Buffer.from(c, "utf8") : Buffer.from(c))),
       );
     },
     get stderr() {
@@ -74,14 +66,14 @@ type Harness = {
 };
 
 async function startServer(dataDir?: string): Promise<Harness> {
-  const dir = dataDir ?? tempDir("excalicli-backup-data-");
+  const dir = dataDir ?? tempDir("excali-backup-data-");
   if (!dataDir) {
     // already in tempDirs
   } else if (!tempDirs.includes(dir)) {
     tempDirs.push(dir);
   }
-  const cwd = tempDir("excalicli-backup-cwd-");
-  const configHome = tempDir("excalicli-backup-xdg-");
+  const cwd = tempDir("excali-backup-cwd-");
+  const configHome = tempDir("excali-backup-xdg-");
   const token = "test-bootstrap-token-backup-cli";
 
   const db = openDatabase(dir);
@@ -112,8 +104,8 @@ async function startServer(dataDir?: string): Promise<Harness> {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     XDG_CONFIG_HOME: configHome,
-    EXCALICLI_SERVER: baseUrl,
-    EXCALICLI_TOKEN: token,
+    EXCALI_SERVER: baseUrl,
+    EXCALI_TOKEN: token,
   };
 
   return { app, db, baseUrl, token, dataDir: dir, cwd, env };
@@ -171,10 +163,7 @@ async function seedViaCli(h: Harness): Promise<{ fileId: string; imageBytes: Buf
   });
   assert.equal(code, ExitCode.OK, c.stderr);
 
-  const imageBytes = Buffer.from(
-    "PNG-FAKE-BACKUP-" + "y".repeat(80),
-    "utf8",
-  );
+  const imageBytes = Buffer.from("PNG-FAKE-BACKUP-" + "y".repeat(80), "utf8");
   const fileId = sha1Hex(imageBytes);
   const dataURL = `data:image/png;base64,${imageBytes.toString("base64")}`;
 
@@ -209,15 +198,92 @@ async function seedViaCli(h: Harness): Promise<{ fileId: string; imageBytes: Buf
   await push(
     "arch",
     0,
-    [{ id: "r1", type: "rectangle", x: 0, y: 0, width: 10, height: 10, version: 1, versionNonce: 1, isDeleted: false, fillStyle: "solid", strokeWidth: 1, strokeStyle: "solid", roughness: 0, opacity: 100, angle: 0, seed: 1, groupIds: [], frameId: null, roundness: null, boundElements: null, updated: 1, link: null, locked: false }],
+    [
+      {
+        id: "r1",
+        type: "rectangle",
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+        version: 1,
+        versionNonce: 1,
+        isDeleted: false,
+        fillStyle: "solid",
+        strokeWidth: 1,
+        strokeStyle: "solid",
+        roughness: 0,
+        opacity: 100,
+        angle: 0,
+        seed: 1,
+        groupIds: [],
+        frameId: null,
+        roundness: null,
+        boundElements: null,
+        updated: 1,
+        link: null,
+        locked: false,
+      },
+    ],
     "initial",
   );
   await push(
     "arch",
     1,
     [
-      { id: "r1", type: "rectangle", x: 0, y: 0, width: 10, height: 10, version: 1, versionNonce: 1, isDeleted: false, fillStyle: "solid", strokeWidth: 1, strokeStyle: "solid", roughness: 0, opacity: 100, angle: 0, seed: 1, groupIds: [], frameId: null, roundness: null, boundElements: null, updated: 1, link: null, locked: false },
-      { id: "img1", type: "image", x: 20, y: 20, width: 40, height: 40, version: 1, versionNonce: 2, isDeleted: false, fillStyle: "solid", strokeWidth: 1, strokeStyle: "solid", roughness: 0, opacity: 100, angle: 0, seed: 2, groupIds: [], frameId: null, roundness: null, boundElements: null, updated: 1, link: null, locked: false, fileId, status: "saved", scale: [1, 1] },
+      {
+        id: "r1",
+        type: "rectangle",
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+        version: 1,
+        versionNonce: 1,
+        isDeleted: false,
+        fillStyle: "solid",
+        strokeWidth: 1,
+        strokeStyle: "solid",
+        roughness: 0,
+        opacity: 100,
+        angle: 0,
+        seed: 1,
+        groupIds: [],
+        frameId: null,
+        roundness: null,
+        boundElements: null,
+        updated: 1,
+        link: null,
+        locked: false,
+      },
+      {
+        id: "img1",
+        type: "image",
+        x: 20,
+        y: 20,
+        width: 40,
+        height: 40,
+        version: 1,
+        versionNonce: 2,
+        isDeleted: false,
+        fillStyle: "solid",
+        strokeWidth: 1,
+        strokeStyle: "solid",
+        roughness: 0,
+        opacity: 100,
+        angle: 0,
+        seed: 2,
+        groupIds: [],
+        frameId: null,
+        roundness: null,
+        boundElements: null,
+        updated: 1,
+        link: null,
+        locked: false,
+        fileId,
+        status: "saved",
+        scale: [1, 1],
+      },
     ],
     "added screenshot",
     {
@@ -233,8 +299,59 @@ async function seedViaCli(h: Harness): Promise<{ fileId: string; imageBytes: Buf
     "arch",
     2,
     [
-      { id: "r1", type: "rectangle", x: 10, y: 10, width: 10, height: 10, version: 2, versionNonce: 3, isDeleted: false, fillStyle: "solid", strokeWidth: 1, strokeStyle: "solid", roughness: 0, opacity: 100, angle: 0, seed: 1, groupIds: [], frameId: null, roundness: null, boundElements: null, updated: 2, link: null, locked: false },
-      { id: "img1", type: "image", x: 20, y: 20, width: 40, height: 40, version: 1, versionNonce: 2, isDeleted: false, fillStyle: "solid", strokeWidth: 1, strokeStyle: "solid", roughness: 0, opacity: 100, angle: 0, seed: 2, groupIds: [], frameId: null, roundness: null, boundElements: null, updated: 1, link: null, locked: false, fileId, status: "saved", scale: [1, 1] },
+      {
+        id: "r1",
+        type: "rectangle",
+        x: 10,
+        y: 10,
+        width: 10,
+        height: 10,
+        version: 2,
+        versionNonce: 3,
+        isDeleted: false,
+        fillStyle: "solid",
+        strokeWidth: 1,
+        strokeStyle: "solid",
+        roughness: 0,
+        opacity: 100,
+        angle: 0,
+        seed: 1,
+        groupIds: [],
+        frameId: null,
+        roundness: null,
+        boundElements: null,
+        updated: 2,
+        link: null,
+        locked: false,
+      },
+      {
+        id: "img1",
+        type: "image",
+        x: 20,
+        y: 20,
+        width: 40,
+        height: 40,
+        version: 1,
+        versionNonce: 2,
+        isDeleted: false,
+        fillStyle: "solid",
+        strokeWidth: 1,
+        strokeStyle: "solid",
+        roughness: 0,
+        opacity: 100,
+        angle: 0,
+        seed: 2,
+        groupIds: [],
+        frameId: null,
+        roundness: null,
+        boundElements: null,
+        updated: 1,
+        link: null,
+        locked: false,
+        fileId,
+        status: "saved",
+        scale: [1, 1],
+      },
     ],
     "tweaked layout",
     {
@@ -292,7 +409,7 @@ test("backup -o writes tar.gz; help documents layout", async () => {
 });
 
 test("backup, wipe DATA_DIR, restore: history and images survive", async () => {
-  const dataDir = tempDir("excalicli-e2e-wipe-data-");
+  const dataDir = tempDir("excali-e2e-wipe-data-");
   let h = await startServer(dataDir);
   const { fileId, imageBytes } = await seedViaCli(h);
 

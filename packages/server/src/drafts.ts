@@ -11,19 +11,10 @@
  *
  * `updatedBy` always comes from the bearer token identity.
  */
-import {
-  normalizeScene,
-  SceneValidationError,
-  type SceneDocument,
-} from "@excalidraw-collab/core";
+import { normalizeScene, SceneValidationError, type SceneDocument } from "@excalidraw-collab/core";
 import type { FastifyInstance } from "fastify";
 import { authorFromIdentity, createAuthPreHandler } from "./auth.js";
-import {
-  gunzipJson,
-  gzipJson,
-  type Database,
-  type DraftRow,
-} from "./db.js";
+import { gunzipJson, gzipJson, type Database, type DraftRow } from "./db.js";
 import { AppError, ErrorCode } from "./errors.js";
 
 /** Wire shape returned by GET/PUT draft endpoints. */
@@ -79,40 +70,25 @@ const putDraftBodySchema = {
 function parseFileIds(raw: unknown): string[] {
   if (raw === undefined || raw === null) return [];
   if (!Array.isArray(raw)) {
-    throw new AppError(
-      ErrorCode.VALIDATION,
-      "fileIds must be an array of strings",
-      400,
-    );
+    throw new AppError(ErrorCode.VALIDATION, "fileIds must be an array of strings", 400);
   }
   const ids: string[] = [];
   for (let i = 0; i < raw.length; i++) {
     const id = raw[i];
     if (typeof id !== "string" || id.length === 0) {
-      throw new AppError(
-        ErrorCode.VALIDATION,
-        `fileIds[${i}] must be a non-empty string`,
-        400,
-      );
+      throw new AppError(ErrorCode.VALIDATION, `fileIds[${i}] must be a non-empty string`, 400);
     }
     ids.push(id);
   }
   return ids;
 }
 
-function parseBasedOnVersion(
-  raw: unknown,
-  defaultHead: number,
-): number {
+function parseBasedOnVersion(raw: unknown, defaultHead: number): number {
   if (raw === undefined || raw === null || raw === "") {
     return defaultHead;
   }
   if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 0) {
-    throw new AppError(
-      ErrorCode.VALIDATION,
-      "basedOnVersion must be a non-negative integer",
-      400,
-    );
+    throw new AppError(ErrorCode.VALIDATION, "basedOnVersion must be a non-negative integer", 400);
   }
   return raw;
 }
@@ -131,10 +107,7 @@ function parseStoredFileIds(fileIdsJson: string): string[] {
  * Build the draft wire response, computing `stale` from based_on vs current head.
  * A draft is stale when it was based on an older head than the scene has now.
  */
-export function toDraftResponse(
-  row: DraftRow,
-  headVersion: number,
-): DraftResponse {
+export function toDraftResponse(row: DraftRow, headVersion: number): DraftResponse {
   const basedOnVersion = row.based_on_version;
   return {
     elements: gunzipJson<SceneDocument["elements"]>(row.elements),
@@ -179,20 +152,12 @@ export async function registerDraftRoutes(
           const { slug } = request.params;
           const scene = db.getSceneBySlug(slug);
           if (!scene) {
-            throw new AppError(
-              ErrorCode.NOT_FOUND,
-              `scene not found: ${slug}`,
-              404,
-            );
+            throw new AppError(ErrorCode.NOT_FOUND, `scene not found: ${slug}`, 404);
           }
 
           const identity = request.auth;
           if (!identity) {
-            throw new AppError(
-              ErrorCode.UNAUTHORIZED,
-              "authentication required",
-              401,
-            );
+            throw new AppError(ErrorCode.UNAUTHORIZED, "authentication required", 401);
           }
 
           let doc: SceneDocument;
@@ -203,12 +168,9 @@ export async function registerDraftRoutes(
             });
           } catch (err) {
             if (err instanceof SceneValidationError) {
-              throw new AppError(
-                ErrorCode.VALIDATION,
-                err.message,
-                400,
-                { problems: err.problems },
-              );
+              throw new AppError(ErrorCode.VALIDATION, err.message, 400, {
+                problems: err.problems,
+              });
             }
             throw err;
           }
@@ -231,8 +193,7 @@ export async function registerDraftRoutes(
           });
 
           // Re-read head in case a concurrent commit moved it during the put.
-          const headNow =
-            db.getSceneById(scene.id)?.head_version ?? scene.head_version;
+          const headNow = db.getSceneById(scene.id)?.head_version ?? scene.head_version;
           return toDraftResponse(row, headNow);
         },
       );
@@ -246,20 +207,12 @@ export async function registerDraftRoutes(
         const { slug } = request.params;
         const scene = db.getSceneBySlug(slug);
         if (!scene) {
-          throw new AppError(
-            ErrorCode.NOT_FOUND,
-            `scene not found: ${slug}`,
-            404,
-          );
+          throw new AppError(ErrorCode.NOT_FOUND, `scene not found: ${slug}`, 404);
         }
 
         const row = db.getDraft(scene.id);
         if (!row) {
-          throw new AppError(
-            ErrorCode.NOT_FOUND,
-            `no draft for scene: ${slug}`,
-            404,
-          );
+          throw new AppError(ErrorCode.NOT_FOUND, `no draft for scene: ${slug}`, 404);
         }
 
         return toDraftResponse(row, scene.head_version);
@@ -274,20 +227,12 @@ export async function registerDraftRoutes(
         const { slug } = request.params;
         const scene = db.getSceneBySlug(slug);
         if (!scene) {
-          throw new AppError(
-            ErrorCode.NOT_FOUND,
-            `scene not found: ${slug}`,
-            404,
-          );
+          throw new AppError(ErrorCode.NOT_FOUND, `scene not found: ${slug}`, 404);
         }
 
         const deleted = db.deleteDraft(scene.id);
         if (!deleted) {
-          throw new AppError(
-            ErrorCode.NOT_FOUND,
-            `no draft for scene: ${slug}`,
-            404,
-          );
+          throw new AppError(ErrorCode.NOT_FOUND, `no draft for scene: ${slug}`, 404);
         }
 
         return reply.status(204).send();

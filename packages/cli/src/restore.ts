@@ -1,5 +1,5 @@
 /**
- * `excalicli restore backup.tar.gz [--on-collision skip|overwrite|abort]`
+ * `excali restore backup.tar.gz [--on-collision skip|overwrite|abort]`
  *
  * Uploads a portable archive to the server. Collision policy is always
  * explicit in the response (never silent skip/overwrite).
@@ -26,7 +26,7 @@ export type RestoreReport = {
 function requireAuth(ctx: CommandContext): void {
   if (!ctx.config.server || !ctx.config.token) {
     throw new CliError(
-      "No server/token configured. Set EXCALICLI_SERVER and EXCALICLI_TOKEN, or run `excalicli login`.",
+      "No server/token configured. Set EXCALI_SERVER and EXCALI_TOKEN, or run `excali login`.",
       { code: "USAGE" },
     );
   }
@@ -58,13 +58,13 @@ function parseRestoreArgs(args: string[]): {
   if (positionals.length === 0) {
     throw new UsageError(
       "restore requires ARCHIVE.tar.gz\n\n" +
-        "Usage: excalicli restore backup.tar.gz [--on-collision skip|overwrite|abort]",
+        "Usage: excali restore backup.tar.gz [--on-collision skip|overwrite|abort]",
     );
   }
   if (positionals.length > 1) {
     throw new UsageError(
       `unexpected arguments: ${positionals.slice(1).join(" ")}\n\n` +
-        "Usage: excalicli restore backup.tar.gz [--on-collision skip|overwrite|abort]",
+        "Usage: excali restore backup.tar.gz [--on-collision skip|overwrite|abort]",
     );
   }
 
@@ -73,13 +73,7 @@ function parseRestoreArgs(args: string[]): {
     throw new UsageError("restore requires a non-empty ARCHIVE path");
   }
 
-  const rawPolicy = (
-    values["on-collision"] ??
-    values.onCollision ??
-    "skip"
-  )
-    .trim()
-    .toLowerCase();
+  const rawPolicy = (values["on-collision"] ?? values.onCollision ?? "skip").trim().toLowerCase();
   if (rawPolicy !== "skip" && rawPolicy !== "overwrite" && rawPolicy !== "abort") {
     throw new UsageError(
       `--on-collision must be skip|overwrite|abort (got ${JSON.stringify(rawPolicy)})`,
@@ -93,9 +87,7 @@ async function runRestore(ctx: CommandContext): Promise<CommandResult> {
   requireAuth(ctx);
   const { archive, onCollision } = parseRestoreArgs(ctx.args);
 
-  const abs = path.isAbsolute(archive)
-    ? archive
-    : path.join(ctx.cwd, archive);
+  const abs = path.isAbsolute(archive) ? archive : path.join(ctx.cwd, archive);
   if (!fs.existsSync(abs)) {
     throw new CliError(`backup file not found: ${archive}`, { code: "ERROR" });
   }
@@ -139,11 +131,10 @@ async function runRestore(ctx: CommandContext): Promise<CommandResult> {
 
 export const restoreCommand: Command = {
   name: "restore",
-  description:
-    "Restore a portable backup archive into the server (explicit collision policy)",
+  description: "Restore a portable backup archive into the server (explicit collision policy)",
   usage:
-    "excalicli restore backup.tar.gz [--on-collision skip|overwrite|abort] [--json]\n\n" +
-    "  ARCHIVE                 Path to a .tar.gz produced by `excalicli backup`.\n" +
+    "excali restore backup.tar.gz [--on-collision skip|overwrite|abort] [--json]\n\n" +
+    "  ARCHIVE                 Path to a .tar.gz produced by `excali backup`.\n" +
     "  --on-collision POLICY   What to do when a scene slug already exists:\n" +
     "                            skip       leave existing scene (default); report it\n" +
     "                            overwrite  replace existing scene + history\n" +

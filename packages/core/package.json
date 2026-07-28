@@ -1,8 +1,24 @@
 {
   "name": "@excalidraw-collab/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Shared scene types, diffing and digest logic for excalidraw-collab.",
+  "homepage": "https://github.com/femoral/excalidraw-collab#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/femoral/excalidraw-collab.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/femoral/excalidraw-collab/issues"
+  },
   "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -12,7 +28,9 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.test.*",
+    "!dist/**/*.map"
   ],
   "scripts": {
     "build": "node --eval \"const{rmSync}=require('node:fs');rmSync('dist',{recursive:true,force:true});rmSync('tsconfig.tsbuildinfo',{force:true})\" && tsc -b",

@@ -1,12 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  CliError,
-  ExitCode,
-  UsageError,
-  exitCodeForError,
-  toErrorEnvelope,
-} from "./errors.js";
+import { CliError, ExitCode, UsageError, exitCodeForError, toErrorEnvelope } from "./errors.js";
 
 test("exitCodeForError maps server codes", () => {
   assert.equal(exitCodeForError("CONFLICT"), ExitCode.CONFLICT);

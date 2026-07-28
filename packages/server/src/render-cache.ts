@@ -75,12 +75,9 @@ export function renderCachePath(dataDir: string, key: RenderCacheKey): string {
  * the body on every hit).
  */
 export function renderCacheEtag(key: RenderCacheKey): string {
-  const raw = [
-    key.sceneId,
-    String(key.version),
-    key.format,
-    optionsFileStem(key.options),
-  ].join("\0");
+  const raw = [key.sceneId, String(key.version), key.format, optionsFileStem(key.options)].join(
+    "\0",
+  );
   const digest = createHash("sha1").update(raw).digest("hex");
   return `"${digest}"`;
 }

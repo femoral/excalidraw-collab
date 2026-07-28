@@ -1,5 +1,5 @@
 /**
- * `excalicli watch` against a real in-process server (issue #24).
+ * `excali watch` against a real in-process server (issue #24).
  *
  * Asserts the notify path: a concurrent push wakes watch within 1 s
  * (no sleep-and-hope), and `--json` emits JSONL (one object per line).
@@ -9,11 +9,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, test } from "node:test";
-import {
-  buildApp,
-  openDatabase,
-  type Database,
-} from "@excalidraw-collab/server";
+import { buildApp, openDatabase, type Database } from "@excalidraw-collab/server";
 import { run } from "./dispatch.js";
 import { ExitCode } from "./errors.js";
 
@@ -62,12 +58,10 @@ type Harness = {
   env: NodeJS.ProcessEnv;
 };
 
-async function startServer(opts?: {
-  eventsTimeoutMs?: number;
-}): Promise<Harness> {
-  const dataDir = tempDir("excalicli-watch-data-");
-  const cwd = tempDir("excalicli-watch-cwd-");
-  const configHome = tempDir("excalicli-watch-xdg-");
+async function startServer(opts?: { eventsTimeoutMs?: number }): Promise<Harness> {
+  const dataDir = tempDir("excali-watch-data-");
+  const cwd = tempDir("excali-watch-cwd-");
+  const configHome = tempDir("excali-watch-xdg-");
   const token = "test-bootstrap-token-watch-cli";
 
   const db = openDatabase(dataDir);
@@ -99,8 +93,8 @@ async function startServer(opts?: {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     XDG_CONFIG_HOME: configHome,
-    EXCALICLI_SERVER: baseUrl,
-    EXCALICLI_TOKEN: token,
+    EXCALI_SERVER: baseUrl,
+    EXCALI_TOKEN: token,
   };
 
   return { app, baseUrl, token, cwd, env };
@@ -136,11 +130,7 @@ function rect(id: string, versionNonce = 1): Record<string, unknown> {
   };
 }
 
-function writeScene(
-  cwd: string,
-  slug: string,
-  elements: Record<string, unknown>[],
-): string {
+function writeScene(cwd: string, slug: string, elements: Record<string, unknown>[]): string {
   const file = path.join(cwd, `${slug}.excalidraw`);
   const doc = {
     type: "excalidraw",
@@ -209,7 +199,7 @@ test("watch --json emits one JSONL object when a push lands", async () => {
   const ac = new AbortController();
   const watchEnv = {
     ...h.env,
-    EXCALICLI_WATCH_MAX_EVENTS: "1",
+    EXCALI_WATCH_MAX_EVENTS: "1",
   };
 
   const watchPromise = run({
@@ -228,7 +218,7 @@ test("watch --json emits one JSONL object when a push lands", async () => {
   {
     const pushCap = capture();
     // push from a separate cwd so we don't advance watch's local state mid-flight
-    const otherCwd = tempDir("excalicli-watch-pusher-");
+    const otherCwd = tempDir("excali-watch-pusher-");
     writeScene(otherCwd, "arch", [rect("a"), rect("b")]);
     // Record parentVersion via state for the pusher
     fs.mkdirSync(path.join(otherCwd, ".excalidraw-collab"), {
@@ -257,21 +247,14 @@ test("watch --json emits one JSONL object when a push lands", async () => {
   const code = await watchPromise;
   const elapsed = Date.now() - t0;
   assert.equal(code, ExitCode.OK, c.stderr);
-  assert.ok(
-    elapsed < 1000,
-    `watch should react within 1s of push, took ${elapsed}ms`,
-  );
+  assert.ok(elapsed < 1000, `watch should react within 1s of push, took ${elapsed}ms`);
 
   // JSONL: exactly one non-empty line, parseable as a single object.
   const lines = c.stdout
     .split("\n")
     .map((l) => l.trim())
     .filter((l) => l.length > 0);
-  assert.equal(
-    lines.length,
-    1,
-    `expected one JSONL line, got ${lines.length}: ${c.stdout}`,
-  );
+  assert.equal(lines.length, 1, `expected one JSONL line, got ${lines.length}: ${c.stdout}`);
   // Must not be pretty-printed multi-line JSON.
   assert.ok(!c.stdout.includes("\n  "), "JSONL must be compact, not pretty");
   const event = JSON.parse(lines[0]!) as {
@@ -286,10 +269,7 @@ test("watch --json emits one JSONL object when a push lands", async () => {
   assert.equal(event.to, 2);
   assert.equal(event.message, "added b");
   assert.ok(event.diff);
-  assert.ok(
-    (event.diff.summary?.added ?? 0) >= 1,
-    "diff should show the added element",
-  );
+  assert.ok((event.diff.summary?.added ?? 0) >= 1, "diff should show the added element");
 });
 
 test("watch human mode prints a diff after push", async () => {
@@ -326,14 +306,14 @@ test("watch human mode prints a diff after push", async () => {
   const c = capture();
   const watchPromise = run({
     argv: ["watch", "board", "--since", "1"],
-    env: { ...h.env, EXCALICLI_WATCH_MAX_EVENTS: "1" },
+    env: { ...h.env, EXCALI_WATCH_MAX_EVENTS: "1" },
     cwd: h.cwd,
     io: c.io,
   });
 
   await new Promise<void>((r) => setTimeout(r, 50));
 
-  const otherCwd = tempDir("excalicli-watch-pusher2-");
+  const otherCwd = tempDir("excali-watch-pusher2-");
   writeScene(otherCwd, "board", [rect("x"), rect("y")]);
   fs.mkdirSync(path.join(otherCwd, ".excalidraw-collab"), { recursive: true });
   fs.writeFileSync(
@@ -374,8 +354,8 @@ test("watch without SLUG exits usage", async () => {
     argv: ["watch"],
     env: {
       ...process.env,
-      EXCALICLI_SERVER: "http://127.0.0.1:9",
-      EXCALICLI_TOKEN: "t",
+      EXCALI_SERVER: "http://127.0.0.1:9",
+      EXCALI_TOKEN: "t",
     },
     io: c.io,
   });
@@ -428,7 +408,7 @@ test("watch --once exits 0 after exactly one event", async () => {
 
   await new Promise<void>((r) => setTimeout(r, 50));
 
-  const otherCwd = tempDir("excalicli-watch-once-pusher-");
+  const otherCwd = tempDir("excali-watch-once-pusher-");
   writeScene(otherCwd, "once", [rect("a"), rect("b")]);
   fs.mkdirSync(path.join(otherCwd, ".excalidraw-collab"), { recursive: true });
   fs.writeFileSync(
@@ -488,16 +468,7 @@ test("watch --once --timeout exits TIMEOUT with JSONL trailer", async () => {
   const c = capture();
   const t0 = Date.now();
   const code = await run({
-    argv: [
-      "--json",
-      "watch",
-      "idle",
-      "--since",
-      "0",
-      "--once",
-      "--timeout",
-      "1",
-    ],
+    argv: ["--json", "watch", "idle", "--since", "0", "--once", "--timeout", "1"],
     env: h.env,
     cwd: h.cwd,
     io: c.io,
@@ -537,7 +508,7 @@ test("watch --for-turn wakes on another client's lock release", async () => {
   }
   const agentEnv: NodeJS.ProcessEnv = {
     ...h.env,
-    EXCALICLI_TOKEN: agentToken,
+    EXCALI_TOKEN: agentToken,
   };
 
   {
@@ -597,10 +568,7 @@ test("watch --for-turn wakes on another client's lock release", async () => {
   const code = await watchPromise;
   const elapsed = Date.now() - t0;
   assert.equal(code, ExitCode.OK, c.stderr);
-  assert.ok(
-    elapsed < 2_000,
-    `--for-turn should wake on release within 2s, took ${elapsed}ms`,
-  );
+  assert.ok(elapsed < 2_000, `--for-turn should wake on release within 2s, took ${elapsed}ms`);
   const lines = c.stdout
     .split("\n")
     .map((l) => l.trim())
@@ -635,7 +603,7 @@ test("watch --for-turn wakes when lock TTL expires (no client poll)", async () =
   }
   const agentEnv: NodeJS.ProcessEnv = {
     ...h.env,
-    EXCALICLI_TOKEN: agentToken,
+    EXCALI_TOKEN: agentToken,
   };
 
   {
@@ -679,10 +647,7 @@ test("watch --for-turn wakes when lock TTL expires (no client poll)", async () =
 
   assert.equal(code, ExitCode.OK, c.stderr);
   // Should wake near the 1s TTL, not after the full --timeout 8.
-  assert.ok(
-    elapsed < 4_000,
-    `TTL expiry should wake within ~1–2s, took ${elapsed}ms`,
-  );
+  assert.ok(elapsed < 4_000, `TTL expiry should wake within ~1–2s, took ${elapsed}ms`);
   const lines = c.stdout
     .split("\n")
     .map((l) => l.trim())
@@ -724,13 +689,13 @@ test("flagless watch JSONL shape unchanged (no kind field on commit)", async () 
   const c = capture();
   const watchPromise = run({
     argv: ["--json", "watch", "shape", "--since", "1"],
-    env: { ...h.env, EXCALICLI_WATCH_MAX_EVENTS: "1" },
+    env: { ...h.env, EXCALI_WATCH_MAX_EVENTS: "1" },
     cwd: h.cwd,
     io: c.io,
   });
   await new Promise<void>((r) => setTimeout(r, 50));
 
-  const otherCwd = tempDir("excalicli-watch-shape-pusher-");
+  const otherCwd = tempDir("excali-watch-shape-pusher-");
   writeScene(otherCwd, "shape", [rect("a"), rect("b")]);
   fs.mkdirSync(path.join(otherCwd, ".excalidraw-collab"), { recursive: true });
   fs.writeFileSync(

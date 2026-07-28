@@ -1,5 +1,5 @@
 /**
- * `excalicli watch SLUG` — long-poll for scene events and print each one.
+ * `excali watch SLUG` — long-poll for scene events and print each one.
  *
  * Default (no flags): streaming tail of commits — prints each new version's
  * diff until Ctrl-C. Behaviour is unchanged from issue #24.
@@ -90,7 +90,7 @@ export type WatchEventKind = "commit" | "turn";
 function requireAuth(ctx: CommandContext): void {
   if (!ctx.config.server || !ctx.config.token) {
     throw new CliError(
-      "No server/token configured. Set EXCALICLI_SERVER and EXCALICLI_TOKEN, or run `excalicli login`.",
+      "No server/token configured. Set EXCALI_SERVER and EXCALI_TOKEN, or run `excali login`.",
       { code: "USAGE" },
     );
   }
@@ -135,14 +135,14 @@ function parseWatchArgs(args: string[]): {
   if (positionals.length === 0) {
     throw new UsageError(
       "watch requires SLUG\n\n" +
-        "Usage: excalicli watch SLUG [--since N] [--once] [--timeout SECONDS] " +
+        "Usage: excali watch SLUG [--since N] [--once] [--timeout SECONDS] " +
         "[--events commit,turn] [--for-turn] [--json]",
     );
   }
   if (positionals.length > 1) {
     throw new UsageError(
       `unexpected arguments: ${positionals.slice(1).join(" ")}\n\n` +
-        "Usage: excalicli watch SLUG [--since N] [--once] [--timeout SECONDS] " +
+        "Usage: excali watch SLUG [--since N] [--once] [--timeout SECONDS] " +
         "[--events commit,turn] [--for-turn] [--json]",
     );
   }
@@ -213,19 +213,14 @@ function parseEventsFlag(raw: string | undefined): Set<WatchEventKind> {
     } else if (p === "turn" || p === "lock") {
       set.add("turn");
     } else {
-      throw new UsageError(
-        `unknown event kind ${JSON.stringify(p)}; expected commit and/or turn`,
-      );
+      throw new UsageError(`unknown event kind ${JSON.stringify(p)}; expected commit and/or turn`);
     }
   }
   return set;
 }
 
 function isAbortError(err: unknown): boolean {
-  return (
-    err instanceof Error &&
-    (err.name === "AbortError" || err.name === "TimeoutError")
-  );
+  return err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError");
 }
 
 /**
@@ -234,11 +229,7 @@ function isAbortError(err: unknown): boolean {
  *   2. last pulled version in local state (so agents see changes since pull)
  *   3. current head (wait for the *next* commit only)
  */
-async function resolveSince(
-  ctx: CommandContext,
-  slug: string,
-  explicit?: number,
-): Promise<number> {
+async function resolveSince(ctx: CommandContext, slug: string, explicit?: number): Promise<number> {
   if (explicit !== undefined) return explicit;
 
   const server = ctx.config.server!;
@@ -341,19 +332,12 @@ async function emitCommit(
       if (isAbortError(err) || ctx.signal?.aborted) throw err;
       throw err;
     }
-    writeLine(
-      ctx,
-      `── ${slug} v${from} → v${to}  ${event.author}: ${event.message}`,
-    );
+    writeLine(ctx, `── ${slug} v${from} → v${to}  ${event.author}: ${event.message}`);
     writeLine(ctx, text.endsWith("\n") ? text : `${text}\n`);
   }
 }
 
-async function emitTurn(
-  ctx: CommandContext,
-  slug: string,
-  event: GlobalSceneEvent,
-): Promise<void> {
+async function emitTurn(ctx: CommandContext, slug: string, event: GlobalSceneEvent): Promise<void> {
   if (ctx.json) {
     const payload: WatchTurnEvent = {
       slug,
@@ -371,11 +355,7 @@ async function emitTurn(
           (event.actor ? `  (by ${event.actor})` : ""),
       );
     } else {
-      writeLine(
-        ctx,
-        `── ${slug} turn  free` +
-          (event.actor ? `  (by ${event.actor})` : ""),
-      );
+      writeLine(ctx, `── ${slug} turn  free` + (event.actor ? `  (by ${event.actor})` : ""));
     }
   }
 }
@@ -475,10 +455,7 @@ async function fetchEventCursor(ctx: CommandContext): Promise<number> {
   return result.body.cursor;
 }
 
-async function fetchScene(
-  ctx: CommandContext,
-  slug: string,
-): Promise<SceneInfo> {
+async function fetchScene(ctx: CommandContext, slug: string): Promise<SceneInfo> {
   return apiFetch<SceneInfo>({
     path: `/api/scenes/${encodeURIComponent(slug)}`,
     method: "GET",
@@ -496,10 +473,7 @@ async function fetchWhoami(ctx: CommandContext): Promise<WhoamiData> {
   });
 }
 
-function lockIsFreeOrMine(
-  lock: SceneInfo["lock"],
-  me: string,
-): boolean {
+function lockIsFreeOrMine(lock: SceneInfo["lock"], me: string): boolean {
   return lock === null || lock.holder === me;
 }
 
@@ -511,11 +485,7 @@ function lockIsFreeOrMine(
  * the human). Under plain `--once` / streaming watch we do NOT suppress —
  * the caller may legitimately want to observe its own commit landing.
  */
-function isSelfAuthored(
-  event: GlobalSceneEvent,
-  me: string,
-  forTurn: boolean,
-): boolean {
+function isSelfAuthored(event: GlobalSceneEvent, me: string, forTurn: boolean): boolean {
   if (!forTurn) return false;
   if (event.kind === "lock") {
     return event.actor === me;
@@ -523,10 +493,7 @@ function isSelfAuthored(
   return event.author === me;
 }
 
-function eventMatchesKinds(
-  event: GlobalSceneEvent,
-  kinds: Set<WatchEventKind>,
-): boolean {
+function eventMatchesKinds(event: GlobalSceneEvent, kinds: Set<WatchEventKind>): boolean {
   if (event.kind === "version") return kinds.has("commit");
   if (event.kind === "lock") return kinds.has("turn");
   return false;
@@ -551,10 +518,7 @@ async function runCommitWatch(
   const signal = ctx.signal;
 
   if (!ctx.json) {
-    writeLine(
-      ctx,
-      `watching ${slug} since v${since} (Ctrl-C to stop)\n`,
-    );
+    writeLine(ctx, `watching ${slug} since v${since} (Ctrl-C to stop)\n`);
   }
 
   while (true) {
@@ -618,8 +582,8 @@ async function runCommitWatch(
     if (once) break;
 
     // Tests pass an AbortSignal and abort after the first event, or a
-    // maxEvents cap via env (EXCALICLI_WATCH_MAX_EVENTS) for harnesses.
-    const maxRaw = ctx.env.EXCALICLI_WATCH_MAX_EVENTS;
+    // maxEvents cap via env (EXCALI_WATCH_MAX_EVENTS) for harnesses.
+    const maxRaw = ctx.env.EXCALI_WATCH_MAX_EVENTS;
     if (maxRaw !== undefined && maxRaw !== "") {
       const max = Number(maxRaw);
       if (Number.isInteger(max) && max > 0 && eventsSeen >= max) {
@@ -703,9 +667,7 @@ async function runMuxWatch(
       if (!ctx.json) {
         writeLine(
           ctx,
-          scene.lock
-            ? `turn for ${slug}: held by you (${me})\n`
-            : `turn for ${slug}: free\n`,
+          scene.lock ? `turn for ${slug}: held by you (${me})\n` : `turn for ${slug}: free\n`,
         );
       } else {
         writeLine(
@@ -737,15 +699,9 @@ async function runMuxWatch(
 
   if (!ctx.json) {
     if (forTurn) {
-      writeLine(
-        ctx,
-        `waiting for turn on ${slug} (Ctrl-C to stop)\n`,
-      );
+      writeLine(ctx, `waiting for turn on ${slug} (Ctrl-C to stop)\n`);
     } else {
-      writeLine(
-        ctx,
-        `watching ${slug} events=${[...kinds].join(",")} (Ctrl-C to stop)\n`,
-      );
+      writeLine(ctx, `watching ${slug} events=${[...kinds].join(",")} (Ctrl-C to stop)\n`);
     }
   }
 
@@ -774,9 +730,7 @@ async function runMuxWatch(
         } else {
           writeLine(
             ctx,
-            scene.lock
-              ? `── ${slug} turn  held by you (${me})`
-              : `── ${slug} turn  free`,
+            scene.lock ? `── ${slug} turn  held by you (${me})` : `── ${slug} turn  free`,
           );
         }
         return {
@@ -866,9 +820,7 @@ async function runMuxWatch(
             } else {
               writeLine(
                 ctx,
-                scene.lock
-                  ? `── ${slug} turn  held by you (${me})`
-                  : `── ${slug} turn  free`,
+                scene.lock ? `── ${slug} turn  held by you (${me})` : `── ${slug} turn  free`,
               );
             }
             eventsSeen += 1;
@@ -915,7 +867,7 @@ async function runMuxWatch(
         };
       }
 
-      const maxRaw = ctx.env.EXCALICLI_WATCH_MAX_EVENTS;
+      const maxRaw = ctx.env.EXCALI_WATCH_MAX_EVENTS;
       if (maxRaw !== undefined && maxRaw !== "") {
         const max = Number(maxRaw);
         if (Number.isInteger(max) && max > 0 && eventsSeen >= max) {
@@ -939,13 +891,9 @@ async function runMuxWatch(
 async function runWatch(ctx: CommandContext): Promise<CommandResult> {
   requireAuth(ctx);
   const parsed = parseWatchArgs(ctx.args);
-  const { slug, since: sinceArg, once, timeoutSeconds, events, forTurn } =
-    parsed;
+  const { slug, since: sinceArg, once, timeoutSeconds, events, forTurn } = parsed;
 
-  const deadlineMs =
-    timeoutSeconds !== undefined
-      ? Date.now() + timeoutSeconds * 1000
-      : null;
+  const deadlineMs = timeoutSeconds !== undefined ? Date.now() + timeoutSeconds * 1000 : null;
 
   // Zero timeout: fail immediately if we would have to wait.
   if (timeoutSeconds === 0) {
@@ -1018,7 +966,7 @@ export const watchCommand: Command = {
   description:
     "Long-poll for new versions (and optional turn events); --once/--timeout for agent waits",
   usage:
-    "excalicli watch SLUG [--since N] [--once] [--timeout SECONDS] [--events commit,turn] [--for-turn] [--json]\n\n" +
+    "excali watch SLUG [--since N] [--once] [--timeout SECONDS] [--events commit,turn] [--for-turn] [--json]\n\n" +
     "  --since N              Start after version N (default: last pulled, else current head)\n" +
     "  --once                 Exit 0 after the first matching event (prints one diff/JSONL line)\n" +
     "  --timeout SECONDS      Give up after N seconds with no event (exit 6 TIMEOUT)\n" +

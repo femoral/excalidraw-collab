@@ -7,10 +7,7 @@
  * a missing package becomes a clean {@link RenderError} `NOT_INSTALLED`
  * rather than a raw `ERR_MODULE_NOT_FOUND`.
  */
-import {
-  PLAYWRIGHT_NOT_INSTALLED_MESSAGE,
-  RenderError,
-} from "./types.js";
+import { PLAYWRIGHT_NOT_INSTALLED_MESSAGE, RenderError } from "./types.js";
 
 export type PlaywrightModule = typeof import("playwright");
 
@@ -24,9 +21,7 @@ let importer: PlaywrightImporter = defaultImporter;
  * Override the Playwright dynamic import (tests only).
  * Pass `null` to restore the real `import("playwright")`.
  */
-export function setPlaywrightImporterForTests(
-  next: PlaywrightImporter | null,
-): void {
+export function setPlaywrightImporterForTests(next: PlaywrightImporter | null): void {
   importer = next ?? defaultImporter;
 }
 
@@ -38,10 +33,7 @@ export function isPlaywrightModuleNotFound(err: unknown): boolean {
     message?: string;
     cause?: unknown;
   };
-  if (
-    e.code === "ERR_MODULE_NOT_FOUND" ||
-    e.code === "MODULE_NOT_FOUND"
-  ) {
+  if (e.code === "ERR_MODULE_NOT_FOUND" || e.code === "MODULE_NOT_FOUND") {
     const msg = typeof e.message === "string" ? e.message : "";
     // Node messages include the package name; be permissive if the code is
     // already a module-not-found (optional dep simply missing).
@@ -51,7 +43,10 @@ export function isPlaywrightModuleNotFound(err: unknown): boolean {
   if (e.cause !== undefined && e.cause !== err) {
     return isPlaywrightModuleNotFound(e.cause);
   }
-  if (typeof e.message === "string" && /cannot find (package|module) ['"]playwright['"]/i.test(e.message)) {
+  if (
+    typeof e.message === "string" &&
+    /cannot find (package|module) ['"]playwright['"]/i.test(e.message)
+  ) {
     return true;
   }
   return false;

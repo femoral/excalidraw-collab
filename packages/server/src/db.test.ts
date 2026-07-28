@@ -6,13 +6,7 @@ import { afterEach, describe, test } from "node:test";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "./app.js";
 import { loadConfig, type Config } from "./config.js";
-import {
-  DB_FILENAME,
-  gzipJson,
-  gunzipJson,
-  hashToken,
-  openDatabase,
-} from "./db.js";
+import { DB_FILENAME, gzipJson, gunzipJson, hashToken, openDatabase } from "./db.js";
 import { ErrorCode, type ErrorEnvelope } from "./errors.js";
 
 /** Each test gets its own temp DATA_DIR; cleaned in afterEach. */
@@ -369,11 +363,14 @@ describe("typed data-access layer", () => {
       assert.equal(db.getTokenByHash(tokenHash)?.name, "admin");
       assert.equal(token.last_used_at, null);
       assert.equal(token.is_admin, true);
-      assert.equal(db.insertToken({
-        id: "tok-2",
-        name: "agent",
-        token_hash: hashToken("agent-secret"),
-      }).is_admin, false);
+      assert.equal(
+        db.insertToken({
+          id: "tok-2",
+          name: "agent",
+          token_hash: hashToken("agent-secret"),
+        }).is_admin,
+        false,
+      );
       db.touchToken(token.id);
       assert.equal(typeof db.getTokenById(token.id)?.last_used_at, "string");
     } finally {
@@ -434,10 +431,7 @@ describe("/readyz with live database", () => {
       });
 
       const res = await app.inject({ method: "GET", url: "/readyz" });
-      assert.ok(
-        res.statusCode >= 400,
-        `expected non-200, got ${res.statusCode}`,
-      );
+      assert.ok(res.statusCode >= 400, `expected non-200, got ${res.statusCode}`);
       assert.equal(res.statusCode, 503);
       const body = res.json() as ErrorEnvelope;
       assert.equal(body.error.code, ErrorCode.NOT_READY);

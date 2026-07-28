@@ -9,8 +9,16 @@ function capture() {
   let stderr = "";
   return {
     io: {
-      stdout: { write(s: string) { stdout += s; } },
-      stderr: { write(s: string) { stderr += s; } },
+      stdout: {
+        write(s: string) {
+          stdout += s;
+        },
+      },
+      stderr: {
+        write(s: string) {
+          stderr += s;
+        },
+      },
     },
     get stdout() {
       return stdout;
@@ -21,11 +29,11 @@ function capture() {
   };
 }
 
-test("excalicli --help lists commands on stdout", async () => {
+test("excali --help lists commands on stdout", async () => {
   const c = capture();
   const code = await run({ argv: ["--help"], io: c.io });
   assert.equal(code, ExitCode.OK);
-  assert.match(c.stdout, /Usage: excalicli/);
+  assert.match(c.stdout, /Usage: excali/);
   assert.match(c.stdout, /version/);
   assert.equal(c.stderr, "");
 });
@@ -36,7 +44,7 @@ test("unknown command exits 2 with usage on stderr", async () => {
   assert.equal(code, ExitCode.USAGE);
   assert.equal(c.stdout, "");
   assert.match(c.stderr, /Unknown command: not-a-real-command/);
-  assert.match(c.stderr, /Usage: excalicli/);
+  assert.match(c.stderr, /Usage: excali/);
 });
 
 test("version stub: human table on stdout", async () => {
@@ -44,7 +52,7 @@ test("version stub: human table on stdout", async () => {
   const code = await run({ argv: ["version"], io: c.io });
   assert.equal(code, ExitCode.OK);
   assert.match(c.stdout, /name\s+version/);
-  assert.match(c.stdout, /excalicli/);
+  assert.match(c.stdout, /excali/);
   assert.equal(c.stderr, "");
 });
 
@@ -54,7 +62,7 @@ test("version stub: --json emits one JSON object on stdout", async () => {
   assert.equal(code, ExitCode.OK);
   assert.equal(c.stderr, "");
   const parsed = JSON.parse(c.stdout) as { name: string; version: string };
-  assert.equal(parsed.name, "excalicli");
+  assert.equal(parsed.name, "excali");
   assert.equal(typeof parsed.version, "string");
 });
 
@@ -63,7 +71,7 @@ test("global --json before subcommand works", async () => {
   const code = await run({ argv: ["--json", "version"], io: c.io });
   assert.equal(code, ExitCode.OK);
   const parsed = JSON.parse(c.stdout) as { name: string };
-  assert.equal(parsed.name, "excalicli");
+  assert.equal(parsed.name, "excali");
 });
 
 test("failed command with --json: stdout is valid JSON, message on stderr", async () => {

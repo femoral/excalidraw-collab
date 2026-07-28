@@ -15,11 +15,7 @@ export const DEFAULT_DIFF_CACHE_MAX = 256;
  * Build the cache key for a diff between two absolute version numbers.
  * Versions are integers (0 = empty base, 1..head = committed versions).
  */
-export function diffCacheKey(
-  sceneId: string,
-  from: number,
-  to: number,
-): string {
+export function diffCacheKey(sceneId: string, from: number, to: number): string {
   return `${sceneId}\0${from}\0${to}`;
 }
 
@@ -33,9 +29,7 @@ export class DiffCache {
 
   constructor(maxSize: number = DEFAULT_DIFF_CACHE_MAX) {
     if (!Number.isInteger(maxSize) || maxSize < 1) {
-      throw new RangeError(
-        `DiffCache maxSize must be a positive integer, got ${maxSize}`,
-      );
+      throw new RangeError(`DiffCache maxSize must be a positive integer, got ${maxSize}`);
     }
     this.maxSize = maxSize;
   }

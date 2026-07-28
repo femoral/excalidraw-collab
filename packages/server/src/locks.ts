@@ -50,9 +50,7 @@ const claimLockBodySchema = {
   additionalProperties: false,
 } as const;
 
-function lockInfoFromScene(
-  lock: NonNullable<SceneInfo["lock"]>,
-): LockInfo {
+function lockInfoFromScene(lock: NonNullable<SceneInfo["lock"]>): LockInfo {
   return {
     holder: lock.holder,
     expiresAt: lock.expiresAt,
@@ -92,20 +90,12 @@ export async function registerLockRoutes(
           const { slug } = request.params;
           const scene = db.getSceneBySlug(slug);
           if (!scene) {
-            throw new AppError(
-              ErrorCode.NOT_FOUND,
-              `scene not found: ${slug}`,
-              404,
-            );
+            throw new AppError(ErrorCode.NOT_FOUND, `scene not found: ${slug}`, 404);
           }
 
           const identity = request.auth;
           if (!identity) {
-            throw new AppError(
-              ErrorCode.UNAUTHORIZED,
-              "authentication required",
-              401,
-            );
+            throw new AppError(ErrorCode.UNAUTHORIZED, "authentication required", 401);
           }
 
           const holder = authorFromIdentity(identity);
@@ -113,10 +103,7 @@ export async function registerLockRoutes(
 
           // Active lock held by someone else → polite refusal (not a hard
           // wedge: client can still push without the lock, or DELETE first).
-          if (
-            isSceneLockActive(scene, nowMs) &&
-            scene.lock_holder !== holder
-          ) {
+          if (isSceneLockActive(scene, nowMs) && scene.lock_holder !== holder) {
             const current = toLock(scene, nowMs)!;
             throw new AppError(
               ErrorCode.LOCK_HELD,
@@ -147,11 +134,7 @@ export async function registerLockRoutes(
           const expiresAt = new Date(nowMs + ttlSeconds * 1000).toISOString();
           const updated = db.setSceneLock(scene.id, holder, expiresAt);
           if (!updated) {
-            throw new AppError(
-              ErrorCode.NOT_FOUND,
-              `scene not found: ${slug}`,
-              404,
-            );
+            throw new AppError(ErrorCode.NOT_FOUND, `scene not found: ${slug}`, 404);
           }
 
           const lock = toLock(updated, nowMs)!;
@@ -172,36 +155,27 @@ export async function registerLockRoutes(
       // -----------------------------------------------------------------
       // Anyone may release: a crashed agent must not wedge a human editor.
       // Idempotent when free or already expired.
-      api.delete<{ Params: { slug: string } }>(
-        "/scenes/:slug/lock",
-        async (request, reply) => {
-          const { slug } = request.params;
-          const scene = db.getSceneBySlug(slug);
-          if (!scene) {
-            throw new AppError(
-              ErrorCode.NOT_FOUND,
-              `scene not found: ${slug}`,
-              404,
-            );
-          }
+      api.delete<{ Params: { slug: string } }>("/scenes/:slug/lock", async (request, reply) => {
+        const { slug } = request.params;
+        const scene = db.getSceneBySlug(slug);
+        if (!scene) {
+          throw new AppError(ErrorCode.NOT_FOUND, `scene not found: ${slug}`, 404);
+        }
 
-          const identity = request.auth;
-          const actor = identity
-            ? authorFromIdentity(identity)
-            : scene.lock_holder ?? "unknown";
+        const identity = request.auth;
+        const actor = identity ? authorFromIdentity(identity) : (scene.lock_holder ?? "unknown");
 
-          lockExpiry?.disarm(scene.id);
-          db.setSceneLock(scene.id, null, null);
-          events?.publishLock({
-            sceneId: scene.id,
-            slug: scene.slug,
-            headVersion: scene.head_version,
-            lock: null,
-            actor,
-          });
-          return reply.status(204).send();
-        },
-      );
+        lockExpiry?.disarm(scene.id);
+        db.setSceneLock(scene.id, null, null);
+        events?.publishLock({
+          sceneId: scene.id,
+          slug: scene.slug,
+          headVersion: scene.head_version,
+          lock: null,
+          actor,
+        });
+        return reply.status(204).send();
+      });
     },
     { prefix: "/api" },
   );

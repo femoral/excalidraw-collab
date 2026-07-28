@@ -39,8 +39,7 @@ body,
   --radius-sm: 6px;
   --shadow-sm: 0 1px 2px rgba(27, 27, 31, 0.06);
   --shadow-md: 0 8px 24px rgba(27, 27, 31, 0.08);
-  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
-    sans-serif;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   /* Thumbnail slot — wave 5 will fill this; keep dimensions stable. */
   --thumb-aspect: 16 / 10;
@@ -286,7 +285,10 @@ code {
   cursor: pointer;
   background: transparent;
   color: var(--text);
-  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
 }
 
 .btn:disabled {
@@ -432,8 +434,7 @@ code {
   justify-content: center;
   padding: 2rem 1rem;
   background:
-    radial-gradient(ellipse 80% 50% at 50% -10%, var(--accent-soft), transparent),
-    var(--bg);
+    radial-gradient(ellipse 80% 50% at 50% -10%, var(--accent-soft), transparent), var(--bg);
 }
 
 .login-card {
@@ -661,7 +662,9 @@ code {
   overflow: hidden;
   box-shadow: var(--shadow-sm);
   height: 100%;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .scene-card:hover {
@@ -683,13 +686,12 @@ code {
 .scene-thumb-placeholder {
   aspect-ratio: var(--thumb-aspect);
   width: 100%;
-  background:
-    linear-gradient(
-      135deg,
-      var(--thumb-slot-bg) 0%,
-      var(--thumb-slot-bg-mid) 50%,
-      var(--thumb-slot-bg-end) 100%
-    );
+  background: linear-gradient(
+    135deg,
+    var(--thumb-slot-bg) 0%,
+    var(--thumb-slot-bg-mid) 50%,
+    var(--thumb-slot-bg-end) 100%
+  );
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1209,7 +1211,9 @@ code {
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
   margin-bottom: 0.25rem;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
 }
 
 .version-row:hover {
@@ -1481,11 +1485,7 @@ code {
 .diff-top {
   padding: 0.65rem 1rem 0.25rem;
   border-bottom: 1px solid var(--border);
-  background: linear-gradient(
-    180deg,
-    var(--accent-soft) 0%,
-    transparent 120%
-  );
+  background: linear-gradient(180deg, var(--accent-soft) 0%, transparent 120%);
 }
 
 .diff-section {
@@ -1756,11 +1756,7 @@ code {
   gap: 0.5rem;
   padding: 0.7rem 0.75rem 0.45rem 0.9rem;
   border-bottom: 1px solid var(--border);
-  background: linear-gradient(
-    180deg,
-    var(--accent-soft) 0%,
-    var(--bg-elevated) 120%
-  );
+  background: linear-gradient(180deg, var(--accent-soft) 0%, var(--bg-elevated) 120%);
   flex: 0 0 auto;
 }
 

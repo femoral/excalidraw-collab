@@ -59,11 +59,7 @@ function isWorkspaceProtocol(spec: string): boolean {
 test("CLI is publishable (not private)", () => {
   const cli = readPackageJson(cliDir);
   assert.equal(cli.name, "@excalidraw-collab/cli");
-  assert.notEqual(
-    cli.private,
-    true,
-    "CLI must be publishable; remove private: true",
-  );
+  assert.notEqual(cli.private, true, "CLI must be publishable; remove private: true");
   assert.ok(
     Array.isArray(cli.files) && cli.files.includes("dist"),
     'CLI package.json "files" must include "dist"',
@@ -102,8 +98,7 @@ test("CLI runtime deps are non-private workspace packages (no third-party)", () 
   assert.deepEqual(
     names.slice().sort(),
     ["@excalidraw-collab/core"],
-    "CLI runtime dependencies drifted from the expected set " +
-      "(@excalidraw-collab/core only)",
+    "CLI runtime dependencies drifted from the expected set " + "(@excalidraw-collab/core only)",
   );
 });
 

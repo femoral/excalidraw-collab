@@ -258,12 +258,7 @@ export class ApiError extends Error {
   readonly code: string;
   readonly details?: unknown;
 
-  constructor(
-    status: number,
-    code: string,
-    message: string,
-    details?: unknown,
-  ) {
+  constructor(status: number, code: string, message: string, details?: unknown) {
     super(message);
     this.name = "ApiError";
     this.status = status;
@@ -346,20 +341,13 @@ function throwHttpError(
   }
 
   if (isServerErrorBody(parsed)) {
-    throw new ApiError(
-      status,
-      parsed.error.code,
-      parsed.error.message,
-      parsed.error.details,
-    );
+    throw new ApiError(status, parsed.error.code, parsed.error.message, parsed.error.details);
   }
 
   throw new ApiError(
     status,
     "ERROR",
-    typeof parsed === "string" && parsed.length > 0
-      ? parsed
-      : `HTTP ${status} ${statusText}`,
+    typeof parsed === "string" && parsed.length > 0 ? parsed : `HTTP ${status} ${statusText}`,
   );
 }
 
@@ -367,10 +355,7 @@ export function createApiClient(options: ApiClientOptions) {
   const baseUrl = options.baseUrl ?? "";
   const fetchImpl = options.fetchImpl ?? fetch;
 
-  async function request<T>(
-    path: string,
-    init: RequestOptions = {},
-  ): Promise<T> {
+  async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
     const headers = new Headers(init.headers);
     if (!headers.has("Accept")) {
       headers.set("Accept", init.binary ? "*/*" : "application/json");
@@ -391,10 +376,7 @@ export function createApiClient(options: ApiClientOptions) {
         if (!headers.has("Content-Type")) {
           headers.set("Content-Type", "application/json");
         }
-        body =
-          typeof init.body === "string"
-            ? init.body
-            : JSON.stringify(init.body);
+        body = typeof init.body === "string" ? init.body : JSON.stringify(init.body);
       }
     }
 
@@ -416,18 +398,12 @@ export function createApiClient(options: ApiClientOptions) {
             parsed = text;
           }
         }
-        throwHttpError(
-          response.status,
-          response.statusText,
-          parsed,
-          options.onUnauthorized,
-        );
+        throwHttpError(response.status, response.statusText, parsed, options.onUnauthorized);
       }
       const buf = await response.arrayBuffer();
       return {
         bytes: buf,
-        mimeType:
-          response.headers.get("Content-Type") ?? "application/octet-stream",
+        mimeType: response.headers.get("Content-Type") ?? "application/octet-stream",
       } as T;
     }
 
@@ -442,12 +418,7 @@ export function createApiClient(options: ApiClientOptions) {
     }
 
     if (!response.ok) {
-      throwHttpError(
-        response.status,
-        response.statusText,
-        parsed,
-        options.onUnauthorized,
-      );
+      throwHttpError(response.status, response.statusText, parsed, options.onUnauthorized);
     }
 
     // 204 No Content and empty bodies.
@@ -471,10 +442,7 @@ export function createApiClient(options: ApiClientOptions) {
       return body.scenes;
     },
 
-    async createScene(input: {
-      name: string;
-      slug?: string;
-    }): Promise<SceneInfo> {
+    async createScene(input: { name: string; slug?: string }): Promise<SceneInfo> {
       return request<SceneInfo>("/api/scenes", {
         method: "POST",
         body: input.slug !== undefined ? input : { name: input.name },
@@ -486,13 +454,10 @@ export function createApiClient(options: ApiClientOptions) {
     },
 
     async renameScene(slug: string, name: string): Promise<SceneInfo> {
-      return request<SceneInfo>(
-        `/api/scenes/${encodeURIComponent(slug)}`,
-        {
-          method: "PATCH",
-          body: { name },
-        },
-      );
+      return request<SceneInfo>(`/api/scenes/${encodeURIComponent(slug)}`, {
+        method: "PATCH",
+        body: { name },
+      });
     },
 
     async deleteScene(slug: string): Promise<void> {
@@ -506,13 +471,8 @@ export function createApiClient(options: ApiClientOptions) {
       slug: string,
       version?: number | string,
     ): Promise<SceneDocumentResponse> {
-      const qs =
-        version === undefined
-          ? ""
-          : `?v=${encodeURIComponent(String(version))}`;
-      return request<SceneDocumentResponse>(
-        `/api/scenes/${encodeURIComponent(slug)}/scene${qs}`,
-      );
+      const qs = version === undefined ? "" : `?v=${encodeURIComponent(String(version))}`;
+      return request<SceneDocumentResponse>(`/api/scenes/${encodeURIComponent(slug)}/scene${qs}`);
     },
 
     /**
@@ -530,17 +490,15 @@ export function createApiClient(options: ApiClientOptions) {
       if (opts?.force) params.set("force", "true");
       if (opts?.merge) params.set("merge", "true");
       const qs = params.toString() ? `?${params.toString()}` : "";
-      return request<CommitSceneResponse>(
-        `/api/scenes/${encodeURIComponent(slug)}/scene${qs}`,
-        { method: "POST", body },
-      );
+      return request<CommitSceneResponse>(`/api/scenes/${encodeURIComponent(slug)}/scene${qs}`, {
+        method: "POST",
+        body,
+      });
     },
 
     async getDraft(slug: string): Promise<DraftResponse | null> {
       try {
-        return await request<DraftResponse>(
-          `/api/scenes/${encodeURIComponent(slug)}/draft`,
-        );
+        return await request<DraftResponse>(`/api/scenes/${encodeURIComponent(slug)}/draft`);
       } catch (err) {
         if (err instanceof ApiError && err.isNotFound) {
           return null;
@@ -550,18 +508,15 @@ export function createApiClient(options: ApiClientOptions) {
     },
 
     async putDraft(slug: string, body: PutDraftBody): Promise<DraftResponse> {
-      return request<DraftResponse>(
-        `/api/scenes/${encodeURIComponent(slug)}/draft`,
-        { method: "PUT", body },
-      );
+      return request<DraftResponse>(`/api/scenes/${encodeURIComponent(slug)}/draft`, {
+        method: "PUT",
+        body,
+      });
     },
 
     async deleteDraft(slug: string): Promise<void> {
       try {
-        await request<void>(
-          `/api/scenes/${encodeURIComponent(slug)}/draft`,
-          { method: "DELETE" },
-        );
+        await request<void>(`/api/scenes/${encodeURIComponent(slug)}/draft`, { method: "DELETE" });
       } catch (err) {
         // Idempotent: already-cleared draft is fine (commit clears it too).
         if (err instanceof ApiError && err.isNotFound) {
@@ -600,9 +555,7 @@ export function createApiClient(options: ApiClientOptions) {
     },
 
     /** Fetch raw file bytes for rehydration into Excalidraw BinaryFiles. */
-    async getFileBytes(
-      fileId: string,
-    ): Promise<{ bytes: ArrayBuffer; mimeType: string }> {
+    async getFileBytes(fileId: string): Promise<{ bytes: ArrayBuffer; mimeType: string }> {
       return request<{ bytes: ArrayBuffer; mimeType: string }>(
         `/api/files/${encodeURIComponent(fileId)}`,
         { binary: true },
@@ -617,10 +570,7 @@ export function createApiClient(options: ApiClientOptions) {
       slug: string,
       version?: number,
     ): Promise<{ bytes: ArrayBuffer; mimeType: string }> {
-      const qs =
-        version === undefined
-          ? ""
-          : `?v=${encodeURIComponent(String(version))}`;
+      const qs = version === undefined ? "" : `?v=${encodeURIComponent(String(version))}`;
       return request<{ bytes: ArrayBuffer; mimeType: string }>(
         `/api/scenes/${encodeURIComponent(slug)}/render.png${qs}`,
         { binary: true },
@@ -643,9 +593,7 @@ export function createApiClient(options: ApiClientOptions) {
     /**
      * Publish (or clear with null) the instance theme default. Admin only.
      */
-    async setThemeSettings(
-      theme: "light" | "dark" | null,
-    ): Promise<ThemeSettings> {
+    async setThemeSettings(theme: "light" | "dark" | null): Promise<ThemeSettings> {
       return request<ThemeSettings>("/api/settings/theme", {
         method: "PUT",
         body: { theme },
@@ -656,22 +604,16 @@ export function createApiClient(options: ApiClientOptions) {
      * Claim (or refresh) the advisory turn lock. Holder is the token identity.
      * On LOCK_HELD the ApiError carries `{ holder, expiresAt }` in details.
      */
-    async claimLock(
-      slug: string,
-      body: { ttl?: number } = {},
-    ): Promise<LockInfo> {
-      return request<LockInfo>(
-        `/api/scenes/${encodeURIComponent(slug)}/lock`,
-        { method: "POST", body },
-      );
+    async claimLock(slug: string, body: { ttl?: number } = {}): Promise<LockInfo> {
+      return request<LockInfo>(`/api/scenes/${encodeURIComponent(slug)}/lock`, {
+        method: "POST",
+        body,
+      });
     },
 
     /** Release the advisory turn lock. Any identity may release. */
     async releaseLock(slug: string): Promise<void> {
-      await request<void>(
-        `/api/scenes/${encodeURIComponent(slug)}/lock`,
-        { method: "DELETE" },
-      );
+      await request<void>(`/api/scenes/${encodeURIComponent(slug)}/lock`, { method: "DELETE" });
     },
 
     /** Paginated version history (newest first). */
@@ -700,9 +642,7 @@ export function createApiClient(options: ApiClientOptions) {
       const params = new URLSearchParams();
       params.set("from", String(from));
       params.set("to", String(to));
-      return request<SceneDiffResponse>(
-        `/api/scenes/${encodeURIComponent(slug)}/diff?${params}`,
-      );
+      return request<SceneDiffResponse>(`/api/scenes/${encodeURIComponent(slug)}/diff?${params}`);
     },
 
     /**
@@ -746,10 +686,7 @@ export function createApiClient(options: ApiClientOptions) {
      * The server runs upstream `reconcileElements` in the render worker
      * and commits the result. Never implement client-side merge here.
      */
-    async mergeScene(
-      slug: string,
-      body: CommitSceneBody,
-    ): Promise<CommitSceneResponse> {
+    async mergeScene(slug: string, body: CommitSceneBody): Promise<CommitSceneResponse> {
       return request<CommitSceneResponse>(
         `/api/scenes/${encodeURIComponent(slug)}/scene?merge=true`,
         { method: "POST", body },

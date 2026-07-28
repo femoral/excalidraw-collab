@@ -47,10 +47,7 @@ describe("render-cache", () => {
       format: "png",
       options: { scale: 1, dark: false },
     });
-    assert.equal(
-      p,
-      path.join("/data", RENDERS_SUBDIR, "abc", "3", "s1_d0.png"),
-    );
+    assert.equal(p, path.join("/data", RENDERS_SUBDIR, "abc", "3", "s1_d0.png"));
   });
 
   test("etag is stable for the same key and differs when options change", () => {
@@ -65,10 +62,7 @@ describe("render-cache", () => {
       renderCacheEtag(base),
       renderCacheEtag({ ...base, options: { scale: 2, dark: false } }),
     );
-    assert.notEqual(
-      renderCacheEtag(base),
-      renderCacheEtag({ ...base, format: "svg" }),
-    );
+    assert.notEqual(renderCacheEtag(base), renderCacheEtag({ ...base, format: "svg" }));
     assert.match(renderCacheEtag(base), /^"[0-9a-f]{40}"$/);
   });
 

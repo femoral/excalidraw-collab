@@ -13,10 +13,7 @@ export type Route =
  * Trailing slashes (except root) are normalized away.
  */
 export function matchRoute(pathname: string): Route {
-  const path =
-    pathname.length > 1 && pathname.endsWith("/")
-      ? pathname.slice(0, -1)
-      : pathname;
+  const path = pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
 
   if (path === "/" || path === "") {
     return { name: "home" };

@@ -5,12 +5,7 @@
  * is authoritative; fractional `index` is optional and is left alone.
  */
 
-import type {
-  BinaryFiles,
-  ExcalidrawElement,
-  PersistedAppState,
-  SceneDocument,
-} from "./types.js";
+import type { BinaryFiles, ExcalidrawElement, PersistedAppState, SceneDocument } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Persistable appState allowlist (never a denylist)
@@ -46,11 +41,11 @@ export const PERSISTED_APP_STATE_KEYS = [
  * on commit. Resolved at view time (localStorage → instance default →
  * prefers-color-scheme).
  */
-export const VIEWER_ONLY_APP_STATE_KEYS = ["theme"] as const satisfies readonly (keyof PersistedAppState)[];
+export const VIEWER_ONLY_APP_STATE_KEYS = [
+  "theme",
+] as const satisfies readonly (keyof PersistedAppState)[];
 
-const VIEWER_ONLY_APP_STATE_KEY_SET: ReadonlySet<string> = new Set(
-  VIEWER_ONLY_APP_STATE_KEYS,
-);
+const VIEWER_ONLY_APP_STATE_KEY_SET: ReadonlySet<string> = new Set(VIEWER_ONLY_APP_STATE_KEYS);
 
 // ---------------------------------------------------------------------------
 // Validation error — reports every problem found, not just the first
@@ -88,9 +83,7 @@ export class SceneValidationError extends Error {
  * `theme`) are dropped even when listed in {@link PERSISTED_APP_STATE_KEYS},
  * so toggling dark mode never enters a scene document or its diffs.
  */
-export function pickAppState(
-  appState: unknown,
-): Partial<PersistedAppState> {
+export function pickAppState(appState: unknown): Partial<PersistedAppState> {
   if (appState == null || typeof appState !== "object" || Array.isArray(appState)) {
     return {};
   }
@@ -143,9 +136,7 @@ export function normalizeScene(input: unknown): SceneDocument {
   // or known .excalidraw keys). A completely empty `{}` is a valid empty scene.
   const hasElementsKey = Object.prototype.hasOwnProperty.call(obj, "elements");
   if (hasElementsKey && !Array.isArray(obj.elements)) {
-    problems.push(
-      `elements must be an array; got ${describeType(obj.elements)}`,
-    );
+    problems.push(`elements must be an array; got ${describeType(obj.elements)}`);
   }
 
   if (
@@ -161,9 +152,7 @@ export function normalizeScene(input: unknown): SceneDocument {
     obj.appState != null &&
     (typeof obj.appState !== "object" || Array.isArray(obj.appState))
   ) {
-    problems.push(
-      `appState must be an object; got ${describeType(obj.appState)}`,
-    );
+    problems.push(`appState must be an object; got ${describeType(obj.appState)}`);
   }
 
   const elements = hasElementsKey && Array.isArray(obj.elements) ? obj.elements : [];
@@ -172,16 +161,13 @@ export function normalizeScene(input: unknown): SceneDocument {
       ? (obj.files as BinaryFiles)
       : undefined;
   const appState =
-    obj.appState != null &&
-    typeof obj.appState === "object" &&
-    !Array.isArray(obj.appState)
+    obj.appState != null && typeof obj.appState === "object" && !Array.isArray(obj.appState)
       ? obj.appState
       : undefined;
 
   // If elements key was present but not an array we already recorded a problem;
   // still run further validation on whatever we can so the error is complete.
-  const elementsForValidation =
-    hasElementsKey && !Array.isArray(obj.elements) ? [] : elements;
+  const elementsForValidation = hasElementsKey && !Array.isArray(obj.elements) ? [] : elements;
 
   return normalizeFromParts(elementsForValidation, appState, files, problems);
 }
@@ -206,9 +192,7 @@ function normalizeFromParts(
     if (!Object.prototype.hasOwnProperty.call(rec, "id") || rec.id === undefined) {
       problems.push(`elements[${i}] is missing required field "id"`);
     } else if (typeof rec.id !== "string") {
-      problems.push(
-        `elements[${i}].id must be a string; got ${describeType(rec.id)}`,
-      );
+      problems.push(`elements[${i}].id must be a string; got ${describeType(rec.id)}`);
     } else if (rec.id.length === 0) {
       problems.push(`elements[${i}].id must be a non-empty string`);
     } else {
@@ -225,19 +209,13 @@ function normalizeFromParts(
     if (!Object.prototype.hasOwnProperty.call(rec, "type") || rec.type === undefined) {
       problems.push(`elements[${i}] is missing required field "type"`);
     } else if (typeof rec.type !== "string") {
-      problems.push(
-        `elements[${i}].type must be a string; got ${describeType(rec.type)}`,
-      );
+      problems.push(`elements[${i}].type must be a string; got ${describeType(rec.type)}`);
     } else if (rec.type.length === 0) {
       problems.push(`elements[${i}].type must be a non-empty string`);
     }
 
     // Track file references from image-like elements (fileId present).
-    if (
-      typeof rec.fileId === "string" &&
-      rec.fileId.length > 0 &&
-      rec.isDeleted !== true
-    ) {
+    if (typeof rec.fileId === "string" && rec.fileId.length > 0 && rec.isDeleted !== true) {
       fileIdsReferenced.add(rec.fileId);
     }
   }
@@ -268,9 +246,7 @@ function normalizeFromParts(
   // Elements that reference a fileId must have a matching entry in files.
   for (const fileId of fileIdsReferenced) {
     if (!Object.prototype.hasOwnProperty.call(filesMap, fileId)) {
-      problems.push(
-        `element references fileId "${fileId}" which is missing from the files map`,
-      );
+      problems.push(`element references fileId "${fileId}" which is missing from the files map`);
     }
   }
 

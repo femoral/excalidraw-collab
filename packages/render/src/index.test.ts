@@ -72,18 +72,14 @@ test("isPlaywrightModuleNotFound detects ERR_MODULE_NOT_FOUND for playwright", (
     code: "ERR_MODULE_NOT_FOUND",
   });
   assert.equal(isPlaywrightModuleNotFound(err), true);
-  assert.equal(
-    isPlaywrightModuleNotFound(new Error("something else")),
-    false,
-  );
+  assert.equal(isPlaywrightModuleNotFound(new Error("something else")), false);
 });
 
 test("loadPlaywright maps missing module to RenderError NOT_INSTALLED", async () => {
   setPlaywrightImporterForTests(async () => {
-    throw Object.assign(
-      new Error("Cannot find package 'playwright' imported from worker.js"),
-      { code: "ERR_MODULE_NOT_FOUND" },
-    );
+    throw Object.assign(new Error("Cannot find package 'playwright' imported from worker.js"), {
+      code: "ERR_MODULE_NOT_FOUND",
+    });
   });
 
   await assert.rejects(

@@ -32,11 +32,7 @@ import {
   type RenderCacheOptions,
   type RenderFormat,
 } from "./render-cache.js";
-import {
-  emptySceneDocument,
-  resolveVersionRef,
-  versionToDocument,
-} from "./versions.js";
+import { emptySceneDocument, resolveVersionRef, versionToDocument } from "./versions.js";
 
 /**
  * Minimal worker surface the server needs. Matches
@@ -103,9 +99,7 @@ export class SceneRenderService {
     dataDir?: string,
   ) {
     this.worker = worker;
-    this.cache =
-      cache ??
-      new RenderCache(dataDir ?? ".");
+    this.cache = cache ?? new RenderCache(dataDir ?? ".");
   }
 
   /**
@@ -150,11 +144,13 @@ export class SceneRenderService {
       pending = this.computeAndStore(key, head);
       this.inflight.set(inflightKey, pending);
       // Always clear the slot when settled so a failure can retry.
-      pending.finally(() => {
-        this.inflight.delete(inflightKey);
-      }).catch(() => {
-        // swallow — caller awaits `pending` for the real error
-      });
+      pending
+        .finally(() => {
+          this.inflight.delete(inflightKey);
+        })
+        .catch(() => {
+          // swallow — caller awaits `pending` for the real error
+        });
     }
 
     const bytes = await pending;
@@ -167,10 +163,7 @@ export class SceneRenderService {
     };
   }
 
-  private async computeAndStore(
-    key: RenderCacheKey,
-    head: number,
-  ): Promise<Buffer> {
+  private async computeAndStore(key: RenderCacheKey, head: number): Promise<Buffer> {
     // Double-check disk: another request may have finished between the
     // first get and acquiring the inflight slot.
     const raced = this.cache.get(key);
@@ -224,11 +217,7 @@ export class SceneRenderService {
     files?: Record<string, unknown> | null;
   } {
     if (!Number.isInteger(version) || version < 0) {
-      throw new AppError(
-        ErrorCode.NOT_FOUND,
-        `version not found: ${version}`,
-        404,
-      );
+      throw new AppError(ErrorCode.NOT_FOUND, `version not found: ${version}`, 404);
     }
     if (version === 0) {
       const empty = emptySceneDocument();
@@ -247,11 +236,7 @@ export class SceneRenderService {
     }
     const row = this.db.getVersion(sceneId, version);
     if (!row) {
-      throw new AppError(
-        ErrorCode.NOT_FOUND,
-        `version not found: ${version}`,
-        404,
-      );
+      throw new AppError(ErrorCode.NOT_FOUND, `version not found: ${version}`, 404);
     }
     return versionToDocument(this.store, row);
   }
@@ -279,9 +264,7 @@ export function renderWorkerDisabledError(): AppError {
  * skipped). Same status/code as {@link renderWorkerDisabledError}; only
  * `details.reason` differs (`"not_installed"`).
  */
-export function renderWorkerNotInstalledError(
-  causeMessage?: string,
-): AppError {
+export function renderWorkerNotInstalledError(causeMessage?: string): AppError {
   const details: {
     reason: RenderUnavailableReason;
     cause?: string;
@@ -336,11 +319,7 @@ export function parseRenderScale(raw: unknown): number {
     );
   }
   if (n > MAX_RENDER_SCALE) {
-    throw new AppError(
-      ErrorCode.VALIDATION,
-      `scale must be <= ${MAX_RENDER_SCALE}, got ${n}`,
-      400,
-    );
+    throw new AppError(ErrorCode.VALIDATION, `scale must be <= ${MAX_RENDER_SCALE}, got ${n}`, 400);
   }
   return n;
 }
@@ -365,14 +344,9 @@ export function parseRenderDark(raw: unknown): boolean {
  * Whether `If-None-Match` matches a strong etag (quoted form).
  * Supports comma-separated lists and the `*` wildcard.
  */
-export function etagMatches(
-  ifNoneMatch: string | string[] | undefined,
-  etag: string,
-): boolean {
+export function etagMatches(ifNoneMatch: string | string[] | undefined, etag: string): boolean {
   if (ifNoneMatch === undefined) return false;
-  const header = Array.isArray(ifNoneMatch)
-    ? ifNoneMatch.join(",")
-    : ifNoneMatch;
+  const header = Array.isArray(ifNoneMatch) ? ifNoneMatch.join(",") : ifNoneMatch;
   const trimmed = header.trim();
   if (trimmed === "") return false;
   if (trimmed === "*") return true;
@@ -439,13 +413,7 @@ export async function registerRenderRoutes(
   const { db, store } = deps;
   const renders =
     deps.renders ??
-    new SceneRenderService(
-      db,
-      store,
-      deps.worker ?? null,
-      undefined,
-      deps.config?.dataDir,
-    );
+    new SceneRenderService(db, store, deps.worker ?? null, undefined, deps.config?.dataDir);
   const authPreHandler = createAuthPreHandler(db);
 
   const handle = async (
@@ -464,11 +432,7 @@ export async function registerRenderRoutes(
     const { slug } = request.params;
     const scene = db.getSceneBySlug(slug);
     if (!scene) {
-      throw new AppError(
-        ErrorCode.NOT_FOUND,
-        `scene not found: ${slug}`,
-        404,
-      );
+      throw new AppError(ErrorCode.NOT_FOUND, `scene not found: ${slug}`, 404);
     }
 
     const head = scene.head_version;
@@ -489,11 +453,7 @@ export async function registerRenderRoutes(
       );
     }
     if (resolved >= 1 && !db.getVersion(scene.id, resolved)) {
-      throw new AppError(
-        ErrorCode.NOT_FOUND,
-        `version not found: ${resolved}`,
-        404,
-      );
+      throw new AppError(ErrorCode.NOT_FOUND, `version not found: ${resolved}`, 404);
     }
 
     const scale = parseRenderScale(request.query.scale);
@@ -517,13 +477,7 @@ export async function registerRenderRoutes(
         .send();
     }
 
-    const result = await renders.render(
-      scene.id,
-      resolved,
-      format,
-      { scale, dark },
-      head,
-    );
+    const result = await renders.render(scene.id, resolved, format, { scale, dark }, head);
     return sendRenderReply(request, reply, result);
   };
 

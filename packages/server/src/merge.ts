@@ -82,10 +82,7 @@ export function deterministicVersionNonce(id: string, version: number): number {
  * is already honest for upstream's rule and must not be rewritten (keeps
  * same-element LWW deterministic and preserves pre-bumped test fixtures).
  */
-function bumpElementVersion(
-  el: VersionedElement,
-  parentVersion: number,
-): VersionedElement {
+function bumpElementVersion(el: VersionedElement, parentVersion: number): VersionedElement {
   const localV = elementVersion(el);
   if (localV > parentVersion) {
     return el;
@@ -205,9 +202,7 @@ export function formatMergeCommitMessage(
  * Collect image `fileId` values referenced by elements after a merge.
  * Does not invent ids — only reads the public `fileId` field.
  */
-export function collectReferencedFileIds(
-  elements: readonly unknown[],
-): string[] {
+export function collectReferencedFileIds(elements: readonly unknown[]): string[] {
   const ids = new Set<string>();
   for (const el of elements) {
     if (el === null || typeof el !== "object") continue;

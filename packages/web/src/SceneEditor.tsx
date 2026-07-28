@@ -8,17 +8,8 @@
  * so they never land on the human undo stack.
  */
 
-import {
-  CaptureUpdateAction,
-  Excalidraw,
-  exportToBlob,
-  MainMenu,
-} from "@excalidraw/excalidraw";
-import type {
-  AppState,
-  BinaryFiles,
-  ExcalidrawImperativeAPI,
-} from "@excalidraw/excalidraw/types";
+import { CaptureUpdateAction, Excalidraw, exportToBlob, MainMenu } from "@excalidraw/excalidraw";
+import type { AppState, BinaryFiles, ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type { OrderedExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import {
   useCallback,
@@ -30,12 +21,7 @@ import {
   type MouseEvent,
   type ReactElement,
 } from "react";
-import {
-  ApiError,
-  type ApiClient,
-  type BinaryFilePayload,
-  type LockInfo,
-} from "./api.ts";
+import { ApiError, type ApiClient, type BinaryFilePayload, type LockInfo } from "./api.ts";
 import {
   arrayBufferToDataURL,
   buildCommitPayload,
@@ -154,9 +140,7 @@ type LoadState =
       sceneName: string;
     };
 
-function toBinaryFiles(
-  files: Record<string, BinaryFilePayload> | undefined,
-): BinaryFiles {
+function toBinaryFiles(files: Record<string, BinaryFilePayload> | undefined): BinaryFiles {
   if (!files) return {};
   const out: BinaryFiles = {};
   for (const [id, entry] of Object.entries(files)) {
@@ -239,9 +223,9 @@ export function SceneEditor({
   /** Skip one onChange after remote updateScene so draft autosave does not fire. */
   const applyingRemoteRef = useRef(false);
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
-  const coalescerRef = useRef<ReturnType<
-    typeof createDebouncedCoalescer<EditorSnapshot>
-  > | null>(null);
+  const coalescerRef = useRef<ReturnType<typeof createDebouncedCoalescer<EditorSnapshot>> | null>(
+    null,
+  );
   /** Snapshot of the loaded past version for restore-from-readonly. */
   const loadedDocRef = useRef<{
     elements: unknown[];
@@ -291,9 +275,7 @@ export function SceneEditor({
         } else {
           selfNameRef.current = null;
         }
-        setLock(
-          meta.lock && isEditorLockActive(meta.lock) ? meta.lock : null,
-        );
+        setLock(meta.lock && isEditorLockActive(meta.lock) ? meta.lock : null);
         headVersionRef.current = meta.headVersion;
         pollSinceRef.current = meta.headVersion;
         observedHeadRef.current = meta.headVersion;
@@ -307,8 +289,7 @@ export function SceneEditor({
           const sceneDoc = await api.getSceneDocument(slug, wantVersion);
           if (cancelled) return;
 
-          const elements =
-            (sceneDoc.elements as readonly OrderedExcalidrawElement[]) ?? [];
+          const elements = (sceneDoc.elements as readonly OrderedExcalidrawElement[]) ?? [];
           const appState = (sceneDoc.appState ?? {}) as Partial<AppState>;
           const files = toBinaryFiles(
             sceneDoc.files as Record<string, BinaryFilePayload> | undefined,
@@ -320,10 +301,7 @@ export function SceneEditor({
           loadedDocRef.current = {
             elements: [...elements],
             appState: { ...(appState as Record<string, unknown>) },
-            files: sceneDoc.files as Record<
-              string,
-              BinaryFilePayload | undefined
-            >,
+            files: sceneDoc.files as Record<string, BinaryFilePayload | undefined>,
           };
 
           setLoad({
@@ -345,9 +323,7 @@ export function SceneEditor({
         const [sceneDoc, draft] = await Promise.all([
           api.getSceneDocument(
             slug,
-            wantVersion != null && wantVersion === meta.headVersion
-              ? wantVersion
-              : undefined,
+            wantVersion != null && wantVersion === meta.headVersion ? wantVersion : undefined,
           ),
           api.getDraft(slug),
         ]);
@@ -396,10 +372,7 @@ export function SceneEditor({
               uploadedFilesRef.current.add(fileId);
             } catch (err) {
               // Missing blob: keep going; image elements will show as broken.
-              console.warn(
-                `[excalidraw-collab] failed to rehydrate file ${fileId}`,
-                err,
-              );
+              console.warn(`[excalidraw-collab] failed to rehydrate file ${fileId}`, err);
             }
           }
           // Files already on the server from prior head versions that the draft
@@ -414,12 +387,9 @@ export function SceneEditor({
             }
           }
         } else {
-          elements =
-            (sceneDoc.elements as readonly OrderedExcalidrawElement[]) ?? [];
+          elements = (sceneDoc.elements as readonly OrderedExcalidrawElement[]) ?? [];
           appState = (sceneDoc.appState ?? {}) as Partial<AppState>;
-          files = toBinaryFiles(
-            sceneDoc.files as Record<string, BinaryFilePayload> | undefined,
-          );
+          files = toBinaryFiles(sceneDoc.files as Record<string, BinaryFilePayload> | undefined);
           for (const id of Object.keys(files)) {
             uploadedFilesRef.current.add(id);
           }
@@ -481,8 +451,7 @@ export function SceneEditor({
       } catch (err) {
         if (cancelled) return;
         if (err instanceof ApiError && err.isUnauthorized) return;
-        const message =
-          err instanceof Error ? err.message : "Failed to load scene.";
+        const message = err instanceof Error ? err.message : "Failed to load scene.";
         setLoad({ kind: "error", message });
       }
     })();
@@ -593,11 +562,7 @@ export function SceneEditor({
   // ----- onChange -----------------------------------------------------------
 
   const handleChange = useCallback(
-    (
-      elements: readonly OrderedExcalidrawElement[],
-      appState: AppState,
-      files: BinaryFiles,
-    ) => {
+    (elements: readonly OrderedExcalidrawElement[], appState: AppState, files: BinaryFiles) => {
       // Read-only: never draft-save or mark dirty (viewMode blocks edits).
       if (load.kind === "ready" && load.readOnly) {
         return;
@@ -702,13 +667,8 @@ export function SceneEditor({
 
           for (const event of mine) {
             if (event.kind === "lock") {
-              if (
-                shouldApplyRemoteLock(event, { selfName: self })
-              ) {
-                const nextLock =
-                  event.lock && isEditorLockActive(event.lock)
-                    ? event.lock
-                    : null;
+              if (shouldApplyRemoteLock(event, { selfName: self })) {
+                const nextLock = event.lock && isEditorLockActive(event.lock) ? event.lock : null;
                 setLock(nextLock);
               }
               continue;
@@ -728,18 +688,12 @@ export function SceneEditor({
             // Always keep lock badge in sync when the event carries it.
             if (
               event.lock !== undefined &&
-              shouldApplyRemoteLock(
-                { actor: event.author, kind: "version" },
-                { selfName: self },
-              )
+              shouldApplyRemoteLock({ actor: event.author, kind: "version" }, { selfName: self })
             ) {
               // Version commits by others (or lock-cleared by holder push)
               // should refresh the badge; self version already handled on push.
               if (!(self && event.author === self)) {
-                const nextLock =
-                  event.lock && isEditorLockActive(event.lock)
-                    ? event.lock
-                    : null;
+                const nextLock = event.lock && isEditorLockActive(event.lock) ? event.lock : null;
                 setLock(nextLock);
               }
             }
@@ -750,10 +704,7 @@ export function SceneEditor({
             pollSinceRef.current = Math.max(pollSinceRef.current, to);
 
             if (
-              shouldUpdateChromeHead(
-                { headVersion: to, author: event.author },
-                { selfName: self },
-              )
+              shouldUpdateChromeHead({ headVersion: to, author: event.author }, { selfName: self })
             ) {
               setChromeHeadVersion(to);
             }
@@ -810,9 +761,7 @@ export function SceneEditor({
     const delay = editorLockExpiryDelayMs(lock);
     if (delay === null) return;
     const t = window.setTimeout(() => {
-      setLock((current) =>
-        current && !isEditorLockActive(current) ? null : current,
-      );
+      setLock((current) => (current && !isEditorLockActive(current) ? null : current));
     }, delay);
     return () => window.clearTimeout(t);
   }, [lock, readOnly, load.kind]);
@@ -849,19 +798,15 @@ export function SceneEditor({
       throw new Error("Editor is not ready yet.");
     }
 
-    const elements =
-      (sceneDoc.elements as readonly OrderedExcalidrawElement[]) ?? [];
+    const elements = (sceneDoc.elements as readonly OrderedExcalidrawElement[]) ?? [];
     const appState = (sceneDoc.appState ?? {}) as Record<string, unknown>;
-    const files = toBinaryFiles(
-      sceneDoc.files as Record<string, BinaryFilePayload> | undefined,
-    );
+    const files = toBinaryFiles(sceneDoc.files as Record<string, BinaryFilePayload> | undefined);
 
     const remotePayload = buildRemoteSceneUpdate({
       elements,
       appState: {
         ...appState,
-        name:
-          load.kind === "ready" ? load.sceneName : (appState.name as string),
+        name: load.kind === "ready" ? load.sceneName : (appState.name as string),
       },
     });
     // Acceptance tripwire: remote must never enter undo history.
@@ -870,9 +815,7 @@ export function SceneEditor({
       remotePayload.captureUpdate !== CaptureUpdateAction.NEVER ||
       REMOTE_CAPTURE_UPDATE !== CaptureUpdateAction.NEVER
     ) {
-      throw new Error(
-        "Internal error: remote load would capture undo history.",
-      );
+      throw new Error("Internal error: remote load would capture undo history.");
     }
 
     applyingRemoteRef.current = true;
@@ -951,10 +894,7 @@ export function SceneEditor({
     } catch (err) {
       if (err instanceof ApiError && err.isUnauthorized) return;
       setRemoteToast((s) =>
-        toastApplyFailed(
-          s,
-          err instanceof Error ? err.message : "Could not load remote version.",
-        ),
+        toastApplyFailed(s, err instanceof Error ? err.message : "Could not load remote version."),
       );
     }
   }
@@ -979,9 +919,7 @@ export function SceneEditor({
       latestSnapshotRef.current = snapshot;
     }
     if (!snapshot) {
-      setRemoteToast((s) =>
-        toastApplyFailed(s, "Nothing local to merge yet."),
-      );
+      setRemoteToast((s) => toastApplyFailed(s, "Nothing local to merge yet."));
       return;
     }
 
@@ -1016,9 +954,7 @@ export function SceneEditor({
       }
       setSaveIndicator("idle");
       setRemoteToast((s) => toastApplySucceeded(s));
-      setBanner(
-        `Merged as v${result.version}. Local strokes were reconciled with remote head.`,
-      );
+      setBanner(`Merged as v${result.version}. Local strokes were reconciled with remote head.`);
     } catch (err) {
       if (err instanceof ApiError && err.isUnauthorized) return;
       const message =
@@ -1040,11 +976,7 @@ export function SceneEditor({
       // Dismissing marks head as seen so the panel does not re-ambush on reload,
       // but the model is retained for the "What changed" re-open control.
       if (s.kind === "ready") {
-        markSceneSeen(
-          window.localStorage,
-          slug,
-          s.model.range.to,
-        );
+        markSceneSeen(window.localStorage, slug, s.model.range.to);
       } else if (s.kind === "loading" || s.kind === "error") {
         markSceneSeen(window.localStorage, slug, headVersionRef.current);
       }
@@ -1088,10 +1020,7 @@ export function SceneEditor({
       await coalescerRef.current?.flushNow();
 
       // Upload any remaining new files before the turn lands.
-      const need = filesNeedingUpload(
-        snapshot.files,
-        uploadedFilesRef.current,
-      );
+      const need = filesNeedingUpload(snapshot.files, uploadedFilesRef.current);
       for (const file of need) {
         try {
           await api.uploadFile(file);
@@ -1115,9 +1044,9 @@ export function SceneEditor({
       const thumbResult = await attachThumbnailForCommit({
         shouldGenerate: shouldGenerateThumbnail(snapshot.elements),
         exportPng: async () => {
-          const elements = filterExportElements(
-            snapshot.elements,
-          ) as Parameters<typeof exportToBlob>[0]["elements"];
+          const elements = filterExportElements(snapshot.elements) as Parameters<
+            typeof exportToBlob
+          >[0]["elements"];
           const appState = buildThumbnailExportAppState(
             snapshot.appState as Record<string, unknown> | undefined,
           ) as Parameters<typeof exportToBlob>[0]["appState"];
@@ -1148,12 +1077,9 @@ export function SceneEditor({
       // content-addresses them (dedup if already uploaded). Binaries never
       // live in elements — only fileId references.
       const body = withThumbnailFileId(
-        buildCommitPayload(
-          snapshot,
-          headVersionRef.current,
-          validated.message,
-          { includeFiles: true },
-        ),
+        buildCommitPayload(snapshot, headVersionRef.current, validated.message, {
+          includeFiles: true,
+        }),
         thumbnailFileIdForCommit(thumbResult),
       );
 
@@ -1190,16 +1116,12 @@ export function SceneEditor({
         // Refresh meta so we notice holder release / expiry after our push.
         try {
           const meta = await api.getSceneMeta(slug);
-          setLock(
-            meta.lock && isEditorLockActive(meta.lock) ? meta.lock : null,
-          );
+          setLock(meta.lock && isEditorLockActive(meta.lock) ? meta.lock : null);
         } catch {
           // non-fatal
         }
       }
-      setBanner(
-        `Committed v${result.version} as ${result.author}: “${result.message}”`,
-      );
+      setBanner(`Committed v${result.version} as ${result.author}: “${result.message}”`);
     } catch (err) {
       if (err instanceof ApiError && err.isUnauthorized) return;
       if (err instanceof ApiError && err.isConflict) {
@@ -1208,9 +1130,7 @@ export function SceneEditor({
             "Conflict: the scene moved while you were editing. Reload or force-resolve (CLI).",
         );
       } else {
-        setCommitError(
-          err instanceof Error ? err.message : "Commit failed.",
-        );
+        setCommitError(err instanceof Error ? err.message : "Commit failed.");
       }
     } finally {
       setCommitBusy(false);
@@ -1252,9 +1172,7 @@ export function SceneEditor({
         }
         return;
       }
-      setBanner(
-        err instanceof Error ? err.message : "Could not update turn lock.",
-      );
+      setBanner(err instanceof Error ? err.message : "Could not update turn lock.");
     } finally {
       setLockBusy(false);
     }
@@ -1269,9 +1187,7 @@ export function SceneEditor({
       setBanner("Turn released.");
     } catch (err) {
       if (err instanceof ApiError && err.isUnauthorized) return;
-      setBanner(
-        err instanceof Error ? err.message : "Could not release turn.",
-      );
+      setBanner(err instanceof Error ? err.message : "Could not release turn.");
     } finally {
       setLockBusy(false);
     }
@@ -1291,30 +1207,19 @@ export function SceneEditor({
 
     setRestoreBusy(true);
     try {
-      const source =
-        loadedDocRef.current ?? {
-          elements: [...load.initialData.elements],
-          appState: load.initialData.appState as Record<string, unknown>,
-          files: {},
-        };
-      const body = buildRestorePayload(
-        source,
-        headVersionRef.current,
-        restoredVersion,
-      );
+      const source = loadedDocRef.current ?? {
+        elements: [...load.initialData.elements],
+        appState: load.initialData.appState as Record<string, unknown>,
+        files: {},
+      };
+      const body = buildRestorePayload(source, headVersionRef.current, restoredVersion);
       const result = await api.commitScene(slug, body);
-      setBanner(
-        `Restored v${restoredVersion} as new v${result.version}. Opening head…`,
-      );
+      setBanner(`Restored v${restoredVersion} as new v${result.version}. Opening head…`);
       // Navigate to live head so the user can continue editing.
       onNavigate(headEditorPath(slug));
     } catch (err) {
       if (err instanceof ApiError && err.isUnauthorized) return;
-      setBanner(
-        err instanceof Error
-          ? err.message
-          : "Restore failed.",
-      );
+      setBanner(err instanceof Error ? err.message : "Restore failed.");
     } finally {
       setRestoreBusy(false);
     }
@@ -1335,11 +1240,7 @@ export function SceneEditor({
     return (
       <div className="editor-state editor-state-error" role="alert">
         <p>{load.message}</p>
-        <button
-          type="button"
-          className="btn btn-secondary"
-          onClick={() => guardedNavigate("/")}
-        >
+        <button type="button" className="btn btn-secondary" onClick={() => guardedNavigate("/")}>
           Back to scenes
         </button>
       </div>
@@ -1351,8 +1252,7 @@ export function SceneEditor({
   const menuTurnLabel = turnMenuLabel(lock, selfName);
   // Local base version (commit parent). Remote advances surface via the toast,
   // not by rewriting this number — that would desync parentVersion from content.
-  const displayHead =
-    chromeHeadVersion > 0 ? chromeHeadVersion : load.headVersion;
+  const displayHead = chromeHeadVersion > 0 ? chromeHeadVersion : load.headVersion;
   const panelVisible = isPanelVisible(whatChanged);
   const reopenWhatChanged = canReopenPanel(whatChanged);
   const toastBusy = remoteToast.kind === "applying";
@@ -1375,10 +1275,7 @@ export function SceneEditor({
               <>
                 head v{displayHead}
                 {load.draftStale ? (
-                  <span
-                    className="editor-stale-badge"
-                    title="Draft based on older head"
-                  >
+                  <span className="editor-stale-badge" title="Draft based on older head">
                     stale draft
                   </span>
                 ) : null}
@@ -1404,15 +1301,9 @@ export function SceneEditor({
           {showLockControls && lockActive && lock ? (
             <span
               className="editor-lock-badge"
-              title={
-                lock.expiresAt
-                  ? `Expires ${lock.expiresAt}`
-                  : "Advisory turn lock"
-              }
+              title={lock.expiresAt ? `Expires ${lock.expiresAt}` : "Advisory turn lock"}
             >
-              <span className="editor-lock-badge-text">
-                {formatLockBadge(lock)}
-              </span>
+              <span className="editor-lock-badge-text">{formatLockBadge(lock)}</span>
               <button
                 type="button"
                 className="editor-lock-release"
@@ -1477,11 +1368,7 @@ export function SceneEditor({
 
       {banner ? (
         <div
-          className={
-            readOnly
-              ? "editor-banner editor-banner-readonly"
-              : "editor-banner"
-          }
+          className={readOnly ? "editor-banner editor-banner-readonly" : "editor-banner"}
           role="status"
         >
           <span>{banner}</span>
@@ -1517,25 +1404,21 @@ export function SceneEditor({
       {!readOnly && remoteToast.kind !== "hidden" ? (
         <div
           className={
-            remoteToast.kind === "error"
-              ? "remote-toast remote-toast-error"
-              : "remote-toast"
+            remoteToast.kind === "error" ? "remote-toast remote-toast-error" : "remote-toast"
           }
           role="status"
           aria-live="polite"
         >
           <div className="remote-toast-body">
-            <p className="remote-toast-message">
-              {formatRemoteToastMessage(remoteToast.toast)}
-            </p>
+            <p className="remote-toast-message">{formatRemoteToastMessage(remoteToast.toast)}</p>
             {remoteToast.kind === "error" ? (
               <p className="remote-toast-error-text" role="alert">
                 {remoteToast.message}
               </p>
             ) : (
               <p className="remote-toast-hint">
-                Load replaces the canvas with remote head (kept off your undo
-                stack). Merge keeps your strokes and reconciles server-side.
+                Load replaces the canvas with remote head (kept off your undo stack). Merge keeps
+                your strokes and reconciles server-side.
               </p>
             )}
           </div>
@@ -1546,9 +1429,7 @@ export function SceneEditor({
               disabled={toastBusy}
               onClick={() => void handleRemoteLoad()}
             >
-              {toastBusy &&
-              remoteToast.kind === "applying" &&
-              remoteToast.action === "load"
+              {toastBusy && remoteToast.kind === "applying" && remoteToast.action === "load"
                 ? "Loading…"
                 : "Load"}
             </button>
@@ -1559,9 +1440,7 @@ export function SceneEditor({
               onClick={() => void handleRemoteMerge()}
               title="POST /scene?merge=true — server-side reconcile (issue #29)"
             >
-              {toastBusy &&
-              remoteToast.kind === "applying" &&
-              remoteToast.action === "merge"
+              {toastBusy && remoteToast.kind === "applying" && remoteToast.action === "merge"
                 ? "Merging…"
                 : "Merge into mine"}
             </button>
@@ -1580,11 +1459,7 @@ export function SceneEditor({
 
       {/* What-changed review panel — dismissible; re-open from chrome. */}
       {!readOnly && whatChanged.kind === "loading" ? (
-        <aside
-          className="what-changed-panel"
-          aria-labelledby={whatChangedTitleId}
-          aria-busy="true"
-        >
+        <aside className="what-changed-panel" aria-labelledby={whatChangedTitleId} aria-busy="true">
           <div className="what-changed-header">
             <h2 id={whatChangedTitleId} className="what-changed-title">
               What changed
@@ -1601,19 +1476,14 @@ export function SceneEditor({
           <div className="what-changed-state" role="status">
             <div className="spinner" aria-hidden="true" />
             <p>
-              Loading changes v{whatChanged.range.from} → v
-              {whatChanged.range.to}…
+              Loading changes v{whatChanged.range.from} → v{whatChanged.range.to}…
             </p>
           </div>
         </aside>
       ) : null}
 
       {!readOnly && whatChanged.kind === "error" ? (
-        <aside
-          className="what-changed-panel"
-          aria-labelledby={whatChangedTitleId}
-          role="alert"
-        >
+        <aside className="what-changed-panel" aria-labelledby={whatChangedTitleId} role="alert">
           <div className="what-changed-header">
             <h2 id={whatChangedTitleId} className="what-changed-title">
               What changed
@@ -1644,9 +1514,7 @@ export function SceneEditor({
                     setWhatChanged(
                       panelLoadFailed(
                         { from, to },
-                        err instanceof Error
-                          ? err.message
-                          : "Could not load changes.",
+                        err instanceof Error ? err.message : "Could not load changes.",
                       ),
                     );
                   }
@@ -1660,10 +1528,7 @@ export function SceneEditor({
       ) : null}
 
       {!readOnly && panelVisible && whatChanged.kind === "ready" ? (
-        <aside
-          className="what-changed-panel"
-          aria-labelledby={whatChangedTitleId}
-        >
+        <aside className="what-changed-panel" aria-labelledby={whatChangedTitleId}>
           <div className="what-changed-header">
             <div className="what-changed-header-text">
               <h2 id={whatChangedTitleId} className="what-changed-title">
@@ -1687,8 +1552,8 @@ export function SceneEditor({
             </button>
           </div>
           <p className="what-changed-lede">
-            Click a change to fly to it. Deleted items are listed but not
-            navigable — there is nothing left on the canvas.
+            Click a change to fly to it. Deleted items are listed but not navigable — there is
+            nothing left on the canvas.
           </p>
           <ul className="what-changed-list">
             {whatChanged.model.reviewItems.map((item) => {
@@ -1707,9 +1572,7 @@ export function SceneEditor({
                         {badge.symbol}
                       </span>
                       <span className="diff-item-body">
-                        <span className="diff-item-headline">
-                          {item.headline}
-                        </span>
+                        <span className="diff-item-headline">{item.headline}</span>
                         {item.detail ? (
                           <span className="diff-item-detail">{item.detail}</span>
                         ) : null}
@@ -1731,13 +1594,9 @@ export function SceneEditor({
                     <span className="diff-item-body">
                       <span className="diff-item-headline">
                         {item.headline}
-                        <span className="what-changed-deleted-tag">
-                          deleted
-                        </span>
+                        <span className="what-changed-deleted-tag">deleted</span>
                       </span>
-                      {item.detail ? (
-                        <span className="diff-item-detail">{item.detail}</span>
-                      ) : null}
+                      {item.detail ? <span className="diff-item-detail">{item.detail}</span> : null}
                     </span>
                   </div>
                 </li>
@@ -1747,8 +1606,7 @@ export function SceneEditor({
           {whatChanged.model.view.appStateCount > 0 ? (
             <p className="what-changed-appstate-note">
               +{whatChanged.model.view.appStateCount} canvas setting
-              {whatChanged.model.view.appStateCount === 1 ? "" : "s"} changed
-              (not navigable).
+              {whatChanged.model.view.appStateCount === 1 ? "" : "s"} changed (not navigable).
             </p>
           ) : null}
         </aside>
@@ -1756,18 +1614,14 @@ export function SceneEditor({
 
       <div
         className="excalidraw-host"
-        data-canvas={
-          readOnly
-            ? `scene:${slug}:v${load.viewingVersion}`
-            : `scene:${slug}`
-        }
+        data-canvas={readOnly ? `scene:${slug}:v${load.viewingVersion}` : `scene:${slug}`}
       >
         <Excalidraw
           key={
             readOnly
               ? `${slug}:v${load.viewingVersion}`
-              // Stable live key: remote Load must not remount (would wipe undo).
-              : `${slug}:live`
+              : // Stable live key: remote Load must not remount (would wipe undo).
+                `${slug}:live`
           }
           // Chrome and canvas always share the resolved viewer theme (issue #38).
           // Upstream MainMenu.ToggleTheme is intentionally omitted so there is
@@ -1841,9 +1695,7 @@ export function SceneEditor({
               </MainMenu.Item>
             ) : null}
             <MainMenu.Separator />
-            {!readOnly ? (
-              <MainMenu.DefaultItems.ChangeCanvasBackground />
-            ) : null}
+            {!readOnly ? <MainMenu.DefaultItems.ChangeCanvasBackground /> : null}
             <MainMenu.DefaultItems.Help />
           </MainMenu>
         </Excalidraw>
@@ -1881,8 +1733,8 @@ export function SceneEditor({
             </div>
             <form className="modal-form" onSubmit={handleCommit}>
               <p className="modal-lede">
-                End your turn with a short message. This creates a new version
-                others can pull — drafts stay private until you commit.
+                End your turn with a short message. This creates a new version others can pull —
+                drafts stay private until you commit.
               </p>
               <label className="field-label" htmlFor={commitMessageId}>
                 Message
@@ -1904,8 +1756,7 @@ export function SceneEditor({
                 </p>
               ) : (
                 <p className="form-hint">
-                  Author is taken from your token. Parent version: v
-                  {headVersionRef.current}.
+                  Author is taken from your token. Parent version: v{headVersionRef.current}.
                 </p>
               )}
               <div className="modal-actions">
@@ -1917,11 +1768,7 @@ export function SceneEditor({
                 >
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={commitBusy}
-                >
+                <button type="submit" className="btn btn-primary" disabled={commitBusy}>
                   {commitBusy ? "Committing…" : "Commit"}
                 </button>
               </div>

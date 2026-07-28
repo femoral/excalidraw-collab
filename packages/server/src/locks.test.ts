@@ -10,16 +10,9 @@ import { afterEach, describe, test } from "node:test";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "./app.js";
 import { loadConfig, type Config } from "./config.js";
-import {
-  gzipJson,
-  openDatabase,
-  type Database,
-} from "./db.js";
+import { gzipJson, openDatabase, type Database } from "./db.js";
 import { ErrorCode, type ErrorEnvelope } from "./errors.js";
-import {
-  DEFAULT_LOCK_TTL_SECONDS,
-  type LockInfo,
-} from "./locks.js";
+import { DEFAULT_LOCK_TTL_SECONDS, type LockInfo } from "./locks.js";
 import type { SceneInfo } from "./scenes.js";
 import type { PushVersionResponse } from "./versions.js";
 
@@ -479,11 +472,7 @@ describe("push + lock interaction", () => {
 
     // Force a lock via DAL so we don't need a second token for this check.
     const row = db.getSceneBySlug("arch")!;
-    db.setSceneLock(
-      row.id,
-      "someone-else",
-      new Date(Date.now() + 600_000).toISOString(),
-    );
+    db.setSceneLock(row.id, "someone-else", new Date(Date.now() + 600_000).toISOString());
 
     const pushed = await pushScene(app, admin, "arch", 0, "still works");
     assert.equal(pushed.status, 201);
@@ -553,4 +542,3 @@ describe("Database lock helpers", () => {
     assert.equal(db.getSceneById(scene.id)?.lock_holder, null);
   });
 });
-

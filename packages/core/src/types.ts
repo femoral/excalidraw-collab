@@ -27,12 +27,7 @@ import type {
   FileId,
 } from "@excalidraw/excalidraw/element/types";
 
-import type {
-  AppState,
-  BinaryFiles,
-  BinaryFileData,
-  DataURL,
-} from "@excalidraw/excalidraw/types";
+import type { AppState, BinaryFiles, BinaryFileData, DataURL } from "@excalidraw/excalidraw/types";
 
 // ---------------------------------------------------------------------------
 // Upstream element / file types (re-exported, never redeclared)
@@ -250,7 +245,7 @@ export type DigestElement = {
 
 /**
  * Text outline of a scene for agents that cannot see a canvas
- * (`excalicli describe` — PLAN.md §6).
+ * (`excali describe` — PLAN.md §6).
  *
  * Produced by `digestScene`. The structured form keeps ids for tooling;
  * `formatDigest` omits them unless `verbose` is set.

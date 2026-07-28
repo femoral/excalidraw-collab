@@ -1,10 +1,30 @@
 {
   "name": "@excalidraw-collab/cli",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "CLI for excalidraw-collab — push, pull, diff and describe Excalidraw scenes from the terminal or an AI agent.",
+  "keywords": [
+    "excalidraw",
+    "cli",
+    "diagrams",
+    "agents",
+    "collaboration"
+  ],
+  "homepage": "https://github.com/femoral/excalidraw-collab#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/femoral/excalidraw-collab.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/femoral/excalidraw-collab/issues"
+  },
   "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "bin": {
-    "excalicli": "./bin/excalicli"
+    "excali": "./bin/excali"
   },
   "exports": {
     ".": {
@@ -16,8 +36,14 @@
   "types": "./dist/index.d.ts",
   "files": [
     "bin",
-    "dist"
+    "dist",
+    "skills",
+    "!dist/**/*.test.*",
+    "!dist/**/*.map"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "node --eval \"const{rmSync}=require('node:fs');rmSync('dist',{recursive:true,force:true});rmSync('tsconfig.tsbuildinfo',{force:true})\" && tsc -b",
     "test": "node --test dist/**/*.test.js",
@@ -31,4 +57,3 @@
     "@excalidraw-collab/server": "workspace:*"
   }
 }
-

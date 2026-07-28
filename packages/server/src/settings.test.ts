@@ -9,11 +9,7 @@ import { afterEach, describe, test } from "node:test";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "./app.js";
 import { loadConfig, type Config } from "./config.js";
-import {
-  META_INSTANCE_THEME,
-  openDatabase,
-  type Database,
-} from "./db.js";
+import { META_INSTANCE_THEME, openDatabase, type Database } from "./db.js";
 import { ErrorCode, type ErrorEnvelope } from "./errors.js";
 import type { ThemeSettings } from "./settings.js";
 import type { TokenCreated } from "./tokens.js";
@@ -187,10 +183,7 @@ describe("PUT /api/settings/theme", () => {
       },
       payload: { name: "agent-bot" },
     });
-    assert.ok(
-      mint.statusCode === 200 || mint.statusCode === 201,
-      mint.body,
-    );
+    assert.ok(mint.statusCode === 200 || mint.statusCode === 201, mint.body);
     const agent = mint.json() as TokenCreated;
     assert.equal(agent.isAdmin, false);
 

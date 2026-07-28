@@ -60,11 +60,7 @@ function buildHeaders(
   return headers;
 }
 
-function throwIfNotOk(
-  response: Response,
-  body: unknown,
-  text: string,
-): void {
+function throwIfNotOk(response: Response, body: unknown, text: string): void {
   if (response.ok) return;
   if (isServerErrorBody(body)) {
     throw new CliError(body.error.message, {
@@ -97,10 +93,7 @@ export async function apiFetchResult<T = unknown>(
   const token = config?.token;
 
   if (!server) {
-    throw new CliError(
-      "No server configured. Set EXCALICLI_SERVER or run login.",
-      { code: "USAGE" },
-    );
+    throw new CliError("No server configured. Set EXCALI_SERVER or run login.", { code: "USAGE" });
   }
 
   const url = resolveUrl(reqPath, server);
@@ -112,10 +105,7 @@ export async function apiFetchResult<T = unknown>(
   } catch (cause) {
     // Abort is not an error for long-poll watch loops — rethrow as-is so
     // the caller can treat AbortError as a clean stop.
-    if (
-      cause instanceof Error &&
-      (cause.name === "AbortError" || cause.name === "TimeoutError")
-    ) {
+    if (cause instanceof Error && (cause.name === "AbortError" || cause.name === "TimeoutError")) {
       throw cause;
     }
     throw new CliError(
@@ -147,9 +137,7 @@ export async function apiFetchResult<T = unknown>(
  * the server's `{ error: { code, message, details? } }` envelope into
  * {@link CliError} carrying the code (exit codes derived via errors.ts).
  */
-export async function apiFetch<T = unknown>(
-  options: ApiFetchOptions,
-): Promise<T> {
+export async function apiFetch<T = unknown>(options: ApiFetchOptions): Promise<T> {
   const result = await apiFetchResult<T>(options);
   return result.body as T;
 }
@@ -163,10 +151,7 @@ export async function apiFetchText(options: ApiFetchOptions): Promise<string> {
   const token = config?.token;
 
   if (!server) {
-    throw new CliError(
-      "No server configured. Set EXCALICLI_SERVER or run login.",
-      { code: "USAGE" },
-    );
+    throw new CliError("No server configured. Set EXCALI_SERVER or run login.", { code: "USAGE" });
   }
 
   const url = resolveUrl(reqPath, server);
@@ -176,10 +161,7 @@ export async function apiFetchText(options: ApiFetchOptions): Promise<string> {
   try {
     response = await fetch(url, { ...init, headers });
   } catch (cause) {
-    if (
-      cause instanceof Error &&
-      (cause.name === "AbortError" || cause.name === "TimeoutError")
-    ) {
+    if (cause instanceof Error && (cause.name === "AbortError" || cause.name === "TimeoutError")) {
       throw cause;
     }
     throw new CliError(
@@ -215,18 +197,13 @@ export type ApiBinaryResult = {
  * responses, still parses a JSON error envelope when present so
  * {@link CliError} carries the server code and `details.reason`.
  */
-export async function apiFetchBinary(
-  options: ApiFetchOptions,
-): Promise<ApiBinaryResult> {
+export async function apiFetchBinary(options: ApiFetchOptions): Promise<ApiBinaryResult> {
   const { path: reqPath, config, ...init } = options;
   const server = config?.server;
   const token = config?.token;
 
   if (!server) {
-    throw new CliError(
-      "No server configured. Set EXCALICLI_SERVER or run login.",
-      { code: "USAGE" },
-    );
+    throw new CliError("No server configured. Set EXCALI_SERVER or run login.", { code: "USAGE" });
   }
 
   const url = resolveUrl(reqPath, server);
@@ -238,10 +215,7 @@ export async function apiFetchBinary(
   try {
     response = await fetch(url, { ...init, headers });
   } catch (cause) {
-    if (
-      cause instanceof Error &&
-      (cause.name === "AbortError" || cause.name === "TimeoutError")
-    ) {
+    if (cause instanceof Error && (cause.name === "AbortError" || cause.name === "TimeoutError")) {
       throw cause;
     }
     throw new CliError(

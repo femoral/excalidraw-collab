@@ -3,15 +3,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import {
-  configPath,
-  loadConfig,
-  readConfigFile,
-  writeConfigFile,
-} from "./config.js";
+import { configPath, loadConfig, readConfigFile, writeConfigFile } from "./config.js";
 
 function tempEnv(): { env: NodeJS.ProcessEnv; dir: string } {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "excalicli-config-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "excali-config-"));
   return {
     dir,
     env: { ...process.env, XDG_CONFIG_HOME: dir },
@@ -20,10 +15,7 @@ function tempEnv(): { env: NodeJS.ProcessEnv; dir: string } {
 
 test("writeConfigFile creates dir and writes mode 0600", () => {
   const { env, dir } = tempEnv();
-  const file = writeConfigFile(
-    { server: "http://127.0.0.1:9999", token: "sekrit" },
-    env,
-  );
+  const file = writeConfigFile({ server: "http://127.0.0.1:9999", token: "sekrit" }, env);
 
   assert.equal(file, configPath(env));
   assert.ok(file.startsWith(dir));
@@ -54,15 +46,12 @@ test("missing config file yields empty object", () => {
 
 test("env vars override file values", () => {
   const { env } = tempEnv();
-  writeConfigFile(
-    { server: "http://from-file", token: "from-file" },
-    env,
-  );
+  writeConfigFile({ server: "http://from-file", token: "from-file" }, env);
 
   const resolved = loadConfig({
     ...env,
-    EXCALICLI_SERVER: "http://from-env",
-    EXCALICLI_TOKEN: "from-env",
+    EXCALI_SERVER: "http://from-env",
+    EXCALI_TOKEN: "from-env",
   });
 
   assert.equal(resolved.server, "http://from-env");
@@ -71,15 +60,12 @@ test("env vars override file values", () => {
 
 test("partial env override keeps other file field", () => {
   const { env } = tempEnv();
-  writeConfigFile(
-    { server: "http://from-file", token: "from-file" },
-    env,
-  );
+  writeConfigFile({ server: "http://from-file", token: "from-file" }, env);
 
   const resolved = loadConfig({
     ...env,
-    EXCALICLI_SERVER: "http://from-env",
-    EXCALICLI_TOKEN: undefined,
+    EXCALI_SERVER: "http://from-env",
+    EXCALI_TOKEN: undefined,
   });
 
   assert.equal(resolved.server, "http://from-env");

@@ -7,10 +7,7 @@
 
 const SQLITE_EXPERIMENTAL = /node:sqlite|sqlite module/i;
 
-function isSqliteExperimentalWarning(
-  warning: string | Error,
-  ...rest: unknown[]
-): boolean {
+function isSqliteExperimentalWarning(warning: string | Error, ...rest: unknown[]): boolean {
   const message =
     typeof warning === "string"
       ? warning
@@ -26,12 +23,7 @@ function isSqliteExperimentalWarning(
       : typeof rest[0] === "string"
         ? rest[0]
         : "";
-  const type =
-    typeof rest[0] === "string"
-      ? rest[0]
-      : typeof rest[1] === "string"
-        ? rest[1]
-        : "";
+  const type = typeof rest[0] === "string" ? rest[0] : typeof rest[1] === "string" ? rest[1] : "";
 
   if (!SQLITE_EXPERIMENTAL.test(message) && !SQLITE_EXPERIMENTAL.test(name)) {
     return false;
@@ -54,9 +46,7 @@ if (!(process.emitWarning as { __sqliteFiltered?: boolean }).__sqliteFiltered) {
       return;
     }
     // process.emitWarning has several overloads; forward as-is.
-    return (
-      originalEmitWarning as (...a: unknown[]) => void
-    )(warning, ...args);
+    return (originalEmitWarning as (...a: unknown[]) => void)(warning, ...args);
   }) as typeof process.emitWarning & { __sqliteFiltered?: boolean };
 
   filtered.__sqliteFiltered = true;

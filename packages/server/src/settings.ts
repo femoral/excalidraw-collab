@@ -7,15 +7,8 @@
  * everyone else sees.
  */
 import type { FastifyInstance } from "fastify";
-import {
-  createAuthPreHandler,
-  requireAdminPreHandler,
-} from "./auth.js";
-import {
-  META_INSTANCE_THEME,
-  type Database,
-  type InstanceTheme,
-} from "./db.js";
+import { createAuthPreHandler, requireAdminPreHandler } from "./auth.js";
+import { META_INSTANCE_THEME, type Database, type InstanceTheme } from "./db.js";
 import { AppError, ErrorCode } from "./errors.js";
 
 /** Wire shape for GET/PUT /api/settings/theme. */
@@ -45,10 +38,7 @@ const putThemeBodySchema = {
      * viewers without a local choice follow prefers-color-scheme.
      */
     theme: {
-      anyOf: [
-        { type: "string", enum: ["light", "dark"] },
-        { type: "null" },
-      ],
+      anyOf: [{ type: "string", enum: ["light", "dark"] }, { type: "null" }],
     },
   },
   additionalProperties: false,
@@ -59,10 +49,7 @@ const putThemeBodySchema = {
  *   - GET  /api/settings/theme — unauthenticated (login screen needs it)
  *   - PUT  /api/settings/theme — admin only
  */
-export async function registerSettingsRoutes(
-  app: FastifyInstance,
-  db: Database,
-): Promise<void> {
+export async function registerSettingsRoutes(app: FastifyInstance, db: Database): Promise<void> {
   // Public read: no auth preHandler. Cheap, cacheable in principle; always
   // fresh from meta so an admin flip is visible on the next page load.
   await app.register(
@@ -95,11 +82,7 @@ export async function registerSettingsRoutes(
           } else if (theme === "light" || theme === "dark") {
             db.setMeta(META_INSTANCE_THEME, theme);
           } else {
-            throw new AppError(
-              ErrorCode.VALIDATION,
-              'theme must be "light", "dark", or null',
-              400,
-            );
+            throw new AppError(ErrorCode.VALIDATION, 'theme must be "light", "dark", or null', 400);
           }
           return themeSettingsFromDb(db);
         },

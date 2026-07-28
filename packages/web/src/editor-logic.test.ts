@@ -286,15 +286,9 @@ describe("buildDraftPayload / buildCommitPayload", () => {
       },
     };
     const commit = buildCommitPayload(withTheme, 1, "flip theme only");
-    assert.equal(
-      Object.prototype.hasOwnProperty.call(commit.appState, "theme"),
-      false,
-    );
+    assert.equal(Object.prototype.hasOwnProperty.call(commit.appState, "theme"), false);
     const draft = buildDraftPayload(withTheme, 1);
-    assert.equal(
-      Object.prototype.hasOwnProperty.call(draft.appState, "theme"),
-      false,
-    );
+    assert.equal(Object.prototype.hasOwnProperty.call(draft.appState, "theme"), false);
   });
 });
 
@@ -361,10 +355,7 @@ describe("formatFileUploadError", () => {
   });
 
   test("falls back to server message", () => {
-    assert.equal(
-      formatFileUploadError({ message: "payload too large" }),
-      "payload too large",
-    );
+    assert.equal(formatFileUploadError({ message: "payload too large" }), "payload too large");
   });
 });
 
@@ -410,17 +401,11 @@ describe("isEditorLockActive / formatLockBadge / turnMenu", () => {
   test("null and expired locks are inactive", () => {
     assert.equal(isEditorLockActive(null, now), false);
     assert.equal(
-      isEditorLockActive(
-        { holder: "bot", expiresAt: "2026-06-01T11:00:00.000Z" },
-        now,
-      ),
+      isEditorLockActive({ holder: "bot", expiresAt: "2026-06-01T11:00:00.000Z" }, now),
       false,
     );
     assert.equal(
-      isEditorLockActive(
-        { holder: "bot", expiresAt: "2026-06-01T13:00:00.000Z" },
-        now,
-      ),
+      isEditorLockActive({ holder: "bot", expiresAt: "2026-06-01T13:00:00.000Z" }, now),
       true,
     );
   });
@@ -436,27 +421,16 @@ describe("isEditorLockActive / formatLockBadge / turnMenu", () => {
     assert.equal(turnMenuShouldClaim(null, now), true);
     assert.equal(turnMenuLabel(null, "admin", now), "Claim turn");
     assert.equal(
-      turnMenuLabel(
-        { holder: "admin", expiresAt: "2026-06-01T13:00:00.000Z" },
-        "admin",
-        now,
-      ),
+      turnMenuLabel({ holder: "admin", expiresAt: "2026-06-01T13:00:00.000Z" }, "admin", now),
       "Release turn",
     );
     // Someone else holds it — recovery action is still Release.
     assert.equal(
-      turnMenuLabel(
-        { holder: "claude-code", expiresAt: "2026-06-01T13:00:00.000Z" },
-        "admin",
-        now,
-      ),
+      turnMenuLabel({ holder: "claude-code", expiresAt: "2026-06-01T13:00:00.000Z" }, "admin", now),
       "Release turn",
     );
     assert.equal(
-      turnMenuShouldClaim(
-        { holder: "claude-code", expiresAt: "2026-06-01T13:00:00.000Z" },
-        now,
-      ),
+      turnMenuShouldClaim({ holder: "claude-code", expiresAt: "2026-06-01T13:00:00.000Z" }, now),
       false,
     );
   });
@@ -477,7 +451,7 @@ describe("remote update toast", () => {
         author: "agent",
         message: "added queue",
       }),
-      'agent pushed v12: “added queue”',
+      "agent pushed v12: “added queue”",
     );
   });
 
@@ -507,44 +481,26 @@ describe("remote update toast", () => {
 
   test("shouldUpdateChromeHead suppresses self-authored", () => {
     assert.equal(
-      shouldUpdateChromeHead(
-        { headVersion: 6, author: "admin" },
-        { selfName: "admin" },
-      ),
+      shouldUpdateChromeHead({ headVersion: 6, author: "admin" }, { selfName: "admin" }),
       false,
     );
     assert.equal(
-      shouldUpdateChromeHead(
-        { headVersion: 6, author: "agent" },
-        { selfName: "admin" },
-      ),
+      shouldUpdateChromeHead({ headVersion: 6, author: "agent" }, { selfName: "admin" }),
       true,
     );
   });
 
   test("shouldApplyRemoteLock suppresses self actor", () => {
-    assert.equal(
-      shouldApplyRemoteLock({ actor: "admin" }, { selfName: "admin" }),
-      false,
-    );
-    assert.equal(
-      shouldApplyRemoteLock({ actor: "agent" }, { selfName: "admin" }),
-      true,
-    );
-    assert.equal(
-      shouldApplyRemoteLock({}, { selfName: "admin" }),
-      true,
-    );
+    assert.equal(shouldApplyRemoteLock({ actor: "admin" }, { selfName: "admin" }), false);
+    assert.equal(shouldApplyRemoteLock({ actor: "agent" }, { selfName: "admin" }), true);
+    assert.equal(shouldApplyRemoteLock({}, { selfName: "admin" }), true);
   });
 
   test("editorLockExpiryDelayMs", () => {
     const now = Date.parse("2026-06-01T12:00:00.000Z");
     assert.equal(editorLockExpiryDelayMs(null, now), null);
     assert.equal(
-      editorLockExpiryDelayMs(
-        { holder: "a", expiresAt: "2026-06-01T12:00:10.000Z" },
-        now,
-      ),
+      editorLockExpiryDelayMs({ holder: "a", expiresAt: "2026-06-01T12:00:10.000Z" }, now),
       10_000,
     );
   });
@@ -590,9 +546,7 @@ describe("draft autosave does not feed itself", () => {
     // cursorButton/selection are not in the persisted whitelist.
     assert.equal(
       draftFingerprint(snap([1], { cursorButton: "up", selectedElementIds: {} })),
-      draftFingerprint(
-        snap([1], { cursorButton: "down", selectedElementIds: { "el-0": true } }),
-      ),
+      draftFingerprint(snap([1], { cursorButton: "down", selectedElementIds: { "el-0": true } })),
     );
   });
 

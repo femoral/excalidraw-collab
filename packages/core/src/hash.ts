@@ -27,9 +27,7 @@ import type { ExcalidrawElement } from "./types.js";
  * Mirrors upstream `hashElementsVersion` (djb2 over `versionNonce`, order-
  * sensitive). Returns an unsigned 32-bit integer.
  */
-export function sceneHash(
-  elements: readonly Pick<ExcalidrawElement, "versionNonce">[],
-): number {
+export function sceneHash(elements: readonly Pick<ExcalidrawElement, "versionNonce">[]): number {
   let hash = 5381;
   for (let i = 0; i < elements.length; i++) {
     // versionNonce is required on every ExcalidrawElement; treat missing as 0

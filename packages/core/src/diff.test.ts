@@ -21,12 +21,7 @@ import {
   isEmptyDiff,
   normalizeScene,
 } from "./index.js";
-import type {
-  ElementChange,
-  ExcalidrawElement,
-  SceneDocument,
-  SceneDiff,
-} from "./index.js";
+import type { ElementChange, ExcalidrawElement, SceneDocument, SceneDiff } from "./index.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = join(HERE, "..", "test", "fixtures");
@@ -78,9 +73,7 @@ function deletes(diff: SceneDiff): Extract<ElementChange, { op: "delete" }>[] {
   );
 }
 
-function reorders(
-  diff: SceneDiff,
-): Extract<ElementChange, { op: "reorder" }>[] {
+function reorders(diff: SceneDiff): Extract<ElementChange, { op: "reorder" }>[] {
   return diff.elements.filter(
     (c): c is Extract<ElementChange, { op: "reorder" }> => c.op === "reorder",
   );
@@ -117,10 +110,7 @@ describe("diffScenes idle / no-edit", () => {
     test(`diffScenes(x, x) is empty for ${label}`, () => {
       const doc = loadFixture(path);
       const diff = diffScenes(doc, doc);
-      assert.ok(
-        isEmptyDiff(diff),
-        `${label}: self-diff not empty:\n${formatDiff(diff)}`,
-      );
+      assert.ok(isEmptyDiff(diff), `${label}: self-diff not empty:\n${formatDiff(diff)}`);
       assert.equal(diff.elements.length, 0);
       assert.equal(diff.appState.length, 0);
       assert.deepEqual(diff.summary, {
@@ -155,10 +145,7 @@ describe("diffScenes idle / no-edit", () => {
       })),
     };
     const diff = diffScenes(base, noisier);
-    assert.ok(
-      isEmptyDiff(diff),
-      `churn props leaked into diff:\n${formatDiff(diff)}`,
-    );
+    assert.ok(isEmptyDiff(diff), `churn props leaked into diff:\n${formatDiff(diff)}`);
   });
 });
 
@@ -184,9 +171,7 @@ describe("diffScenes pair fixtures", () => {
     assert.match(boxA.describe, /Service A/);
 
     // Bound text for Service A also moves with the container.
-    const boundText = updates(diff).find(
-      (c) => c.type === "text" && c.label === "Service A",
-    );
+    const boundText = updates(diff).find((c) => c.type === "text" && c.label === "Service A");
     assert.ok(boundText, "expected bound text of Service A to move");
     assert.match(boundText.describe, /moved/);
 
@@ -291,9 +276,7 @@ describe("diffScenes pair fixtures", () => {
     assert.equal(boxC.label, "Service C");
     assert.match(boxC.describe, /Service C/);
 
-    const boundText = deletes(diff).find(
-      (c) => c.type === "text" && c.label === "Service C",
-    );
+    const boundText = deletes(diff).find((c) => c.type === "text" && c.label === "Service C");
     assert.ok(boundText, "expected delete for bound text of Service C");
 
     // Shared relative order preserved → no reorders from hard-delete index shifts.
@@ -308,17 +291,10 @@ describe("diffScenes pair fixtures", () => {
     const { before, after } = loadPair("reorder");
     const diff = diffScenes(before, after);
 
-    assert.equal(
-      diff.summary.updated,
-      0,
-      `reorder leaked updates:\n${formatDiff(diff)}`,
-    );
+    assert.equal(diff.summary.updated, 0, `reorder leaked updates:\n${formatDiff(diff)}`);
     assert.equal(diff.summary.added, 0);
     assert.equal(diff.summary.deleted, 0);
-    assert.ok(
-      diff.summary.reordered > 0,
-      `expected reorders, got none:\n${formatDiff(diff)}`,
-    );
+    assert.ok(diff.summary.reordered > 0, `expected reorders, got none:\n${formatDiff(diff)}`);
 
     const rs = reorders(diff);
     // Every reordered element has from !== to.
@@ -458,8 +434,7 @@ describe("formatDiff", () => {
         { key: "y", from: 120, to: 200 },
         { key: "backgroundColor", from: "#fff", to: "#e9ecef" },
       ],
-      describe:
-        '~ rectangle "Auth Service"  moved (320,120) → (320,200); restyled fill #e9ecef',
+      describe: '~ rectangle "Auth Service"  moved (320,120) → (320,200); restyled fill #e9ecef',
     },
     {
       op: "update",
@@ -660,19 +635,13 @@ describe("diffScenes appState defaults", () => {
   });
 
   test("absent → upstream default is not a change", () => {
-    const diff = diffScenes(
-      withAppState({}),
-      withAppState({ ...APP_STATE_DEFAULTS }),
-    );
+    const diff = diffScenes(withAppState({}), withAppState({ ...APP_STATE_DEFAULTS }));
     assert.deepEqual(diff.appState, []);
     assert.ok(isEmptyDiff(diff));
   });
 
   test("suppression is symmetric (default → absent)", () => {
-    const diff = diffScenes(
-      withAppState({ ...APP_STATE_DEFAULTS }),
-      withAppState({}),
-    );
+    const diff = diffScenes(withAppState({ ...APP_STATE_DEFAULTS }), withAppState({}));
     assert.deepEqual(diff.appState, []);
   });
 
@@ -681,39 +650,23 @@ describe("diffScenes appState defaults", () => {
       withAppState({}),
       withAppState({ viewBackgroundColor: "#000000", gridSize: 40 }),
     );
-    assert.deepEqual(
-      diff.appState.map((d) => d.key).sort(),
-      ["gridSize", "viewBackgroundColor"],
-    );
+    assert.deepEqual(diff.appState.map((d) => d.key).sort(), ["gridSize", "viewBackgroundColor"]);
   });
 
   test("scene name is never suppressed (upstream default is null)", () => {
     // Regression: `name` must not join APP_STATE_DEFAULTS — a rename is real.
     assert.ok(!Object.prototype.hasOwnProperty.call(APP_STATE_DEFAULTS, "name"));
-    const diff = diffScenes(
-      withAppState({}),
-      withAppState({ name: "Ingest Pipeline" }),
-    );
-    assert.deepEqual(diff.appState, [
-      { key: "name", from: undefined, to: "Ingest Pipeline" },
-    ]);
+    const diff = diffScenes(withAppState({}), withAppState({ name: "Ingest Pipeline" }));
+    assert.deepEqual(diff.appState, [{ key: "name", from: undefined, to: "Ingest Pipeline" }]);
   });
 
   test("an explicit change away from a default is still reported", () => {
-    const diff = diffScenes(
-      withAppState({ exportScale: 1 }),
-      withAppState({ exportScale: 2 }),
-    );
-    assert.deepEqual(diff.appState, [
-      { key: "exportScale", from: 1, to: 2 },
-    ]);
+    const diff = diffScenes(withAppState({ exportScale: 1 }), withAppState({ exportScale: 2 }));
+    assert.deepEqual(diff.appState, [{ key: "exportScale", from: 1, to: 2 }]);
   });
 
   test("theme changes are not scene-document diffs (issue #38)", () => {
-    const diff = diffScenes(
-      withAppState({ theme: "light" }),
-      withAppState({ theme: "dark" }),
-    );
+    const diff = diffScenes(withAppState({ theme: "light" }), withAppState({ theme: "dark" }));
     assert.deepEqual(diff.appState, []);
     assert.ok(isEmptyDiff(diff));
   });

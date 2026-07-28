@@ -1,5 +1,5 @@
 /**
- * `excalicli diff SLUG [--from head~1] [--to head] [--since-last-pull] [--json]`
+ * `excali diff SLUG [--from head~1] [--to head] [--since-last-pull] [--json]`
  *
  * Thin client over GET /api/scenes/:slug/diff. Empty diffs exit 0 — nothing
  * changed is success for agent loops that check exit status.
@@ -15,7 +15,7 @@ import { getPulledVersion } from "./state.js";
 function requireAuth(ctx: CommandContext): void {
   if (!ctx.config.server || !ctx.config.token) {
     throw new CliError(
-      "No server/token configured. Set EXCALICLI_SERVER and EXCALICLI_TOKEN, or run `excalicli login`.",
+      "No server/token configured. Set EXCALI_SERVER and EXCALI_TOKEN, or run `excali login`.",
       { code: "USAGE" },
     );
   }
@@ -58,13 +58,13 @@ function parseDiffArgs(args: string[]): {
   if (positionals.length === 0) {
     throw new UsageError(
       "diff requires SLUG\n\n" +
-        "Usage: excalicli diff SLUG [--from head~1] [--to head] [--since-last-pull]",
+        "Usage: excali diff SLUG [--from head~1] [--to head] [--since-last-pull]",
     );
   }
   if (positionals.length > 1) {
     throw new UsageError(
       `unexpected arguments: ${positionals.slice(1).join(" ")}\n\n` +
-        "Usage: excalicli diff SLUG [--from head~1] [--to head] [--since-last-pull]",
+        "Usage: excali diff SLUG [--from head~1] [--to head] [--since-last-pull]",
     );
   }
 
@@ -77,7 +77,7 @@ function parseDiffArgs(args: string[]): {
   if (sinceLastPull && values.from !== undefined) {
     throw new UsageError(
       "diff: --since-last-pull and --from cannot be used together\n\n" +
-        "Usage: excalicli diff SLUG [--from head~1] [--to head] [--since-last-pull]",
+        "Usage: excali diff SLUG [--from head~1] [--to head] [--since-last-pull]",
     );
   }
 
@@ -103,8 +103,7 @@ function resolveRefs(
     const pulled = getPulledVersion(ctx.cwd, server, slug);
     if (pulled === undefined) {
       throw new CliError(
-        `No local pulled version for scene "${slug}" on ${server}.\n` +
-          `Run: excalicli pull ${slug}`,
+        `No local pulled version for scene "${slug}" on ${server}.\n` + `Run: excali pull ${slug}`,
         { code: "USAGE" },
       );
     }
@@ -148,10 +147,9 @@ async function runDiff(ctx: CommandContext): Promise<CommandResult> {
 
 export const diffCommand: Command = {
   name: "diff",
-  description:
-    "Show what changed between two scene versions (default: head~1 → head)",
+  description: "Show what changed between two scene versions (default: head~1 → head)",
   usage:
-    "excalicli diff SLUG [--from head~1] [--to head] [--since-last-pull] [--json]\n\n" +
+    "excali diff SLUG [--from head~1] [--to head] [--since-last-pull] [--json]\n\n" +
     "  --from REF           Start version (N, head, head~N). Default: head~1\n" +
     "  --to REF             End version. Default: head\n" +
     "  --since-last-pull    Diff from the version recorded by pull/push to head\n" +

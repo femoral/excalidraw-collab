@@ -64,10 +64,7 @@ function useLocation(): { pathname: string; search: string } {
 }
 
 function navigate(to: string, event?: MouseEvent<HTMLAnchorElement>) {
-  if (
-    event &&
-    (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
-  ) {
+  if (event && (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) {
     return;
   }
   event?.preventDefault();
@@ -98,13 +95,7 @@ function SceneView({
 }): ReactElement {
   const version = parseVersionQuery(search);
   return (
-    <SceneEditor
-      slug={slug}
-      api={api}
-      onNavigate={navigate}
-      version={version}
-      theme={theme}
-    />
+    <SceneEditor slug={slug} api={api} onNavigate={navigate} version={version} theme={theme} />
   );
 }
 
@@ -170,12 +161,8 @@ function useThemeController(api: ApiClient): ThemeController {
     readViewerTheme(storage()),
   );
   const [instanceDefault, setInstanceDefault] = useState<InstanceTheme>(null);
-  const [systemPreference, setSystemPreference] = useState<Theme>(() =>
-    readSystemPreference(),
-  );
-  const [hintDismissed, setHintDismissed] = useState(() =>
-    readHintDismissed(storage()),
-  );
+  const [systemPreference, setSystemPreference] = useState<Theme>(() => readSystemPreference());
+  const [hintDismissed, setHintDismissed] = useState(() => readHintDismissed(storage()));
   const [isAdmin, setIsAdmin] = useState(false);
   const [instanceBusy, setInstanceBusy] = useState(false);
   const [instanceError, setInstanceError] = useState<string | null>(null);
@@ -263,9 +250,7 @@ function useThemeController(api: ApiClient): ThemeController {
       writeViewerTheme(storage(), theme);
       setViewerChoice(theme);
     } catch (err) {
-      setInstanceError(
-        err instanceof Error ? err.message : "Could not set instance theme.",
-      );
+      setInstanceError(err instanceof Error ? err.message : "Could not set instance theme.");
     } finally {
       setInstanceBusy(false);
     }
@@ -321,14 +306,10 @@ export function App(): ReactElement {
   const { pathname, search } = useLocation();
   const route = matchRoute(pathname);
 
-  const [auth, dispatchAuth] = useReducer(
-    reduceAuth,
-    undefined,
-    (): AuthState => {
-      const token = readStoredToken(storage());
-      return reduceAuth({ status: "anonymous" }, { type: "hydrate", token });
-    },
-  );
+  const [auth, dispatchAuth] = useReducer(reduceAuth, undefined, (): AuthState => {
+    const token = readStoredToken(storage());
+    return reduceAuth({ status: "anonymous" }, { type: "hydrate", token });
+  });
 
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginBusy, setLoginBusy] = useState(false);
@@ -386,16 +367,11 @@ export function App(): ReactElement {
         if (cancelled) return;
         // 401 already cleared storage + set anonymous via onUnauthorized.
         if (err instanceof ApiError && err.isUnauthorized) {
-          setLoginError(
-            "That token is invalid or has been revoked. Request a new one.",
-          );
+          setLoginError("That token is invalid or has been revoked. Request a new one.");
         } else {
           // Network / server errors: return to login UI but keep the token so
           // reload retries without re-pasting. (logout does not clear storage.)
-          const message =
-            err instanceof Error
-              ? err.message
-              : "Could not reach the server.";
+          const message = err instanceof Error ? err.message : "Could not reach the server.";
           setLoginError(message);
           dispatchAuth({ type: "logout" });
         }
@@ -460,11 +436,7 @@ export function App(): ReactElement {
     <div className="app-shell">
       <header className="app-header">
         <div className="app-header-brand">
-          <a
-            href="/"
-            className="app-logo"
-            onClick={(e) => navigate("/", e)}
-          >
+          <a href="/" className="app-logo" onClick={(e) => navigate("/", e)}>
             excalidraw-collab
           </a>
           <span className="app-header-sep" aria-hidden="true">
@@ -484,36 +456,22 @@ export function App(): ReactElement {
             <>
               <a
                 href={`/s/${encodeURIComponent(route.slug)}`}
-                className={
-                  route.name === "scene" ? "nav-link is-active" : "nav-link"
-                }
-                onClick={(e) =>
-                  navigate(`/s/${encodeURIComponent(route.slug)}`, e)
-                }
+                className={route.name === "scene" ? "nav-link is-active" : "nav-link"}
+                onClick={(e) => navigate(`/s/${encodeURIComponent(route.slug)}`, e)}
               >
                 Editor
               </a>
               <a
                 href={`/s/${encodeURIComponent(route.slug)}/history`}
-                className={
-                  route.name === "history" ? "nav-link is-active" : "nav-link"
-                }
-                onClick={(e) =>
-                  navigate(
-                    `/s/${encodeURIComponent(route.slug)}/history`,
-                    e,
-                  )
-                }
+                className={route.name === "history" ? "nav-link is-active" : "nav-link"}
+                onClick={(e) => navigate(`/s/${encodeURIComponent(route.slug)}/history`, e)}
               >
                 History
               </a>
             </>
           ) : null}
           <div className="header-theme-controls">
-            <ThemeToggleButton
-              theme={themeCtl.theme}
-              onToggle={themeCtl.toggleTheme}
-            />
+            <ThemeToggleButton theme={themeCtl.theme} onToggle={themeCtl.toggleTheme} />
             {themeCtl.isAdmin ? (
               <button
                 type="button"
@@ -539,14 +497,10 @@ export function App(): ReactElement {
       </header>
 
       {themeCtl.showMismatchHint && themeCtl.instanceDefault ? (
-        <div
-          className="banner banner-info theme-mismatch-banner"
-          role="status"
-        >
+        <div className="banner banner-info theme-mismatch-banner" role="status">
           <span>
-            This instance defaults to the{" "}
-            <strong>{themeCtl.instanceDefault}</strong> theme, which differs
-            from your system preference ({themeCtl.systemPreference}).
+            This instance defaults to the <strong>{themeCtl.instanceDefault}</strong> theme, which
+            differs from your system preference ({themeCtl.systemPreference}).
           </span>
           <div className="banner-actions">
             <button
@@ -590,23 +544,14 @@ export function App(): ReactElement {
       ) : null}
 
       <main className="app-main">
-        {route.name === "home" ? (
-          <SceneList api={api} onNavigate={navigate} />
-        ) : null}
+        {route.name === "home" ? <SceneList api={api} onNavigate={navigate} /> : null}
         {route.name === "scene" ? (
-          <SceneView
-            slug={route.slug}
-            api={api}
-            search={search}
-            theme={themeCtl.theme}
-          />
+          <SceneView slug={route.slug} api={api} search={search} theme={themeCtl.theme} />
         ) : null}
         {route.name === "history" ? (
           <HistoryView slug={route.slug} api={api} onNavigate={navigate} />
         ) : null}
-        {route.name === "notFound" ? (
-          <NotFoundView path={route.path} />
-        ) : null}
+        {route.name === "notFound" ? <NotFoundView path={route.path} /> : null}
       </main>
     </div>
   );

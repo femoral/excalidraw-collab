@@ -6,11 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, test } from "node:test";
-import {
-  buildApp,
-  openDatabase,
-  type Database,
-} from "@excalidraw-collab/server";
+import { buildApp, openDatabase, type Database } from "@excalidraw-collab/server";
 import { run } from "./dispatch.js";
 import { ExitCode } from "./errors.js";
 
@@ -63,9 +59,9 @@ type Harness = {
 };
 
 async function startServer(): Promise<Harness> {
-  const dataDir = tempDir("excalicli-turn-data-");
-  const cwd = tempDir("excalicli-turn-cwd-");
-  const configHome = tempDir("excalicli-turn-xdg-");
+  const dataDir = tempDir("excali-turn-data-");
+  const cwd = tempDir("excali-turn-cwd-");
+  const configHome = tempDir("excali-turn-xdg-");
   const token = "test-bootstrap-token-turn-cli";
 
   const db = openDatabase(dataDir);
@@ -96,8 +92,8 @@ async function startServer(): Promise<Harness> {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     XDG_CONFIG_HOME: configHome,
-    EXCALICLI_SERVER: baseUrl,
-    EXCALICLI_TOKEN: token,
+    EXCALI_SERVER: baseUrl,
+    EXCALI_TOKEN: token,
   };
 
   return { app, db, baseUrl, token, dataDir, cwd, env, configHome };
@@ -119,7 +115,7 @@ async function mintAgent(
   assert.equal(parsed.name, name);
   const env: NodeJS.ProcessEnv = {
     ...h.env,
-    EXCALICLI_TOKEN: parsed.token,
+    EXCALI_TOKEN: parsed.token,
   };
   return { token: parsed.token, env };
 }
@@ -331,14 +327,7 @@ test("push warns when lock held by other, still succeeds; --respect-lock exits 5
   {
     const c = capture();
     const code = await run({
-      argv: [
-        "push",
-        "arch",
-        "-m",
-        "blocked",
-        "--respect-lock",
-        "--json",
-      ],
+      argv: ["push", "arch", "-m", "blocked", "--respect-lock", "--json"],
       env: h.env,
       io: c.io,
       cwd: h.cwd,

@@ -23,11 +23,8 @@ const PAIRS_DIR = join(FIXTURES_DIR, "pairs");
 // Seed before importing excalidraw so nanoid / seed / versionNonce are stable
 seedRandom(0xeca11d42);
 
-const {
-  convertToExcalidrawElements,
-  restoreElements,
-  serializeAsJSON,
-} = await import("@excalidraw/excalidraw");
+const { convertToExcalidrawElements, restoreElements, serializeAsJSON } =
+  await import("@excalidraw/excalidraw");
 
 const DEFAULT_APP_STATE = {
   viewBackgroundColor: "#ffffff",
@@ -53,24 +50,13 @@ function repairArrowGeometry(elements) {
     if (el.type !== "arrow" && el.type !== "line") return el;
     const next = { ...el };
 
-    const startEl = next.startBinding
-      ? byId.get(next.startBinding.elementId)
-      : null;
+    const startEl = next.startBinding ? byId.get(next.startBinding.elementId) : null;
     const endEl = next.endBinding ? byId.get(next.endBinding.elementId) : null;
 
     // Prefer midpoints of bound shapes; fall back to existing numeric coords.
-    let x1 =
-      startEl != null
-        ? startEl.x + startEl.width / 2
-        : Number.isFinite(next.x)
-          ? next.x
-          : 0;
+    let x1 = startEl != null ? startEl.x + startEl.width / 2 : Number.isFinite(next.x) ? next.x : 0;
     let y1 =
-      startEl != null
-        ? startEl.y + startEl.height / 2
-        : Number.isFinite(next.y)
-          ? next.y
-          : 0;
+      startEl != null ? startEl.y + startEl.height / 2 : Number.isFinite(next.y) ? next.y : 0;
     let x2 =
       endEl != null
         ? endEl.x + endEl.width / 2
@@ -117,18 +103,14 @@ function repairArrowGeometry(elements) {
       next.startBinding = {
         ...next.startBinding,
         gap: Number.isFinite(next.startBinding.gap) ? next.startBinding.gap : 1,
-        focus: Number.isFinite(next.startBinding.focus)
-          ? next.startBinding.focus
-          : 0,
+        focus: Number.isFinite(next.startBinding.focus) ? next.startBinding.focus : 0,
       };
     }
     if (next.endBinding) {
       next.endBinding = {
         ...next.endBinding,
         gap: Number.isFinite(next.endBinding.gap) ? next.endBinding.gap : 1,
-        focus: Number.isFinite(next.endBinding.focus)
-          ? next.endBinding.focus
-          : 0,
+        focus: Number.isFinite(next.endBinding.focus) ? next.endBinding.focus : 0,
       };
     }
     return next;
@@ -183,12 +165,7 @@ function withElements(scene, mutator) {
   elements = repairArrowGeometry(elements);
   elements = elements.map((e) => sanitizeFinite(e));
   const files = next.files ?? {};
-  const json = serializeAsJSON(
-    elements,
-    next.appState ?? DEFAULT_APP_STATE,
-    files,
-    "local",
-  );
+  const json = serializeAsJSON(elements, next.appState ?? DEFAULT_APP_STATE, files, "local");
   return JSON.parse(json);
 }
 
@@ -567,10 +544,7 @@ function pairGroup(before) {
         el.groupIds = [groupId, ...el.groupIds];
       }
       // Bound text of grouped containers also joins the group (editor behavior)
-      if (
-        el.type === "text" &&
-        (el.containerId === "box-a" || el.containerId === "box-b")
-      ) {
+      if (el.type === "text" && (el.containerId === "box-a" || el.containerId === "box-b")) {
         el.groupIds = [groupId, ...el.groupIds];
       }
     }

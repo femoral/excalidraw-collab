@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import type {
-  DiffElementChange,
-  SceneDiffResponse,
-  VersionInfo,
-} from "./api.ts";
+import type { DiffElementChange, SceneDiffResponse, VersionInfo } from "./api.ts";
 import {
   appendRemoteVersion,
   buildRestorePayload,
@@ -31,10 +27,7 @@ import {
   versionInfoFromSceneEvent,
 } from "./history-logic.ts";
 
-function version(
-  n: number,
-  overrides: Partial<VersionInfo> = {},
-): VersionInfo {
+function version(n: number, overrides: Partial<VersionInfo> = {}): VersionInfo {
   return {
     version: n,
     parentVersion: n > 1 ? n - 1 : null,
@@ -48,11 +41,7 @@ function version(
   };
 }
 
-function add(
-  id: string,
-  label: string | null = null,
-  type = "rectangle",
-): DiffElementChange {
+function add(id: string, label: string | null = null, type = "rectangle"): DiffElementChange {
   return {
     op: "add",
     id,
@@ -63,11 +52,7 @@ function add(
   };
 }
 
-function del(
-  id: string,
-  label: string | null = null,
-  type = "rectangle",
-): DiffElementChange {
+function del(id: string, label: string | null = null, type = "rectangle"): DiffElementChange {
   return {
     op: "delete",
     id,
@@ -110,11 +95,7 @@ function reorder(id: string, from: number, to: number): DiffElementChange {
 
 describe("orderVersionsNewestFirst", () => {
   test("sorts by version descending", () => {
-    const ordered = orderVersionsNewestFirst([
-      version(1),
-      version(3),
-      version(2),
-    ]);
+    const ordered = orderVersionsNewestFirst([version(1), version(3), version(2)]);
     assert.deepEqual(
       ordered.map((v) => v.version),
       [3, 2, 1],
@@ -151,10 +132,7 @@ describe("formatChangeCounts", () => {
   });
 
   test("totalChangeCount sums", () => {
-    assert.equal(
-      totalChangeCount({ added: 1, deleted: 2, updated: 3, reordered: 4 }),
-      10,
-    );
+    assert.equal(totalChangeCount({ added: 1, deleted: 2, updated: 3, reordered: 4 }), 10);
   });
 });
 
@@ -207,33 +185,23 @@ describe("resolveDiffRange", () => {
 
 describe("classifyUpdatePriority", () => {
   test("text edit is content", () => {
-    assert.equal(
-      classifyUpdatePriority([{ key: "text", from: "a", to: "b" }]),
-      "content",
-    );
+    assert.equal(classifyUpdatePriority([{ key: "text", from: "a", to: "b" }]), "content");
   });
 
   test("binding is content", () => {
     assert.equal(
-      classifyUpdatePriority([
-        { key: "startBinding", from: null, to: { elementId: "x" } },
-      ]),
+      classifyUpdatePriority([{ key: "startBinding", from: null, to: { elementId: "x" } }]),
       "content",
     );
   });
 
   test("move is geometry", () => {
-    assert.equal(
-      classifyUpdatePriority([{ key: "x", from: 0, to: 10 }]),
-      "geometry",
-    );
+    assert.equal(classifyUpdatePriority([{ key: "x", from: 0, to: 10 }]), "geometry");
   });
 
   test("fill is style", () => {
     assert.equal(
-      classifyUpdatePriority([
-        { key: "backgroundColor", from: "#fff", to: "#000" },
-      ]),
+      classifyUpdatePriority([{ key: "backgroundColor", from: "#fff", to: "#000" }]),
       "style",
     );
   });
@@ -251,10 +219,7 @@ describe("classifyUpdatePriority", () => {
 
 describe("elementHeadline", () => {
   test("prefers label over id", () => {
-    assert.equal(
-      elementHeadline(add("abc123", "Auth Service")),
-      "rectangle “Auth Service”",
-    );
+    assert.equal(elementHeadline(add("abc123", "Auth Service")), "rectangle “Auth Service”");
   });
 
   test("falls back to type when unlabelled", () => {
@@ -312,21 +277,13 @@ describe("prioritizeDiff", () => {
     );
     // Top changes lead with structural/content.
     assert.ok(view.topChanges.length >= 3);
-    assert.ok(
-      view.topChanges.some(
-        (i) => i.kind === "element" && i.change.op === "add",
-      ),
-    );
+    assert.ok(view.topChanges.some((i) => i.kind === "element" && i.change.op === "add"));
   });
 
   test("style-only section collapses when long", () => {
     const styleUpdates: DiffElementChange[] = [];
     for (let i = 0; i < COLLAPSE_THRESHOLD + 2; i++) {
-      styleUpdates.push(
-        upd(`s${i}`, [
-          { key: "strokeColor", from: "#000", to: `#${i}${i}${i}` },
-        ]),
-      );
+      styleUpdates.push(upd(`s${i}`, [{ key: "strokeColor", from: "#000", to: `#${i}${i}${i}` }]));
     }
     const view = prioritizeDiff({
       from: 1,
@@ -347,9 +304,7 @@ describe("prioritizeDiff", () => {
   });
 
   test("adds stay expanded even when many", () => {
-    const manyAdds = Array.from({ length: 30 }, (_, i) =>
-      add(`a${i}`, `Shape ${i}`),
-    );
+    const manyAdds = Array.from({ length: 30 }, (_, i) => add(`a${i}`, `Shape ${i}`));
     const view = prioritizeDiff({
       from: 0,
       to: 1,
@@ -372,11 +327,7 @@ describe("prioritizeDiff", () => {
       elements.push(upd(`g${i}`, [{ key: "x", from: i, to: i + 1 }], `M${i}`));
     }
     for (let i = 0; i < 40; i++) {
-      elements.push(
-        upd(`s${i}`, [
-          { key: "opacity", from: 100, to: 90 },
-        ]),
-      );
+      elements.push(upd(`s${i}`, [{ key: "opacity", from: 100, to: 90 }]));
     }
     for (let i = 0; i < 10; i++) elements.push(reorder(`r${i}`, i, i + 1));
 
@@ -455,20 +406,12 @@ describe("buildRestorePayload", () => {
     // Whitelist only — collaborators must not ride along.
     assert.ok(payload.appState);
     assert.equal(payload.appState.viewBackgroundColor, "#fff");
-    assert.equal(
-      Object.prototype.hasOwnProperty.call(payload.appState, "collaborators"),
-      false,
-    );
+    assert.equal(Object.prototype.hasOwnProperty.call(payload.appState, "collaborators"), false);
     assert.equal(restoreCreatesForwardCommit(payload, 7, 3), true);
   });
 
   test("custom message override", () => {
-    const payload = buildRestorePayload(
-      { elements: [] },
-      1,
-      1,
-      "Bring back the original layout",
-    );
+    const payload = buildRestorePayload({ elements: [] }, 1, 1, "Bring back the original layout");
     assert.equal(payload.message, "Bring back the original layout");
   });
 });

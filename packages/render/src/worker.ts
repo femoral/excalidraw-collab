@@ -7,12 +7,7 @@
  *   - a deployment that skipped optionalDependencies fails with a clean
  *     {@link RenderError} `NOT_INSTALLED` instead of `ERR_MODULE_NOT_FOUND`
  */
-import type {
-  Browser,
-  BrowserContext,
-  BrowserServer,
-  Page,
-} from "playwright";
+import type { Browser, BrowserContext, BrowserServer, Page } from "playwright";
 import { loadPlaywright } from "./playwright-loader.js";
 import {
   RENDER_MSG,
@@ -71,16 +66,12 @@ function utf8ToBytes(text: string): Uint8Array {
  * `idleTimeoutMs` with no in-flight work the browser is closed and the next
  * render re-launches it.
  */
-export function createRenderWorker(
-  options: RenderWorkerOptions,
-): RenderWorkerHandle {
+export function createRenderWorker(options: RenderWorkerOptions): RenderWorkerHandle {
   const baseUrl = normalizeBaseUrl(options.baseUrl);
   const concurrency = Math.max(1, options.concurrency ?? DEFAULT_CONCURRENCY);
   const renderTimeoutMs = options.renderTimeoutMs ?? DEFAULT_RENDER_TIMEOUT_MS;
   const idleTimeoutMs =
-    options.idleTimeoutMs === undefined
-      ? DEFAULT_IDLE_TIMEOUT_MS
-      : options.idleTimeoutMs;
+    options.idleTimeoutMs === undefined ? DEFAULT_IDLE_TIMEOUT_MS : options.idleTimeoutMs;
   const launchArgs = options.launchArgs ?? [];
 
   let browser: Browser | null = null;
@@ -114,11 +105,7 @@ export function createRenderWorker(
         void tearDownBrowser();
       }
     }, idleTimeoutMs);
-    if (
-      typeof idleTimer === "object" &&
-      idleTimer !== null &&
-      "unref" in idleTimer
-    ) {
+    if (typeof idleTimer === "object" && idleTimer !== null && "unref" in idleTimer) {
       idleTimer.unref();
     }
   }
@@ -314,10 +301,7 @@ export function createRenderWorker(
         } catch {
           // ignore
         }
-        throw asRenderError(
-          err,
-          "RENDER_FAILED",
-        );
+        throw asRenderError(err, "RENDER_FAILED");
       }
       return page;
     } catch (err) {
@@ -331,10 +315,7 @@ export function createRenderWorker(
         if (page) resolve(page);
         else {
           reject(
-            new RenderError(
-              "BROWSER_CLOSED",
-              "browser closed while waiting for a render page",
-            ),
+            new RenderError("BROWSER_CLOSED", "browser closed while waiting for a render page"),
           );
         }
       };
@@ -357,11 +338,7 @@ export function createRenderWorker(
       void page.close().catch(() => undefined);
       // Only spawn a replacement while the browser is still healthy and
       // someone is waiting — never after a kill (avoids unhandled rejections).
-      if (
-        pageWaiters.length > 0 &&
-        browser?.isConnected() &&
-        pageCount < concurrency
-      ) {
+      if (pageWaiters.length > 0 && browser?.isConnected() && pageCount < concurrency) {
         const waiter = pageWaiters.shift()!;
         void createReadyPage().then(
           (p) => waiter(p),
@@ -394,25 +371,15 @@ export function createRenderWorker(
     const resultPromise = page.evaluate(
       async ({ payload, responseType: expectedType }) => {
         const w = globalThis as unknown as {
-          addEventListener: (
-            type: string,
-            listener: (event: { data: unknown }) => void,
-          ) => void;
-          removeEventListener: (
-            type: string,
-            listener: (event: { data: unknown }) => void,
-          ) => void;
+          addEventListener: (type: string, listener: (event: { data: unknown }) => void) => void;
+          removeEventListener: (type: string, listener: (event: { data: unknown }) => void) => void;
           postMessage: (message: unknown, targetOrigin: string) => void;
           __excalidrawCollabRenderResults?: Array<{ id: string; type: string }>;
         };
         const response = await new Promise<TRes>((resolve, reject) => {
           const onMessage = (event: { data: unknown }) => {
             const data = event.data as TRes | undefined;
-            if (
-              !data ||
-              data.type !== expectedType ||
-              data.id !== (payload as { id: string }).id
-            ) {
+            if (!data || data.type !== expectedType || data.id !== (payload as { id: string }).id) {
               return;
             }
             w.removeEventListener("message", onMessage);
@@ -428,9 +395,7 @@ export function createRenderWorker(
             const queue = w.__excalidrawCollabRenderResults;
             if (Array.isArray(queue)) {
               const idx = queue.findIndex(
-                (r) =>
-                  r.id === (payload as { id: string }).id &&
-                  r.type === expectedType,
+                (r) => r.id === (payload as { id: string }).id && r.type === expectedType,
               );
               if (idx >= 0) {
                 const [item] = queue.splice(idx, 1);
@@ -456,31 +421,20 @@ export function createRenderWorker(
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<never>((_resolve, reject) => {
       timeoutId = setTimeout(() => {
-        reject(
-          new RenderError(
-            "TIMEOUT",
-            `render timed out after ${renderTimeoutMs}ms`,
-          ),
-        );
+        reject(new RenderError("TIMEOUT", `render timed out after ${renderTimeoutMs}ms`));
       }, renderTimeoutMs);
     });
 
     let onPageClose: (() => void) | undefined;
     const closedPromise = new Promise<never>((_resolve, reject) => {
       onPageClose = () => {
-        reject(
-          new RenderError("BROWSER_CLOSED", "browser closed during render"),
-        );
+        reject(new RenderError("BROWSER_CLOSED", "browser closed during render"));
       };
       page.once("close", onPageClose);
     });
 
     try {
-      return await Promise.race([
-        resultPromise,
-        timeoutPromise,
-        closedPromise,
-      ]);
+      return await Promise.race([resultPromise, timeoutPromise, closedPromise]);
     } finally {
       if (timeoutId !== undefined) clearTimeout(timeoutId);
       if (onPageClose) page.off("close", onPageClose);
@@ -490,10 +444,7 @@ export function createRenderWorker(
     }
   }
 
-  async function runRenderOnPage(
-    page: Page,
-    request: RenderRequest,
-  ): Promise<RenderResult> {
+  async function runRenderOnPage(page: Page, request: RenderRequest): Promise<RenderResult> {
     const id = `r-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     const payload: PageExportRequest = {
       type: RENDER_MSG.REQUEST,
@@ -514,16 +465,10 @@ export function createRenderWorker(
       RENDER_MSG.RESPONSE,
     );
     if (!response.ok) {
-      throw new RenderError(
-        "RENDER_FAILED",
-        response.error || "render failed in page",
-      );
+      throw new RenderError("RENDER_FAILED", response.error || "render failed in page");
     }
     if (!("data" in response) || typeof response.data !== "string") {
-      throw new RenderError(
-        "RENDER_FAILED",
-        "export response missing data payload",
-      );
+      throw new RenderError("RENDER_FAILED", "export response missing data payload");
     }
     if (request.format === "png") {
       return {
@@ -551,26 +496,20 @@ export function createRenderWorker(
       regenerateIds: request.regenerateIds === true,
     };
 
-    const response = await postToPage<
-      PageSkeletonRequest,
-      PageSkeletonResponse
-    >(page, payload, RENDER_MSG.SKELETON_RESPONSE);
+    const response = await postToPage<PageSkeletonRequest, PageSkeletonResponse>(
+      page,
+      payload,
+      RENDER_MSG.SKELETON_RESPONSE,
+    );
     if (!response.ok) {
-      const detail =
-        response.reason || response.error || "skeleton conversion failed";
-      const prefix =
-        response.index !== undefined
-          ? `skeleton[${response.index}]: `
-          : "";
+      const detail = response.reason || response.error || "skeleton conversion failed";
+      const prefix = response.index !== undefined ? `skeleton[${response.index}]: ` : "";
       throw new RenderError("RENDER_FAILED", `${prefix}${detail}`);
     }
     return { elements: response.elements };
   }
 
-  async function runMergeOnPage(
-    page: Page,
-    request: MergeRequest,
-  ): Promise<MergeResult> {
+  async function runMergeOnPage(page: Page, request: MergeRequest): Promise<MergeResult> {
     const id = `m-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     const payload: PageMergeRequest = {
       type: RENDER_MSG.REQUEST,
@@ -587,16 +526,10 @@ export function createRenderWorker(
       RENDER_MSG.RESPONSE,
     );
     if (!response.ok) {
-      throw new RenderError(
-        "RENDER_FAILED",
-        response.error || "merge failed in page",
-      );
+      throw new RenderError("RENDER_FAILED", response.error || "merge failed in page");
     }
     if (!("elements" in response) || !Array.isArray(response.elements)) {
-      throw new RenderError(
-        "RENDER_FAILED",
-        "merge response missing elements array",
-      );
+      throw new RenderError("RENDER_FAILED", "merge response missing elements array");
     }
     return { elements: response.elements };
   }
@@ -636,38 +569,24 @@ export function createRenderWorker(
       );
     }
     if (!request.scene || !Array.isArray(request.scene.elements)) {
-      throw new RenderError(
-        "INVALID_REQUEST",
-        "scene.elements must be an array",
-      );
+      throw new RenderError("INVALID_REQUEST", "scene.elements must be an array");
     }
     return withPage((page) => runRenderOnPage(page, request));
   }
 
-  async function convertSkeleton(
-    request: SkeletonConvertRequest,
-  ): Promise<SkeletonConvertResult> {
+  async function convertSkeleton(request: SkeletonConvertRequest): Promise<SkeletonConvertResult> {
     if (!request || !Array.isArray(request.elements)) {
-      throw new RenderError(
-        "INVALID_REQUEST",
-        "elements must be an array",
-      );
+      throw new RenderError("INVALID_REQUEST", "elements must be an array");
     }
     return withPage((page) => runSkeletonOnPage(page, request));
   }
 
   async function merge(request: MergeRequest): Promise<MergeResult> {
     if (!request.local || !Array.isArray(request.local.elements)) {
-      throw new RenderError(
-        "INVALID_REQUEST",
-        "merge local.elements must be an array",
-      );
+      throw new RenderError("INVALID_REQUEST", "merge local.elements must be an array");
     }
     if (!request.remote || !Array.isArray(request.remote.elements)) {
-      throw new RenderError(
-        "INVALID_REQUEST",
-        "merge remote.elements must be an array",
-      );
+      throw new RenderError("INVALID_REQUEST", "merge remote.elements must be an array");
     }
     return withPage((page) => runMergeOnPage(page, request));
   }

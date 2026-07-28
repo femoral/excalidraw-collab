@@ -34,10 +34,7 @@ export function splitFiles(doc: SceneDocument): {
  *
  * Element objects and appState are left untouched (same references).
  */
-export function mergeFiles(
-  doc: SceneDocument,
-  files: BinaryFiles,
-): SceneDocument {
+export function mergeFiles(doc: SceneDocument, files: BinaryFiles): SceneDocument {
   return {
     elements: doc.elements,
     appState: doc.appState,

@@ -8,17 +8,8 @@
  * column, never inferred from the name.
  */
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import type {
-  FastifyInstance,
-  FastifyReply,
-  FastifyRequest,
-  preHandlerHookHandler,
-} from "fastify";
-import {
-  hashToken,
-  META_BOOTSTRAP_COMPLETED,
-  type Database,
-} from "./db.js";
+import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
+import { hashToken, META_BOOTSTRAP_COMPLETED, type Database } from "./db.js";
 import { AppError, ErrorCode } from "./errors.js";
 
 /** Default name for the bootstrap admin token (not load-bearing for privilege). */
@@ -141,11 +132,7 @@ export async function requireAdminPreHandler(
     throw unauthorized("authentication required");
   }
   if (!identity.isAdmin) {
-    throw new AppError(
-      ErrorCode.FORBIDDEN,
-      "admin token required",
-      403,
-    );
+    throw new AppError(ErrorCode.FORBIDDEN, "admin token required", 403);
   }
 }
 
@@ -161,10 +148,7 @@ export async function requireAdminPreHandler(
  *
  * Returns true when a new admin row was inserted.
  */
-export function seedBootstrapToken(
-  db: Database,
-  bootstrapToken: string,
-): boolean {
+export function seedBootstrapToken(db: Database, bootstrapToken: string): boolean {
   if (!bootstrapToken) return false;
   if (db.getMeta(META_BOOTSTRAP_COMPLETED) === "1") return false;
 
@@ -187,10 +171,7 @@ export type WhoamiInfo = {
  * Register `GET /api/whoami` — any valid bearer token may read its own identity
  * (the name that appears as author in history). Not admin-gated.
  */
-export async function registerWhoamiRoute(
-  app: FastifyInstance,
-  db: Database,
-): Promise<void> {
+export async function registerWhoamiRoute(app: FastifyInstance, db: Database): Promise<void> {
   const authPreHandler = createAuthPreHandler(db);
 
   await app.register(

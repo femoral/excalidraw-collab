@@ -21,17 +21,9 @@ import type { Database } from "./db.js";
 import { DiffCache, diffCacheKey } from "./diff-cache.js";
 import { AppError, ErrorCode } from "./errors.js";
 import type { FileStore } from "./files.js";
-import {
-  emptySceneDocument,
-  resolveVersionRef,
-  versionToDocument,
-} from "./versions.js";
+import { emptySceneDocument, resolveVersionRef, versionToDocument } from "./versions.js";
 
-export {
-  DEFAULT_DIFF_CACHE_MAX,
-  DiffCache,
-  diffCacheKey,
-} from "./diff-cache.js";
+export { DEFAULT_DIFF_CACHE_MAX, DiffCache, diffCacheKey } from "./diff-cache.js";
 
 /**
  * Computes scene diffs with a bounded cache. Shared by the GET /diff route
@@ -58,17 +50,9 @@ export class SceneDiffService {
    * Version 0 is the empty base (no row). Versions outside 0..head or
    * missing rows throw NOT_FOUND.
    */
-  loadDocumentAtVersion(
-    sceneId: string,
-    version: number,
-    head: number,
-  ): SceneDocument {
+  loadDocumentAtVersion(sceneId: string, version: number, head: number): SceneDocument {
     if (!Number.isInteger(version) || version < 0) {
-      throw new AppError(
-        ErrorCode.NOT_FOUND,
-        `version not found: ${version}`,
-        404,
-      );
+      throw new AppError(ErrorCode.NOT_FOUND, `version not found: ${version}`, 404);
     }
     if (version === 0) {
       return emptySceneDocument();
@@ -82,11 +66,7 @@ export class SceneDiffService {
     }
     const row = this.db.getVersion(sceneId, version);
     if (!row) {
-      throw new AppError(
-        ErrorCode.NOT_FOUND,
-        `version not found: ${version}`,
-        404,
-      );
+      throw new AppError(ErrorCode.NOT_FOUND, `version not found: ${version}`, 404);
     }
     // Files are not part of SceneDiff; still rehydrate for a complete
     // SceneDocument shape (diffScenes only reads elements + appState).
@@ -98,12 +78,7 @@ export class SceneDiffService {
    * `(sceneId, from, to)`. Self-diffs short-circuit to an empty result
    * without loading blobs (still cached).
    */
-  diffVersions(
-    sceneId: string,
-    from: number,
-    to: number,
-    head: number,
-  ): SceneDiff {
+  diffVersions(sceneId: string, from: number, to: number, head: number): SceneDiff {
     const key = diffCacheKey(sceneId, from, to);
     const hit = this.cache.get(key);
     if (hit !== undefined) {
@@ -142,11 +117,7 @@ export class SceneDiffService {
    * agent still gets a useful "what is on head" explanation rather than a
    * secondary error.
    */
-  conflictDiff(
-    sceneId: string,
-    parentVersion: number,
-    head: number,
-  ): SceneDiff {
+  conflictDiff(sceneId: string, parentVersion: number, head: number): SceneDiff {
     const key = diffCacheKey(sceneId, parentVersion, head);
     const hit = this.cache.get(key);
     if (hit !== undefined) {
@@ -158,9 +129,7 @@ export class SceneDiffService {
       fromDoc = emptySceneDocument();
     } else {
       const row = this.db.getVersion(sceneId, parentVersion);
-      fromDoc = row
-        ? versionToDocument(this.store, row)
-        : emptySceneDocument();
+      fromDoc = row ? versionToDocument(this.store, row) : emptySceneDocument();
     }
 
     let toDoc: SceneDocument;
@@ -190,11 +159,7 @@ export class SceneDiffService {
 function parseFormat(raw: unknown): "json" | "text" {
   if (raw === undefined || raw === null || raw === "") return "json";
   if (typeof raw !== "string") {
-    throw new AppError(
-      ErrorCode.VALIDATION,
-      `invalid format: expected "json" or "text"`,
-      400,
-    );
+    throw new AppError(ErrorCode.VALIDATION, `invalid format: expected "json" or "text"`, 400);
   }
   const v = raw.trim().toLowerCase();
   if (v === "json") return "json";
@@ -206,16 +171,9 @@ function parseFormat(raw: unknown): "json" | "text" {
   );
 }
 
-function requireRef(
-  name: "from" | "to",
-  raw: string | undefined,
-): string {
+function requireRef(name: "from" | "to", raw: string | undefined): string {
   if (raw === undefined || raw === "") {
-    throw new AppError(
-      ErrorCode.VALIDATION,
-      `query parameter "${name}" is required`,
-      400,
-    );
+    throw new AppError(ErrorCode.VALIDATION, `query parameter "${name}" is required`, 400);
   }
   return raw;
 }
@@ -253,11 +211,7 @@ export async function registerDiffRoutes(
         const { slug } = request.params;
         const scene = db.getSceneBySlug(slug);
         if (!scene) {
-          throw new AppError(
-            ErrorCode.NOT_FOUND,
-            `scene not found: ${slug}`,
-            404,
-          );
+          throw new AppError(ErrorCode.NOT_FOUND, `scene not found: ${slug}`, 404);
         }
 
         const fromRaw = requireRef("from", request.query.from);
@@ -300,27 +254,17 @@ export async function registerDiffRoutes(
           );
         }
         if (from >= 1 && !db.getVersion(scene.id, from)) {
-          throw new AppError(
-            ErrorCode.NOT_FOUND,
-            `version not found: ${from}`,
-            404,
-          );
+          throw new AppError(ErrorCode.NOT_FOUND, `version not found: ${from}`, 404);
         }
         if (to >= 1 && !db.getVersion(scene.id, to)) {
-          throw new AppError(
-            ErrorCode.NOT_FOUND,
-            `version not found: ${to}`,
-            404,
-          );
+          throw new AppError(ErrorCode.NOT_FOUND, `version not found: ${to}`, 404);
         }
 
         const diff = diffs.diffVersions(scene.id, from, to, head);
 
         if (format === "text") {
           const text = formatDiff(diff);
-          return reply
-            .type("text/plain; charset=utf-8")
-            .send(text);
+          return reply.type("text/plain; charset=utf-8").send(text);
         }
 
         return diff;

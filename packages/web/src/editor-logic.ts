@@ -30,9 +30,7 @@ export type HeadMeta = {
   updatedAt: string;
 };
 
-export type InitialSource =
-  | { source: "head" }
-  | { source: "draft"; stale: boolean };
+export type InitialSource = { source: "head" } | { source: "draft"; stale: boolean };
 
 /**
  * Choose initial editor data: draft when it is the newer working copy,
@@ -45,18 +43,13 @@ export type InitialSource =
  * Stale drafts (basedOnVersion < head) are still preferred so human work is
  * never discarded on reload; the `stale` flag is for UI warning only.
  */
-export function selectInitialSource(
-  draft: DraftMeta | null,
-  head: HeadMeta,
-): InitialSource {
+export function selectInitialSource(draft: DraftMeta | null, head: HeadMeta): InitialSource {
   if (draft === null) {
     return { source: "head" };
   }
 
   const stale =
-    draft.stale ||
-    draft.basedOnVersion < head.headVersion ||
-    draft.headVersion < head.headVersion;
+    draft.stale || draft.basedOnVersion < head.headVersion || draft.headVersion < head.headVersion;
 
   // Prefer draft whenever it exists — it is the autosaved working copy.
   // (Even a stale draft is the user's uncommitted strokes.)
@@ -70,10 +63,7 @@ export function selectInitialSource(
  * we want to fall back to head if the draft is both stale and older by clock.
  * Primary path ({@link selectInitialSource}) always keeps the draft.
  */
-export function isDraftNewerThanHead(
-  draft: DraftMeta,
-  head: HeadMeta,
-): boolean {
+export function isDraftNewerThanHead(draft: DraftMeta, head: HeadMeta): boolean {
   if (draft.basedOnVersion >= head.headVersion) return true;
   if (draft.updatedAt >= head.updatedAt) return true;
   return false;
@@ -83,12 +73,7 @@ export function isDraftNewerThanHead(
 // Save / dirty status
 // ---------------------------------------------------------------------------
 
-export type SaveIndicator =
-  | "idle"
-  | "dirty"
-  | "saving"
-  | "saved"
-  | "error";
+export type SaveIndicator = "idle" | "dirty" | "saving" | "saved" | "error";
 
 /**
  * Whether navigating away / closing the tab should prompt.
@@ -154,10 +139,7 @@ export function initialCoalescerState<T>(): CoalescerSnapshot<T> {
 }
 
 /** Record a new edit. Always keeps only the latest value. */
-export function coalescerSchedule<T>(
-  state: CoalescerSnapshot<T>,
-  value: T,
-): CoalescerSnapshot<T> {
+export function coalescerSchedule<T>(state: CoalescerSnapshot<T>, value: T): CoalescerSnapshot<T> {
   if (state.inflight) {
     return { ...state, pending: value, retrigger: true };
   }
@@ -168,9 +150,10 @@ export function coalescerSchedule<T>(
  * After the debounce timer fires: start a save if we are not already in
  * flight and have a pending value. Returns the value to save, or null.
  */
-export function coalescerBeginFlush<T>(
-  state: CoalescerSnapshot<T>,
-): { state: CoalescerSnapshot<T>; value: T | null } {
+export function coalescerBeginFlush<T>(state: CoalescerSnapshot<T>): {
+  state: CoalescerSnapshot<T>;
+  value: T | null;
+} {
   if (state.inflight || state.pending === null) {
     return { state, value: null };
   }
@@ -320,9 +303,7 @@ export type EditorSnapshot = {
 };
 
 /** Collect non-empty file ids present in the editor files map. */
-export function collectFileIds(
-  files: Record<string, BinaryFilePayload | undefined>,
-): string[] {
+export function collectFileIds(files: Record<string, BinaryFilePayload | undefined>): string[] {
   const ids: string[] = [];
   for (const [id, entry] of Object.entries(files)) {
     if (entry && typeof entry.dataURL === "string" && entry.dataURL.length > 0) {
@@ -472,18 +453,14 @@ export function validateCommitMessage(
 // File upload error surfacing (nanoid / non-secure context)
 // ---------------------------------------------------------------------------
 
-export const FILE_ID_REASON_NON_SECURE_NANOID =
-  "non_secure_context_nanoid" as const;
+export const FILE_ID_REASON_NON_SECURE_NANOID = "non_secure_context_nanoid" as const;
 export const FILE_ID_REASON_HASH_MISMATCH = "content_hash_mismatch" as const;
 
 /**
  * Turn a failed /api/files upload into a legible user-facing string.
  * Never swallow the non-secure-context case — it is the #1 footgun on LAN HTTP.
  */
-export function formatFileUploadError(err: {
-  message?: string;
-  details?: unknown;
-}): string {
+export function formatFileUploadError(err: { message?: string; details?: unknown }): string {
   const details =
     err.details && typeof err.details === "object"
       ? (err.details as Record<string, unknown>)
@@ -515,9 +492,7 @@ export function formatFileUploadError(err: {
     );
   }
 
-  return err.message && err.message.length > 0
-    ? err.message
-    : "Image upload failed.";
+  return err.message && err.message.length > 0 ? err.message : "Image upload failed.";
 }
 
 /**
@@ -582,10 +557,7 @@ export type EditorLock = {
  * Whether the advisory lock should show as held. Expired locks are inactive
  * so a crashed agent never wedges the editor badge.
  */
-export function isEditorLockActive(
-  lock: EditorLock,
-  nowMs: number = Date.now(),
-): boolean {
+export function isEditorLockActive(lock: EditorLock, nowMs: number = Date.now()): boolean {
   if (lock === null) return false;
   if (!lock.expiresAt) return true;
   const expires = Date.parse(lock.expiresAt);
@@ -618,10 +590,7 @@ export function turnMenuLabel(
 }
 
 /** True when the menu action should claim rather than release. */
-export function turnMenuShouldClaim(
-  lock: EditorLock,
-  nowMs: number = Date.now(),
-): boolean {
+export function turnMenuShouldClaim(lock: EditorLock, nowMs: number = Date.now()): boolean {
   return !isEditorLockActive(lock, nowMs);
 }
 
@@ -647,10 +616,7 @@ export type RemoteUpdateToast = {
 
 /** Banner copy when someone else pushed while the editor is open. */
 export function formatRemoteUpdateToast(event: RemoteUpdateToast): string {
-  const msg =
-    event.message && event.message.length > 0
-      ? event.message
-      : "(no message)";
+  const msg = event.message && event.message.length > 0 ? event.message : "(no message)";
   return `${event.author} pushed v${event.version}: “${msg}”`;
 }
 

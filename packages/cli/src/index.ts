@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * excalicli — CLI shell for excalidraw-collab (agent-first).
+ * excali — CLI shell for excalidraw-collab (agent-first).
  *
  * Later issues plug commands into the registry in commands.ts.
  * This package owns: dispatch, config, --json rendering, exit codes, apiFetch.
@@ -21,26 +21,11 @@ export {
   toErrorEnvelope,
 } from "./errors.js";
 export type { ServerErrorCode, ErrorEnvelope, ExitCodeValue } from "./errors.js";
-export {
-  apiFetch,
-  apiFetchResult,
-  apiFetchText,
-  apiFetchBinary,
-} from "./api.js";
-export type {
-  ApiFetchOptions,
-  ApiFetchResult,
-  ApiBinaryResult,
-  ServerErrorBody,
-} from "./api.js";
+export { apiFetch, apiFetchResult, apiFetchText, apiFetchBinary } from "./api.js";
+export type { ApiFetchOptions, ApiFetchResult, ApiBinaryResult, ServerErrorBody } from "./api.js";
 export { formatTable, formatHuman, formatJson } from "./format.js";
 export type { CommandResult } from "./format.js";
-export {
-  registerCommand,
-  getCommand,
-  listCommands,
-  CLI_VERSION,
-} from "./commands.js";
+export { registerCommand, getCommand, listCommands, CLI_VERSION } from "./commands.js";
 export type { Command, CommandContext, IoStreams } from "./commands.js";
 export {
   getPulledVersion,
@@ -52,11 +37,7 @@ export {
   emptyLocalState,
 } from "./state.js";
 export type { LocalState, SceneState, ServerState } from "./state.js";
-export {
-  formatConflictDiff,
-  formatConflictMessage,
-  resolutionCommands,
-} from "./conflict.js";
+export { formatConflictDiff, formatConflictMessage, resolutionCommands } from "./conflict.js";
 export type { ConflictDetails, ConflictDiff } from "./conflict.js";
 export type { SceneEventResponse, WatchEvent } from "./watch.js";
 export {
@@ -70,7 +51,7 @@ const isMain =
   process.argv[1] !== undefined &&
   (process.argv[1].endsWith(`${"/"}index.js`) ||
     process.argv[1].endsWith(`${"\\"}index.js`) ||
-    process.argv[1].endsWith("excalicli"));
+    process.argv[1].endsWith("excali"));
 
 if (isMain) {
   const code = await run({ argv: process.argv.slice(2) });

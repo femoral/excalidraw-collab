@@ -23,9 +23,7 @@ import type {
 // ---------------------------------------------------------------------------
 
 /** Newest-first ordering (server default). Stable for equal versions. */
-export function orderVersionsNewestFirst(
-  versions: readonly VersionInfo[],
-): VersionInfo[] {
+export function orderVersionsNewestFirst(versions: readonly VersionInfo[]): VersionInfo[] {
   return [...versions].sort((a, b) => {
     if (b.version !== a.version) return b.version - a.version;
     return 0;
@@ -50,9 +48,7 @@ export function formatChangeCounts(summary: DiffSummary): string {
 }
 
 export function totalChangeCount(summary: DiffSummary): number {
-  return (
-    summary.added + summary.deleted + summary.updated + summary.reordered
-  );
+  return summary.added + summary.deleted + summary.updated + summary.reordered;
 }
 
 export function emptyDiffSummary(): DiffSummary {
@@ -112,10 +108,7 @@ export function formatVersionTimestamp(
  * - Fewer than 2 → append.
  * - Already 2 → drop the oldest selection and append (FIFO).
  */
-export function toggleVersionSelection(
-  selected: readonly number[],
-  version: number,
-): number[] {
+export function toggleVersionSelection(selected: readonly number[], version: number): number[] {
   if (selected.includes(version)) {
     return selected.filter((v) => v !== version);
   }
@@ -129,9 +122,7 @@ export function toggleVersionSelection(
  * Resolve two selected versions into a directed older→newer diff range.
  * Returns null until exactly two distinct versions are selected.
  */
-export function resolveDiffRange(
-  selected: readonly number[],
-): { from: number; to: number } | null {
+export function resolveDiffRange(selected: readonly number[]): { from: number; to: number } | null {
   if (selected.length !== 2) return null;
   const a = selected[0]!;
   const b = selected[1]!;
@@ -140,10 +131,7 @@ export function resolveDiffRange(
 }
 
 /** True when a version number is one of the (up to) two selected. */
-export function isVersionSelected(
-  selected: readonly number[],
-  version: number,
-): boolean {
+export function isVersionSelected(selected: readonly number[], version: number): boolean {
   return selected.includes(version);
 }
 
@@ -206,14 +194,7 @@ export type DiffPriority =
   | "other";
 
 export type DiffSectionKey =
-  | "added"
-  | "deleted"
-  | "content"
-  | "geometry"
-  | "style"
-  | "other"
-  | "reordered"
-  | "appState";
+  "added" | "deleted" | "content" | "geometry" | "style" | "other" | "reordered" | "appState";
 
 export type DiffListItem = {
   kind: "element";
@@ -291,9 +272,7 @@ function hasAny(keys: ReadonlySet<string>, group: ReadonlySet<string>): boolean 
  * Classify an update by the props that changed. Content beats geometry
  * beats style so a text edit that also nudged position still ranks high.
  */
-export function classifyUpdatePriority(
-  props: readonly DiffPropDelta[],
-): DiffPriority {
+export function classifyUpdatePriority(props: readonly DiffPropDelta[]): DiffPriority {
   const keys = new Set(props.map((p) => p.key));
   if (
     hasAny(keys, TEXT_PROPS) ||
@@ -359,10 +338,7 @@ export function elementDetail(change: DiffElementChange): string {
   return "";
 }
 
-function sectionFor(
-  change: DiffElementChange,
-  priority: DiffPriority,
-): DiffSectionKey {
+function sectionFor(change: DiffElementChange, priority: DiffPriority): DiffSectionKey {
   if (change.op === "add") return "added";
   if (change.op === "delete") return "deleted";
   if (change.op === "reorder") return "reordered";
@@ -487,11 +463,8 @@ export function prioritizeDiff(diff: SceneDiffResponse): PrioritizedDiffView {
     return pa - pb;
   });
 
-  const totalItems =
-    diff.elements.length + (diff.appState?.length ?? 0);
-  const isEmpty =
-    totalChangeCount(diff.summary) === 0 &&
-    (diff.appState?.length ?? 0) === 0;
+  const totalItems = diff.elements.length + (diff.appState?.length ?? 0);
+  const isEmpty = totalChangeCount(diff.summary) === 0 && (diff.appState?.length ?? 0) === 0;
 
   return {
     summary: diff.summary,
@@ -523,9 +496,11 @@ function stringifyBrief(value: unknown): string {
 /**
  * Op badge character / short label for list rows.
  */
-export function opBadge(
-  op: DiffElementChange["op"] | "appState",
-): { symbol: string; className: string; label: string } {
+export function opBadge(op: DiffElementChange["op"] | "appState"): {
+  symbol: string;
+  className: string;
+  label: string;
+} {
   switch (op) {
     case "add":
       return { symbol: "+", className: "diff-op-add", label: "added" };
@@ -574,8 +549,7 @@ export function buildRestorePayload(
     }
   }
 
-  const message =
-    messageOverride?.trim() || defaultRestoreMessage(restoredVersion);
+  const message = messageOverride?.trim() || defaultRestoreMessage(restoredVersion);
 
   return {
     parentVersion: headVersion,
@@ -642,10 +616,7 @@ export function historyPath(slug: string): string {
  * Whether the editor should be locked (view mode). True when a past version
  * is open and it is not the current head (head is editable).
  */
-export function isReadOnlyVersion(
-  viewingVersion: number | null,
-  headVersion: number,
-): boolean {
+export function isReadOnlyVersion(viewingVersion: number | null, headVersion: number): boolean {
   if (viewingVersion == null) return false;
   if (headVersion <= 0) return false;
   return viewingVersion !== headVersion;
@@ -687,10 +658,7 @@ export function appendRemoteVersion(
 } {
   const existing = versions.find((v) => v.version === incoming.version);
   if (existing) {
-    const headVersion = versions.reduce(
-      (max, v) => Math.max(max, v.version),
-      incoming.version,
-    );
+    const headVersion = versions.reduce((max, v) => Math.max(max, v.version), incoming.version);
     return {
       versions: [...versions],
       headVersion,

@@ -25,8 +25,7 @@ if (!fs.existsSync(distEntry)) {
   process.exit(1);
 }
 
-const { generateCliReference, CLI_REF_RELATIVE_PATH, cliRefPath } =
-  await import(distEntry);
+const { generateCliReference, CLI_REF_RELATIVE_PATH, cliRefPath } = await import(distEntry);
 
 const outPath = cliRefPath(repoRoot);
 const body = generateCliReference();

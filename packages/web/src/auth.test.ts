@@ -44,30 +44,18 @@ test("write/clear round-trip", () => {
 });
 
 test("hydrate with token → checking; without → anonymous", () => {
-  const withToken = reduceAuth(
-    { status: "anonymous" },
-    { type: "hydrate", token: "t1" },
-  );
+  const withToken = reduceAuth({ status: "anonymous" }, { type: "hydrate", token: "t1" });
   assert.deepEqual(withToken, { status: "checking", token: "t1" });
 
-  const without = reduceAuth(
-    { status: "checking", token: "x" },
-    { type: "hydrate", token: null },
-  );
+  const without = reduceAuth({ status: "checking", token: "x" }, { type: "hydrate", token: null });
   assert.deepEqual(without, { status: "anonymous" });
 });
 
 test("login moves to checking with trimmed token", () => {
-  const next = reduceAuth(
-    { status: "anonymous" },
-    { type: "login", token: "  tok  " },
-  );
+  const next = reduceAuth({ status: "anonymous" }, { type: "login", token: "  tok  " });
   assert.deepEqual(next, { status: "checking", token: "tok" });
 
-  const empty = reduceAuth(
-    { status: "anonymous" },
-    { type: "login", token: "  " },
-  );
+  const empty = reduceAuth({ status: "anonymous" }, { type: "login", token: "  " });
   assert.deepEqual(empty, { status: "anonymous" });
 });
 
@@ -78,10 +66,9 @@ test("session_verified promotes checking → authenticated", () => {
     token: "t",
   });
   // anonymous stays anonymous (no token to promote)
-  assert.deepEqual(
-    reduceAuth({ status: "anonymous" }, { type: "session_verified" }),
-    { status: "anonymous" },
-  );
+  assert.deepEqual(reduceAuth({ status: "anonymous" }, { type: "session_verified" }), {
+    status: "anonymous",
+  });
 });
 
 test("unauthorized and logout always return anonymous", () => {

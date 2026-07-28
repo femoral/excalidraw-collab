@@ -1,9 +1,4 @@
-import {
-  useId,
-  useState,
-  type FormEvent,
-  type ReactElement,
-} from "react";
+import { useId, useState, type FormEvent, type ReactElement } from "react";
 import { normalizeTokenInput } from "./auth.ts";
 import type { Theme } from "./theme-logic.ts";
 
@@ -54,9 +49,7 @@ export function LoginScreen({
           type="button"
           className="btn btn-ghost btn-sm login-theme-toggle theme-toggle"
           onClick={onToggleTheme}
-          aria-label={
-            nextTheme === "dark" ? "Switch to dark theme" : "Switch to light theme"
-          }
+          aria-label={nextTheme === "dark" ? "Switch to dark theme" : "Switch to light theme"}
           title={nextTheme === "dark" ? "Dark theme" : "Light theme"}
         >
           {theme === "dark" ? "☀" : "☾"}
@@ -69,9 +62,7 @@ export function LoginScreen({
           </span>
           <div>
             <h1 className="login-title">excalidraw-collab</h1>
-            <p className="login-subtitle">
-              Self-hosted boards with turn-based collaboration.
-            </p>
+            <p className="login-subtitle">Self-hosted boards with turn-based collaboration.</p>
           </div>
         </div>
 
@@ -103,17 +94,12 @@ export function LoginScreen({
             </p>
           ) : (
             <p className="form-hint">
-              Tokens are minted by an admin (
-              <code>excalicli token create</code>
+              Tokens are minted by an admin (<code>excali token create</code>
               ). Stored only in this browser.
             </p>
           )}
 
-          <button
-            type="submit"
-            className="btn btn-primary btn-block"
-            disabled={busy}
-          >
+          <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
             {busy ? "Signing in…" : "Sign in"}
           </button>
         </form>

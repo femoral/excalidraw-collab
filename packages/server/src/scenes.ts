@@ -132,8 +132,7 @@ export function allocateSlug(db: Database, base: string): string {
     const suffix = `-${n}`;
     const maxBase = SLUG_MAX_LENGTH - suffix.length;
     const candidate =
-      (clipped.slice(0, Math.max(1, maxBase)).replace(/-+$/g, "") || "scene") +
-      suffix;
+      (clipped.slice(0, Math.max(1, maxBase)).replace(/-+$/g, "") || "scene") + suffix;
     if (!db.slugExists(candidate)) return candidate;
     n += 1;
     if (n > 10_000) {
@@ -170,10 +169,7 @@ const renameSceneBodySchema = {
  * Register `/api/scenes` under a scoped plugin that enforces Bearer auth.
  * Any valid token may create, list, get, and soft-delete scenes.
  */
-export async function registerSceneRoutes(
-  app: FastifyInstance,
-  db: Database,
-): Promise<void> {
+export async function registerSceneRoutes(app: FastifyInstance, db: Database): Promise<void> {
   const authPreHandler = createAuthPreHandler(db);
 
   await app.register(
@@ -190,11 +186,7 @@ export async function registerSceneRoutes(
         async (request, reply) => {
           const name = request.body.name.trim();
           if (name.length === 0) {
-            throw new AppError(
-              ErrorCode.VALIDATION,
-              "name must not be empty",
-              400,
-            );
+            throw new AppError(ErrorCode.VALIDATION, "name must not be empty", 400);
           }
 
           let slug: string;
@@ -210,11 +202,7 @@ export async function registerSceneRoutes(
             // Explicit slug: do not auto-suffix; uniqueness is the DB's job
             // and a collision is a client error.
             if (db.slugExists(explicit)) {
-              throw new AppError(
-                ErrorCode.CONFLICT,
-                `slug already exists: ${explicit}`,
-                409,
-              );
+              throw new AppError(ErrorCode.CONFLICT, `slug already exists: ${explicit}`, 409);
             }
             slug = explicit;
           } else {
@@ -233,11 +221,7 @@ export async function registerSceneRoutes(
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             if (/UNIQUE constraint failed/i.test(message)) {
-              throw new AppError(
-                ErrorCode.CONFLICT,
-                `slug already exists: ${slug}`,
-                409,
-              );
+              throw new AppError(ErrorCode.CONFLICT, `slug already exists: ${slug}`, 409);
             }
             throw err;
           }
@@ -257,21 +241,14 @@ export async function registerSceneRoutes(
         return { scenes };
       });
 
-      api.get<{ Params: { slug: string } }>(
-        "/scenes/:slug",
-        async (request) => {
-          const { slug } = request.params;
-          const row = db.getSceneListRowBySlug(slug);
-          if (!row) {
-            throw new AppError(
-              ErrorCode.NOT_FOUND,
-              `scene not found: ${slug}`,
-              404,
-            );
-          }
-          return toSceneInfo(row);
-        },
-      );
+      api.get<{ Params: { slug: string } }>("/scenes/:slug", async (request) => {
+        const { slug } = request.params;
+        const row = db.getSceneListRowBySlug(slug);
+        if (!row) {
+          throw new AppError(ErrorCode.NOT_FOUND, `scene not found: ${slug}`, 404);
+        }
+        return toSceneInfo(row);
+      });
 
       /**
        * Rename a scene (display name only; slug is stable).
@@ -288,61 +265,38 @@ export async function registerSceneRoutes(
           const { slug } = request.params;
           const existing = db.getSceneListRowBySlug(slug);
           if (!existing) {
-            throw new AppError(
-              ErrorCode.NOT_FOUND,
-              `scene not found: ${slug}`,
-              404,
-            );
+            throw new AppError(ErrorCode.NOT_FOUND, `scene not found: ${slug}`, 404);
           }
 
           const name = request.body.name.trim();
           if (name.length === 0) {
-            throw new AppError(
-              ErrorCode.VALIDATION,
-              "name must not be empty",
-              400,
-            );
+            throw new AppError(ErrorCode.VALIDATION, "name must not be empty", 400);
           }
 
           const updated = db.updateSceneName(existing.id, name);
           if (!updated) {
-            throw new AppError(
-              ErrorCode.NOT_FOUND,
-              `scene not found: ${slug}`,
-              404,
-            );
+            throw new AppError(ErrorCode.NOT_FOUND, `scene not found: ${slug}`, 404);
           }
 
           // Re-read list row so head_author / element_count stay accurate.
           const listRow = db.getSceneListRowBySlug(slug);
           if (!listRow) {
-            throw new AppError(
-              ErrorCode.NOT_FOUND,
-              `scene not found: ${slug}`,
-              404,
-            );
+            throw new AppError(ErrorCode.NOT_FOUND, `scene not found: ${slug}`, 404);
           }
           return toSceneInfo(listRow);
         },
       );
 
-      api.delete<{ Params: { slug: string } }>(
-        "/scenes/:slug",
-        async (request, reply) => {
-          const { slug } = request.params;
-          // Resolve live scene only; soft-deleted already look like 404.
-          const row = db.getSceneBySlug(slug);
-          if (!row) {
-            throw new AppError(
-              ErrorCode.NOT_FOUND,
-              `scene not found: ${slug}`,
-              404,
-            );
-          }
-          db.softDeleteScene(row.id);
-          return reply.status(204).send();
-        },
-      );
+      api.delete<{ Params: { slug: string } }>("/scenes/:slug", async (request, reply) => {
+        const { slug } = request.params;
+        // Resolve live scene only; soft-deleted already look like 404.
+        const row = db.getSceneBySlug(slug);
+        if (!row) {
+          throw new AppError(ErrorCode.NOT_FOUND, `scene not found: ${slug}`, 404);
+        }
+        db.softDeleteScene(row.id);
+        return reply.status(204).send();
+      });
     },
     { prefix: "/api" },
   );

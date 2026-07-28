@@ -11,7 +11,7 @@
  * exports only.
  *
  * Determinism (issue #38): export dark mode is keyed ONLY by the explicit
- * `darkMode` flag in the request (`excalicli export --dark`). This page must
+ * `darkMode` flag in the request (`excali export --dark`). This page must
  * never read the instance default theme or the host's `prefers-color-scheme`.
  * A cached PNG/SVG that silently flipped with a settings change would be a bug.
  */
@@ -51,10 +51,9 @@ async function handleExportRequest(
 ): Promise<RenderResponseMessage> {
   const options = normalizeRenderOptions(msg.options);
   const elements = filterExportElements(msg.scene.elements) as ExcalidrawElement[];
-  const appState = buildExportAppState(
-    msg.scene.appState,
-    options,
-  ) as Parameters<typeof exportToBlob>[0]["appState"];
+  const appState = buildExportAppState(msg.scene.appState, options) as Parameters<
+    typeof exportToBlob
+  >[0]["appState"];
   const files = (msg.scene.files ?? null) as BinaryFiles | null;
 
   // Fonts must be ready so text metrics match a real browser session.
@@ -99,9 +98,7 @@ async function handleExportRequest(
  * Upstream-only merge. restoreElements first (ordering / fractional indices),
  * then reconcileElements(local, remote, appState). No hand-rolled conflict rules.
  */
-function handleMergeRequest(
-  msg: RenderMergeRequestMessage,
-): RenderResponseMessage {
+function handleMergeRequest(msg: RenderMergeRequestMessage): RenderResponseMessage {
   // restoreElements repairs ordering so reconcileElements can run.
   const localRestored = restoreElements(
     msg.local.elements as Parameters<typeof restoreElements>[0],
@@ -135,9 +132,7 @@ function handleMergeRequest(
   };
 }
 
-async function handleRenderRequest(
-  msg: RenderRequestMessage,
-): Promise<RenderResponseMessage> {
+async function handleRenderRequest(msg: RenderRequestMessage): Promise<RenderResponseMessage> {
   if (isMergeRequest(msg)) {
     return handleMergeRequest(msg);
   }
@@ -187,9 +182,11 @@ function reply(message: PageResponse): void {
   window.postMessage(message, "*");
   // Mirror onto a global for Playwright evaluate loops that don't use
   // MessageEvent (belt-and-suspenders with the exposed bridge).
-  const queue = (window as Window & {
-    __excalidrawCollabRenderResults?: PageResponse[];
-  }).__excalidrawCollabRenderResults;
+  const queue = (
+    window as Window & {
+      __excalidrawCollabRenderResults?: PageResponse[];
+    }
+  ).__excalidrawCollabRenderResults;
   if (Array.isArray(queue)) {
     queue.push(message);
   }
@@ -217,8 +214,7 @@ export function RenderPage(): ReactElement {
             reply(result);
             setStatus("ready");
           } catch (err) {
-            const message =
-              err instanceof Error ? err.message : "render failed";
+            const message = err instanceof Error ? err.message : "render failed";
             reply({
               type: RENDER_MSG.RESPONSE,
               id: (event.data as RenderRequestMessage).id,
@@ -241,8 +237,7 @@ export function RenderPage(): ReactElement {
             reply(result);
             setStatus("ready");
           } catch (err) {
-            const message =
-              err instanceof Error ? err.message : "skeleton conversion failed";
+            const message = err instanceof Error ? err.message : "skeleton conversion failed";
             reply({
               type: RENDER_MSG.SKELETON_RESPONSE,
               id: (event.data as SkeletonRequestMessage).id,
@@ -262,9 +257,8 @@ export function RenderPage(): ReactElement {
     // Announce readiness after the listener is attached.
     const ready = { type: RENDER_MSG.READY } as const;
     window.postMessage(ready, "*");
-    (
-      window as Window & { __excalidrawCollabRenderReady?: boolean }
-    ).__excalidrawCollabRenderReady = true;
+    (window as Window & { __excalidrawCollabRenderReady?: boolean }).__excalidrawCollabRenderReady =
+      true;
 
     return () => {
       window.removeEventListener("message", onMessage);

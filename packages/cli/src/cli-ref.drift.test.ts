@@ -42,9 +42,6 @@ test("generateCliReference lists every registered command", async () => {
       new RegExp(`### \\\`${c.name}\\\``),
       `generated reference missing section for command ${c.name}`,
     );
-    assert.ok(
-      md.includes(c.description),
-      `generated reference missing description for ${c.name}`,
-    );
+    assert.ok(md.includes(c.description), `generated reference missing description for ${c.name}`);
   }
 });

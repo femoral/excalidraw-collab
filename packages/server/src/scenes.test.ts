@@ -6,18 +6,9 @@ import { afterEach, describe, test } from "node:test";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "./app.js";
 import { loadConfig, type Config } from "./config.js";
-import {
-  gzipJson,
-  openDatabase,
-  type Database,
-} from "./db.js";
+import { gzipJson, openDatabase, type Database } from "./db.js";
 import { ErrorCode, type ErrorEnvelope } from "./errors.js";
-import {
-  allocateSlug,
-  isValidSlug,
-  slugifyName,
-  type SceneInfo,
-} from "./scenes.js";
+import { allocateSlug, isValidSlug, slugifyName, type SceneInfo } from "./scenes.js";
 
 const tempDirs: string[] = [];
 const openDbs: Database[] = [];

@@ -10,10 +10,10 @@ import {
 test("resolutionCommands include pull, push, merge, and force", () => {
   const cmds = resolutionCommands("arch", "added queue");
   assert.deepEqual(cmds, [
-    "excalicli pull arch",
-    'excalicli push arch -m "added queue"',
-    'excalicli push arch -m "added queue" --merge',
-    'excalicli push arch -m "added queue" --force',
+    "excali pull arch",
+    'excali push arch -m "added queue"',
+    'excali push arch -m "added queue" --merge',
+    'excali push arch -m "added queue" --force',
   ]);
 });
 
@@ -32,9 +32,7 @@ test("formatConflictDiff renders summary and describe lines", () => {
         describe: '~ rectangle "Auth"  moved',
       },
     ],
-    appState: [
-      { key: "viewBackgroundColor", from: "#fff", to: "#000" },
-    ],
+    appState: [{ key: "viewBackgroundColor", from: "#fff", to: "#000" }],
   });
   assert.match(text, /v1 → v3/);
   assert.match(text, /\+1/);
@@ -85,8 +83,8 @@ test("formatConflictMessage names exact next commands", () => {
     { message: "my edit", serverMessage: "parentVersion 2 does not match head 4" },
   );
   assert.match(msg, /parentVersion 2 does not match head 4/);
-  assert.match(msg, /excalicli pull arch/);
-  assert.match(msg, /excalicli push arch -m "my edit"/);
+  assert.match(msg, /excali pull arch/);
+  assert.match(msg, /excali push arch -m "my edit"/);
   assert.match(msg, /--merge/);
   assert.match(msg, /--force/);
   assert.match(msg, /Nothing was changed on the server/);

@@ -1,5 +1,5 @@
 /**
- * `excalicli export SLUG --format png|svg|json [--scale 2] [--dark] [--version N] [-o file]`
+ * `excali export SLUG --format png|svg|json [--scale 2] [--dark] [--version N] [-o file]`
  *
  * PNG/SVG hit the server render endpoints; json fetches the scene document
  * (works even when the render worker is unavailable).
@@ -37,7 +37,7 @@ type SceneDocument = {
 function requireAuth(ctx: CommandContext): void {
   if (!ctx.config.server || !ctx.config.token) {
     throw new CliError(
-      "No server/token configured. Set EXCALICLI_SERVER and EXCALICLI_TOKEN, or run `excalicli login`.",
+      "No server/token configured. Set EXCALI_SERVER and EXCALI_TOKEN, or run `excali login`.",
       { code: "USAGE" },
     );
   }
@@ -84,13 +84,13 @@ function parseExportArgs(args: string[]): {
   if (positionals.length === 0) {
     throw new UsageError(
       "export requires SLUG\n\n" +
-        "Usage: excalicli export SLUG --format png|svg|json [--scale 2] [--dark] [--version N] [-o file]",
+        "Usage: excali export SLUG --format png|svg|json [--scale 2] [--dark] [--version N] [-o file]",
     );
   }
   if (positionals.length > 1) {
     throw new UsageError(
       `unexpected arguments: ${positionals.slice(1).join(" ")}\n\n` +
-        "Usage: excalicli export SLUG --format png|svg|json [--scale 2] [--dark] [--version N] [-o file]",
+        "Usage: excali export SLUG --format png|svg|json [--scale 2] [--dark] [--version N] [-o file]",
     );
   }
 
@@ -102,7 +102,7 @@ function parseExportArgs(args: string[]): {
   if (values.format === undefined || values.format.trim() === "") {
     throw new UsageError(
       "export requires --format png|svg|json\n\n" +
-        "Usage: excalicli export SLUG --format png|svg|json [--scale 2] [--dark] [--version N] [-o file]",
+        "Usage: excali export SLUG --format png|svg|json [--scale 2] [--dark] [--version N] [-o file]",
     );
   }
   const formatRaw = values.format.trim().toLowerCase();
@@ -137,9 +137,7 @@ function parseExportArgs(args: string[]): {
   }
 
   if (format === "json" && (scale !== undefined || values.dark === true)) {
-    throw new UsageError(
-      "--scale and --dark only apply to --format png|svg",
-    );
+    throw new UsageError("--scale and --dark only apply to --format png|svg");
   }
 
   return {
@@ -153,21 +151,13 @@ function parseExportArgs(args: string[]): {
 }
 
 /** Default path: `{slug}-v{version}.{ext}`. */
-export function defaultExportPath(
-  slug: string,
-  version: number,
-  format: ExportFormat,
-): string {
+export function defaultExportPath(slug: string, version: number, format: ExportFormat): string {
   const ext = format === "json" ? "json" : format;
   return `${slug}-v${version}.${ext}`;
 }
 
-function renderUnavailableMessage(
-  reason: unknown,
-  serverMessage: string,
-): string {
-  const tip =
-    "Tip: --format json still works without a render worker (no browser needed).";
+function renderUnavailableMessage(reason: unknown, serverMessage: string): string {
+  const tip = "Tip: --format json still works without a render worker (no browser needed).";
   if (reason === "disabled") {
     return (
       "PNG/SVG rendering is not available: RENDER_WORKER=off. " +
@@ -244,8 +234,7 @@ async function exportJson(
     config: ctx.config,
   });
 
-  const outPath =
-    opts.output ?? defaultExportPath(opts.slug, opts.version, "json");
+  const outPath = opts.output ?? defaultExportPath(opts.slug, opts.version, "json");
   const pretty = `${JSON.stringify(scene, null, 2)}\n`;
 
   if (outPath === "-") {
@@ -295,8 +284,7 @@ async function exportRender(
     dark: boolean;
   },
 ): Promise<CommandResult> {
-  const outPath =
-    opts.output ?? defaultExportPath(opts.slug, opts.version, opts.format);
+  const outPath = opts.output ?? defaultExportPath(opts.slug, opts.version, opts.format);
 
   // Binary on stdout cannot share the stream with a --json metadata object.
   if (outPath === "-" && ctx.json) {
@@ -405,10 +393,9 @@ async function runExport(ctx: CommandContext): Promise<CommandResult> {
 
 export const exportCommand: Command = {
   name: "export",
-  description:
-    "Export a scene as PNG, SVG, or JSON (scene document)",
+  description: "Export a scene as PNG, SVG, or JSON (scene document)",
   usage:
-    "excalicli export SLUG --format png|svg|json [--scale 2] [--dark] [--version N] [-o file] [--json]\n\n" +
+    "excali export SLUG --format png|svg|json [--scale 2] [--dark] [--version N] [-o file] [--json]\n\n" +
     "  --format     png | svg | json (required)\n" +
     "  --scale N    Render scale for png/svg (default: server default, usually 1)\n" +
     "  --dark       Dark-mode export for png/svg\n" +

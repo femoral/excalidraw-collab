@@ -40,10 +40,7 @@ export function readViewerTheme(storage: ThemeStorage): ViewerThemeChoice {
 }
 
 /** Persist an explicit viewer choice (or clear with null). */
-export function writeViewerTheme(
-  storage: ThemeStorage,
-  theme: ViewerThemeChoice,
-): void {
+export function writeViewerTheme(storage: ThemeStorage, theme: ViewerThemeChoice): void {
   if (theme === null) {
     storage.removeItem(THEME_STORAGE_KEY);
     return;
@@ -125,10 +122,11 @@ export function applyThemeToDocument(
  * (tests / non-browser).
  */
 export function readSystemPreference(
-  matchMedia: ((query: string) => { matches: boolean }) | undefined =
-    typeof globalThis.matchMedia === "function"
-      ? globalThis.matchMedia.bind(globalThis)
-      : undefined,
+  matchMedia:
+    ((query: string) => { matches: boolean }) | undefined = typeof globalThis.matchMedia ===
+  "function"
+    ? globalThis.matchMedia.bind(globalThis)
+    : undefined,
 ): Theme {
   if (!matchMedia) return "light";
   try {
@@ -144,12 +142,10 @@ export function readSystemPreference(
  */
 export function subscribeSystemPreference(
   onChange: (theme: Theme) => void,
-  matchMedia: ((query: string) => MediaQueryListLike) | undefined =
-    typeof globalThis.matchMedia === "function"
-      ? (globalThis.matchMedia.bind(globalThis) as (
-          query: string,
-        ) => MediaQueryListLike)
-      : undefined,
+  matchMedia: ((query: string) => MediaQueryListLike) | undefined = typeof globalThis.matchMedia ===
+  "function"
+    ? (globalThis.matchMedia.bind(globalThis) as (query: string) => MediaQueryListLike)
+    : undefined,
 ): () => void {
   if (!matchMedia) return () => {};
   let mql: MediaQueryListLike;

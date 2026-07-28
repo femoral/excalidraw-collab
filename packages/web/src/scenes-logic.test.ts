@@ -60,18 +60,9 @@ test("sortScenesByUpdatedAt newest first", () => {
 test("isLockActive respects expiry", () => {
   const now = Date.parse("2026-06-01T12:00:00.000Z");
   assert.equal(isLockActive(null, now), false);
+  assert.equal(isLockActive({ holder: "agent", expiresAt: "2026-06-01T13:00:00.000Z" }, now), true);
   assert.equal(
-    isLockActive(
-      { holder: "agent", expiresAt: "2026-06-01T13:00:00.000Z" },
-      now,
-    ),
-    true,
-  );
-  assert.equal(
-    isLockActive(
-      { holder: "agent", expiresAt: "2026-06-01T11:00:00.000Z" },
-      now,
-    ),
+    isLockActive({ holder: "agent", expiresAt: "2026-06-01T11:00:00.000Z" }, now),
     false,
   );
 });
@@ -101,10 +92,7 @@ test("formatUpdatedAt uses relative units for recent times", () => {
 
 test("headAuthorLabel", () => {
   assert.equal(headAuthorLabel(scene({ headAuthor: "bot" })), "bot");
-  assert.equal(
-    headAuthorLabel(scene({ headAuthor: null, headVersion: 0 })),
-    "No commits yet",
-  );
+  assert.equal(headAuthorLabel(scene({ headAuthor: null, headVersion: 0 })), "No commits yet");
 });
 
 test("buildCreatePayload / buildRenamePayload validation", () => {
@@ -193,9 +181,7 @@ test("401 path: unauthorized resets to idle (no half-list, no error banner)", ()
 // Live refresh / self-authored suppression (issue #37)
 // ---------------------------------------------------------------------------
 
-function versionEvent(
-  overrides: Partial<GlobalSceneEvent> = {},
-): GlobalSceneEvent {
+function versionEvent(overrides: Partial<GlobalSceneEvent> = {}): GlobalSceneEvent {
   return {
     seq: 1,
     sceneId: "id-1",
@@ -215,9 +201,7 @@ function versionEvent(
   };
 }
 
-function lockEvent(
-  overrides: Partial<GlobalSceneEvent> = {},
-): GlobalSceneEvent {
+function lockEvent(overrides: Partial<GlobalSceneEvent> = {}): GlobalSceneEvent {
   return {
     seq: 2,
     sceneId: "id-1",
@@ -231,22 +215,10 @@ function lockEvent(
 }
 
 test("shouldApplyGlobalEvent suppresses self-authored version and lock", () => {
-  assert.equal(
-    shouldApplyGlobalEvent(versionEvent({ author: "me" }), "me"),
-    false,
-  );
-  assert.equal(
-    shouldApplyGlobalEvent(versionEvent({ author: "agent" }), "me"),
-    true,
-  );
-  assert.equal(
-    shouldApplyGlobalEvent(lockEvent({ actor: "me" }), "me"),
-    false,
-  );
-  assert.equal(
-    shouldApplyGlobalEvent(lockEvent({ actor: "agent" }), "me"),
-    true,
-  );
+  assert.equal(shouldApplyGlobalEvent(versionEvent({ author: "me" }), "me"), false);
+  assert.equal(shouldApplyGlobalEvent(versionEvent({ author: "agent" }), "me"), true);
+  assert.equal(shouldApplyGlobalEvent(lockEvent({ actor: "me" }), "me"), false);
+  assert.equal(shouldApplyGlobalEvent(lockEvent({ actor: "agent" }), "me"), true);
   // No self identity → never suppress.
   assert.equal(shouldApplyGlobalEvent(versionEvent({ author: "x" }), null), true);
 });
@@ -271,11 +243,7 @@ test("applyGlobalEventToScene patches head metadata and lock", () => {
   assert.equal(patched.updatedAt, "2026-06-01T12:30:00.000Z");
   assert.equal(patched.lock?.holder, "agent");
 
-  const unlocked = applyGlobalEventToScene(
-    patched,
-    lockEvent({ lock: null, actor: "agent" }),
-    now,
-  );
+  const unlocked = applyGlobalEventToScene(patched, lockEvent({ lock: null, actor: "agent" }), now);
   assert.equal(unlocked.lock, null);
   assert.equal(unlocked.headVersion, 4, "lock event must not clobber head");
 });
@@ -323,17 +291,8 @@ test("lockExpiryDelayMs reports remaining TTL", () => {
   const now = Date.parse("2026-06-01T12:00:00.000Z");
   assert.equal(lockExpiryDelayMs(null, now), null);
   assert.equal(
-    lockExpiryDelayMs(
-      { holder: "a", expiresAt: "2026-06-01T12:00:30.000Z" },
-      now,
-    ),
+    lockExpiryDelayMs({ holder: "a", expiresAt: "2026-06-01T12:00:30.000Z" }, now),
     30_000,
   );
-  assert.equal(
-    lockExpiryDelayMs(
-      { holder: "a", expiresAt: "2026-06-01T11:00:00.000Z" },
-      now,
-    ),
-    0,
-  );
+  assert.equal(lockExpiryDelayMs({ holder: "a", expiresAt: "2026-06-01T11:00:00.000Z" }, now), 0);
 });

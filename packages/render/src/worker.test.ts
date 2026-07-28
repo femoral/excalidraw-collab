@@ -19,14 +19,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /** packages/web/dist — produced by `pnpm --filter @excalidraw-collab/web build`. */
 const WEB_DIST = join(__dirname, "..", "..", "web", "dist");
-const FIXTURES_DIR = join(
-  __dirname,
-  "..",
-  "..",
-  "core",
-  "test",
-  "fixtures",
-);
+const FIXTURES_DIR = join(__dirname, "..", "..", "core", "test", "fixtures");
 
 const FIXTURE_FILES = [
   "empty.excalidraw",
@@ -206,9 +199,7 @@ describe("render worker (playwright)", async () => {
       rejected.length >= 1,
       `expected at least one mid-render failure after kill; settled=${JSON.stringify(
         settled.map((s) =>
-          s.status === "fulfilled"
-            ? "ok"
-            : (s.reason as Error)?.message ?? "err",
+          s.status === "fulfilled" ? "ok" : ((s.reason as Error)?.message ?? "err"),
         ),
       )}`,
     );
@@ -219,9 +210,7 @@ describe("render worker (playwright)", async () => {
       // death (wrapped by the worker on the recovery path either way).
       if (err instanceof RenderError) {
         assert.ok(
-          err.code === "BROWSER_CLOSED" ||
-            err.code === "RENDER_FAILED" ||
-            err.code === "TIMEOUT",
+          err.code === "BROWSER_CLOSED" || err.code === "RENDER_FAILED" || err.code === "TIMEOUT",
           `unexpected code ${err.code}: ${err.message}`,
         );
       } else {
@@ -244,9 +233,7 @@ describe("render worker (playwright)", async () => {
   });
 
   test("all fixture files are covered", async () => {
-    const files = (await readdir(FIXTURES_DIR)).filter((f) =>
-      f.endsWith(".excalidraw"),
-    );
+    const files = (await readdir(FIXTURES_DIR)).filter((f) => f.endsWith(".excalidraw"));
     for (const f of FIXTURE_FILES) {
       assert.ok(files.includes(f), `missing fixture ${f}`);
     }
@@ -358,22 +345,16 @@ describe("render worker (playwright)", async () => {
       "api.boundElements must list a-api-cache",
     );
     assert.ok(
-      (db!.boundElements ?? []).some(
-        (b) => b.id === "a-api-db" && b.type === "arrow",
-      ),
+      (db!.boundElements ?? []).some((b) => b.id === "a-api-db" && b.type === "arrow"),
       "db.boundElements must list a-api-db",
     );
     assert.ok(
-      (cache!.boundElements ?? []).some(
-        (b) => b.id === "a-api-cache" && b.type === "arrow",
-      ),
+      (cache!.boundElements ?? []).some((b) => b.id === "a-api-cache" && b.type === "arrow"),
       "cache.boundElements must list a-api-cache",
     );
 
     // Labels become bound text elements via upstream conversion.
-    const apiText = els.find(
-      (e) => e.type === "text" && e.containerId === "api",
-    );
+    const apiText = els.find((e) => e.type === "text" && e.containerId === "api");
     assert.ok(apiText, "API label should be bound text");
     assert.match(String(apiText!.text ?? ""), /API/i);
   });
@@ -486,11 +467,7 @@ describe("render worker (playwright)", async () => {
       },
       appState: {},
     });
-    assert.equal(
-      (localWins.elements[0] as { x: number }).x,
-      7,
-      "higher local.version must win",
-    );
+    assert.equal((localWins.elements[0] as { x: number }).x, 7, "higher local.version must win");
 
     // Note: same-version versionNonce ties are decided by upstream after
     // restoreElements (which may rewrite nonces). We do not assert that
