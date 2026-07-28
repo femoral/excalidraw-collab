@@ -1,7 +1,7 @@
 /**
  * Scene envelope normalization and appState whitelist.
  *
- * Hard rule (PLAN.md): never author or mutate element internals. Array order
+ * Hard rule: never author or mutate element internals. Array order
  * is authoritative; fractional `index` is optional and is left alone.
  */
 

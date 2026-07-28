@@ -1,5 +1,5 @@
 /**
- * Scene render routes and cached compute path (PLAN.md §7, §9; issue #26).
+ * Scene render routes and cached compute path (issue #26).
  *
  *   GET /api/scenes/:slug/render.png[?v=&scale=&dark=]
  *   GET /api/scenes/:slug/render.svg[?v=&scale=&dark=]

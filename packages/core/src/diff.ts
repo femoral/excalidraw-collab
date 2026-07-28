@@ -5,7 +5,7 @@
  * `formatDiff(diff)` is a pure renderer of that structure for terminals and
  * LLM context windows — never a second implementation of the diff logic.
  *
- * Design notes (PLAN.md §6):
+ * Design notes:
  *  - Identity is `id`. Array order is authoritative for reorder.
  *  - Ignore interaction churn: version, versionNonce, updated, seed.
  *    Also ignore fractional `index` (mirrors array order; reorder is its own op).
@@ -46,7 +46,7 @@ export type DiffScenesOptions = {
  * Props that must never surface in an update. Without this filter every
  * idle re-save looks like a full rewrite.
  *
- * - `version` / `versionNonce` / `updated` / `seed`: PLAN.md §6
+ * - `version` / `versionNonce` / `updated` / `seed`: churn, not user intent
  * - `index`: fractional z-order repaired by restore(); array order is
  *   authoritative and reorder is reported as its own op
  */
@@ -654,7 +654,7 @@ export function diffScenes(
   };
 
   // Only attach version numbers when the caller supplied them. Never invent
-  // version 0 — versions are 1,2,3… monotonic per scene (PLAN.md §4).
+  // version 0 — versions are 1,2,3… monotonic per scene.
   const diff: SceneDiff = {
     summary,
     elements,

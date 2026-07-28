@@ -87,7 +87,7 @@ export type PushVersionResponse = {
 };
 
 /**
- * Conflict details attached to a 409 envelope (PLAN.md §5).
+ * Conflict details attached to a 409 envelope.
  * Carries the structured diff from `parentVersion` → `head` so an agent
  * that is rejected knows what it missed in one round trip — no follow-up
  * GET /diff required (and no temptation to retry with --force blindly).

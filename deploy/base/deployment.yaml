@@ -59,8 +59,8 @@ spec:
           # Basis (with RENDER_WORKER=on):
           #   - Node/Fastify idle: ~50–100 MiB
           #   - Headless Chromium when active: ~400–800 MiB RSS for a typical
-          #     scene render (PLAN.md notes Chromium as the memory floor;
-          #     browser launches lazily on first render and idles out ~10 min)
+          #     scene render (Chromium is the memory floor; the browser
+          #     launches lazily on first render and idles out ~10 min)
           #   - Image itself ships ~400 MB of browser binaries on disk
           # Requests keep a cold pod schedulable; limits leave headroom for a
           # large scene / simultaneous export. With RENDER_WORKER=off you can

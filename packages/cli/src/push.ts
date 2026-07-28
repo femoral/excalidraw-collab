@@ -465,7 +465,7 @@ async function runPush(ctx: CommandContext): Promise<CommandResult> {
   }
   if (result.merged && result.diff) {
     // Surface the merge decision so a silent merge is never worse than a
-    // conflict (PLAN.md / issue #29).
+    // conflict (issue #29).
     human += "\nMerge decided (remote head → result):\n";
     human += formatConflictDiff(result.diff as ConflictDiff);
   }

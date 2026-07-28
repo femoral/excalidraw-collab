@@ -1,6 +1,6 @@
 /**
  * Scene diff routes and a cached compute path shared with 409 conflict
- * responses (PLAN.md §5, §7; issue #17).
+ * responses (issue #17).
  *
  *   GET /api/scenes/:slug/diff?from=&to=[&format=text]
  *

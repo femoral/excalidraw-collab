@@ -18,7 +18,6 @@ dependency. Upgrades are a version bump plus the
 | `excali skills install` | Agent skill — turn loop, conflicts, exit codes (bundled with the CLI) |
 | [docs/upgrade-excalidraw.md](./docs/upgrade-excalidraw.md) | Bumping `@excalidraw/excalidraw` |
 | [docs/release.md](./docs/release.md) | Publishing the CLI to npm |
-| [PLAN.md](./PLAN.md) | Architecture, data model, HTTP API |
 | [deploy/README.md](./deploy/README.md) | Kubernetes / kustomize |
 
 ## Install the CLI

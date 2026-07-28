@@ -2,7 +2,7 @@
 
 This project **never forks** upstream Excalidraw. Upgrades are a version bump of
 the published npm package, then a fixed verification pass against the four
-contact points in [PLAN.md](../PLAN.md) §2 and the `packages/core` fixture
+contact points below and the `packages/core` fixture
 corpus.
 
 Current pin (keep these in lockstep):
@@ -38,7 +38,7 @@ hash, and digest tests load them. If these fail after a bump, the schema or
 element shape moved — do not paper over with production code that rewrites
 element internals.
 
-## 3. Check the four contact points (PLAN.md §2)
+## 3. Check the four contact points
 
 | Contact point                  | What we use                                                                                                                                                        | Where to look                                                                                                        | What to verify                                                                        |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
@@ -47,7 +47,7 @@ element internals.
 | **`.excalidraw` JSON schema**  | Stored verbatim; we never rewrite element internals                                                                                                                | Fixtures + `normalizeScene` / `diffScenes` in `packages/core`                                                        | Round-trip fixtures; old scenes still load in the editor (`restore()` repairs)        |
 | **Fonts / assets**             | `window.EXCALIDRAW_ASSET_PATH = "/"` + fonts copied from the package `dist/prod/fonts` at build time                                                               | `packages/web/src/main.tsx`, `packages/web/vite.config.ts`                                                           | Fonts still copy into the web build; offline editor renders text                      |
 
-Non-negotiable (PLAN.md §2): **the server never authors or mutates element
+Non-negotiable: **the server never authors or mutates element
 internals by hand.** Merge and skeleton conversion always go through upstream
 utils in the render worker.
 
@@ -104,7 +104,7 @@ Commit message example:
 ```
 chore: bump @excalidraw/excalidraw to X.Y.Z
 
-Re-recorded core fixtures; verified PLAN.md §2 contact points.
+Re-recorded core fixtures; verified the four contact points.
 ```
 
 ## Failure playbook
@@ -123,6 +123,5 @@ for upstream.
 
 ## Related docs
 
-- Design authority: [PLAN.md](../PLAN.md) §2, §6, §9
 - Agent workflow: [the bundled skill](../packages/cli/skills/excalidraw-collab/SKILL.md)
 - CLI surface: [cli.md](./cli.md)

@@ -1,7 +1,7 @@
 /**
  * CLI exit codes and server error-code mapping.
  *
- * Exit codes (from PLAN.md / issue #6; TIMEOUT from issue #39):
+ * Exit codes (issue #6; TIMEOUT from issue #39):
  *   0 ok, 1 error, 2 usage, 4 conflict, 5 lock held, 6 timeout
  *
  * Runtime keeps its own copy so the published CLI has zero runtime deps

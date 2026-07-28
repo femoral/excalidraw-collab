@@ -1,5 +1,5 @@
 /**
- * Long-poll events for turn-based collaboration (PLAN.md §7; issues #24, #37).
+ * Long-poll events for turn-based collaboration (issues #24, #37).
  *
  *   GET /api/scenes/:slug/events?since=N   per-scene head advances (CLI watch)
  *   GET /api/events?since=N                multiplexed across all scenes

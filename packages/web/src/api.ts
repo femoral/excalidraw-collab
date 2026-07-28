@@ -189,7 +189,7 @@ export type VersionsPage = {
 /**
  * Structured scene diff (GET /diff). Matches `@excalidraw-collab/core` SceneDiff.
  * Kept as a local wire type so the web package does not depend on core at runtime
- * for history rendering — the shape is stable and documented in PLAN.md §6.
+ * for history rendering — the shape is stable.
  */
 export type DiffSummary = {
   added: number;

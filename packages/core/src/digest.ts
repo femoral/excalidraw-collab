@@ -1,6 +1,6 @@
 /**
  * Scene digest — text outline of a canvas for agents that cannot see one
- * (`excali describe`, PLAN.md §6).
+ * (`excali describe`).
  *
  * Zero runtime dependencies. Never mutates element internals.
  *

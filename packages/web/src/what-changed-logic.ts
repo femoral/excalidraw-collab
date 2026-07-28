@@ -374,7 +374,7 @@ export const REMOTE_CAPTURE_UPDATE = "NEVER" as const;
  * Build the `updateScene` argument for applying a remote document.
  *
  * Critical: `captureUpdate: "NEVER"` so Ctrl+Z undoes the human's last local
- * edit, not the remote load. Matches PLAN.md §10 / issue #22 acceptance.
+ * edit, not the remote load. Matches the issue #22 acceptance criteria.
  *
  * Note: upstream 0.18 takes `captureUpdate` on the scene data object (not as a
  * second options arg). Callers pass the return value straight to updateScene.

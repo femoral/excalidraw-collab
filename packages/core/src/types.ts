@@ -58,7 +58,7 @@ export type {
   DataURL,
 };
 
-/** Subset of AppState that is safe to persist (see PLAN.md §4). */
+/** Subset of AppState that is safe to persist. */
 export type PersistedAppState = Pick<
   AppState,
   | "viewBackgroundColor"
@@ -89,7 +89,7 @@ export type SceneDocument = {
 };
 
 /**
- * One committed version in a scene's linear history (PLAN.md §4).
+ * One committed version in a scene's linear history.
  * The document payload is stored separately (gzipped blobs); this is metadata.
  */
 export type SceneVersion = {
@@ -117,7 +117,7 @@ export type SceneMeta = {
 };
 
 // ---------------------------------------------------------------------------
-// HTTP wire shapes (PLAN.md §7)
+// HTTP wire shapes
 // ---------------------------------------------------------------------------
 
 /**
@@ -146,7 +146,7 @@ export type PushResponse = {
 /**
  * 409 Conflict body: the push's parentVersion does not equal head.
  * Carries the structured diff from parentVersion → head so the client
- * can reconcile in one round trip (PLAN.md §5, §7).
+ * can reconcile in one round trip.
  */
 export type ConflictResponse = {
   parentVersion: number;
@@ -172,7 +172,7 @@ export type PropDelta = {
 };
 
 /**
- * One element-level change between two scene versions (PLAN.md §6).
+ * One element-level change between two scene versions.
  * Produced by `diffScenes`; rendered by `formatDiff`.
  */
 export type ElementChange =
@@ -209,7 +209,7 @@ export type ElementChange =
     };
 
 /**
- * Structured diff between two scene versions (PLAN.md §6).
+ * Structured diff between two scene versions.
  * Produced by `diffScenes`; rendered by `formatDiff`.
  *
  * `from` / `to` are optional version numbers (1,2,3… monotonic per scene).
@@ -230,7 +230,7 @@ export type SceneDiff = {
 };
 
 /**
- * One row in a scene digest's element listing (PLAN.md §6 `describe`).
+ * One row in a scene digest's element listing.
  * Spatial order is top-to-bottom, then left-to-right (tie-break by id).
  */
 export type DigestElement = {
@@ -245,7 +245,7 @@ export type DigestElement = {
 
 /**
  * Text outline of a scene for agents that cannot see a canvas
- * (`excali describe` — PLAN.md §6).
+ * (`excali describe`).
  *
  * Produced by `digestScene`. The structured form keeps ids for tooling;
  * `formatDigest` omits them unless `verbose` is set.

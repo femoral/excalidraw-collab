@@ -17,7 +17,7 @@ import { AppError, ErrorCode } from "./errors.js";
 import type { LockExpiryScheduler } from "./lock-expiry.js";
 import { isSceneLockActive, toLock, type SceneInfo } from "./scenes.js";
 
-/** Default claim TTL when the body omits `ttl` (PLAN.md §5). */
+/** Default claim TTL when the body omits `ttl`. */
 export const DEFAULT_LOCK_TTL_SECONDS = 30 * 60;
 
 /** Hard upper bound so a typo cannot pin a scene for years. */
@@ -34,8 +34,8 @@ export type ClaimLockBody = {
   ttl?: number;
   /**
    * Ignored if present — holder is always the token identity
-   * (PLAN.md §7 shows a client-supplied holder; we deliberately do not
-   * honour it so history/lock attribution stays trustworthy).
+   * (clients may send one; we deliberately do not honour it so history/lock
+   * attribution stays trustworthy).
    */
   holder?: unknown;
 };

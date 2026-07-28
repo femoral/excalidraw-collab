@@ -1,7 +1,7 @@
 /**
  * Single module containing all SQL for the server.
  *
- * Escape hatch (PLAN.md): if `node:sqlite` must be swapped for
+ * Escape hatch: if `node:sqlite` must be swapped for
  * `better-sqlite3`, only this file changes. Callers use the typed
  * data-access surface only — no SQL strings elsewhere.
  */
@@ -20,7 +20,7 @@ export const DB_FILENAME = "db.sqlite";
 export const BUSY_TIMEOUT_MS = 5_000;
 
 // ---------------------------------------------------------------------------
-// Row types (mirror PLAN.md §4)
+// Row types
 // ---------------------------------------------------------------------------
 
 export type SceneRow = {

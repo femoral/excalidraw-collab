@@ -10,7 +10,7 @@
 import { pickAppState, sceneHash } from "@excalidraw-collab/core";
 import type { BinaryFilePayload } from "./api.ts";
 
-/** Default debounce for draft autosave (PLAN.md §10). */
+/** Default debounce for draft autosave. */
 export const DRAFT_AUTOSAVE_MS = 2000;
 
 // ---------------------------------------------------------------------------
