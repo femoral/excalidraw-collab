@@ -4,11 +4,7 @@
  */
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import {
-  createAuthPreHandler,
-  generateTokenSecret,
-  requireAdminPreHandler,
-} from "./auth.js";
+import { createAuthPreHandler, generateTokenSecret, requireAdminPreHandler } from "./auth.js";
 import { hashToken, type Database, type TokenRow } from "./db.js";
 import { AppError, ErrorCode } from "./errors.js";
 
@@ -53,10 +49,7 @@ const createTokenBodySchema = {
  * Register `/api/tokens` under a scoped plugin that enforces Bearer auth
  * and admin-only access.
  */
-export async function registerTokenRoutes(
-  app: FastifyInstance,
-  db: Database,
-): Promise<void> {
+export async function registerTokenRoutes(app: FastifyInstance, db: Database): Promise<void> {
   const authPreHandler = createAuthPreHandler(db);
 
   await app.register(
@@ -74,21 +67,13 @@ export async function registerTokenRoutes(
         async (request, reply) => {
           const name = request.body.name.trim();
           if (name.length === 0) {
-            throw new AppError(
-              ErrorCode.VALIDATION,
-              "name must not be empty",
-              400,
-            );
+            throw new AppError(ErrorCode.VALIDATION, "name must not be empty", 400);
           }
 
           // Names are the public identity (author); keep them unique.
           const existing = db.listTokens().find((t) => t.name === name);
           if (existing) {
-            throw new AppError(
-              ErrorCode.CONFLICT,
-              `token name already exists: ${name}`,
-              409,
-            );
+            throw new AppError(ErrorCode.CONFLICT, `token name already exists: ${name}`, 409);
           }
 
           // Default non-admin; only an admin caller (already enforced) may set
@@ -116,22 +101,15 @@ export async function registerTokenRoutes(
         return { tokens };
       });
 
-      api.delete<{ Params: { id: string } }>(
-        "/tokens/:id",
-        async (request, reply) => {
-          const { id } = request.params;
-          const row = db.getTokenById(id);
-          if (!row) {
-            throw new AppError(
-              ErrorCode.NOT_FOUND,
-              `token not found: ${id}`,
-              404,
-            );
-          }
-          db.deleteToken(id);
-          return reply.status(204).send();
-        },
-      );
+      api.delete<{ Params: { id: string } }>("/tokens/:id", async (request, reply) => {
+        const { id } = request.params;
+        const row = db.getTokenById(id);
+        if (!row) {
+          throw new AppError(ErrorCode.NOT_FOUND, `token not found: ${id}`, 404);
+        }
+        db.deleteToken(id);
+        return reply.status(204).send();
+      });
     },
     { prefix: "/api" },
   );

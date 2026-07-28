@@ -1,5 +1,5 @@
 /**
- * `excalicli backup -o backup.tar.gz`
+ * `excali backup -o backup.tar.gz`
  *
  * Downloads a portable server archive (every scene, all versions, all files)
  * produced via the SQLite backup API. Layout is documented inside the archive
@@ -16,7 +16,7 @@ import type { CommandResult } from "./format.js";
 function requireAuth(ctx: CommandContext): void {
   if (!ctx.config.server || !ctx.config.token) {
     throw new CliError(
-      "No server/token configured. Set EXCALICLI_SERVER and EXCALICLI_TOKEN, or run `excalicli login`.",
+      "No server/token configured. Set EXCALI_SERVER and EXCALI_TOKEN, or run `excali login`.",
       { code: "USAGE" },
     );
   }
@@ -45,15 +45,14 @@ function parseBackupArgs(args: string[]): { output: string } {
   if (positionals.length > 0) {
     throw new UsageError(
       `unexpected arguments: ${positionals.join(" ")}\n\n` +
-        "Usage: excalicli backup -o backup.tar.gz",
+        "Usage: excali backup -o backup.tar.gz",
     );
   }
 
   const output = values.output ?? values.o;
   if (!output || output.trim().length === 0) {
     throw new UsageError(
-      "backup requires -o / --output PATH\n\n" +
-        "Usage: excalicli backup -o backup.tar.gz",
+      "backup requires -o / --output PATH\n\n" + "Usage: excali backup -o backup.tar.gz",
     );
   }
 
@@ -111,10 +110,7 @@ async function runBackup(ctx: CommandContext): Promise<CommandResult> {
   };
 }
 
-function headerInt(
-  headers: Record<string, string>,
-  name: string,
-): number | undefined {
+function headerInt(headers: Record<string, string>, name: string): number | undefined {
   const raw = headers[name.toLowerCase()];
   if (raw === undefined || raw === "") return undefined;
   const n = Number(raw);
@@ -123,10 +119,9 @@ function headerInt(
 
 export const backupCommand: Command = {
   name: "backup",
-  description:
-    "Download a full portable server backup (.tar.gz) of every scene, version, and file",
+  description: "Download a full portable server backup (.tar.gz) of every scene, version, and file",
   usage:
-    "excalicli backup -o backup.tar.gz [--json]\n\n" +
+    "excali backup -o backup.tar.gz [--json]\n\n" +
     "  -o, --output PATH   Write the archive here (use - for stdout).\n\n" +
     "Requires an admin token. The server builds a consistent SQLite snapshot\n" +
     "(sqlite.backup API — never a live WAL copy) and packs a documented,\n" +
@@ -138,7 +133,7 @@ export const backupCommand: Command = {
     "  files/<fileId>                    # raw bytes\n" +
     "  files/<fileId>.json               # mimeType, created\n\n" +
     "Tokens/secrets are not included; version authorship (names) is preserved.\n" +
-    "Restore with: excalicli restore backup.tar.gz\n" +
-    "Escape hatch without history: excalicli pull --all -o dir/",
+    "Restore with: excali restore backup.tar.gz\n" +
+    "Escape hatch without history: excali pull --all -o dir/",
   run: runBackup,
 };

@@ -22,10 +22,7 @@ import {
   versionCount,
   type SceneListStatus,
 } from "./scenes-logic.ts";
-import {
-  loadSceneThumbnail,
-  type ThumbnailDisplay,
-} from "./thumbnail-logic.ts";
+import { loadSceneThumbnail, type ThumbnailDisplay } from "./thumbnail-logic.ts";
 import {
   initialPollState,
   pollAdvanceSince,
@@ -52,11 +49,7 @@ export type SceneListProps = {
  * Scene home: list, create, rename, delete. Cards show head thumbnails when
  * available (uploaded on commit, else render worker, else placeholder).
  */
-export function SceneList({
-  api,
-  onNavigate,
-  onUnauthorized,
-}: SceneListProps): ReactElement {
+export function SceneList({ api, onNavigate, onUnauthorized }: SceneListProps): ReactElement {
   const [list, setList] = useState<SceneListStatus>({ kind: "loading" });
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState("");
@@ -83,10 +76,7 @@ export function SceneList({
     setList((s) => reduceSceneList(s, { type: "load_start" }));
     setActionError(null);
     try {
-      const [scenes, who] = await Promise.all([
-        api.listScenes(),
-        api.whoami().catch(() => null),
-      ]);
+      const [scenes, who] = await Promise.all([api.listScenes(), api.whoami().catch(() => null)]);
       selfNameRef.current = who?.name ?? null;
       setList(reduceSceneList({ kind: "idle" }, { type: "load_success", scenes }));
       needsFullReloadRef.current = false;
@@ -96,11 +86,8 @@ export function SceneList({
         onUnauthorized?.();
         return;
       }
-      const message =
-        err instanceof Error ? err.message : "Failed to load scenes.";
-      setList(
-        reduceSceneList({ kind: "idle" }, { type: "load_error", message }),
-      );
+      const message = err instanceof Error ? err.message : "Failed to load scenes.";
+      setList(reduceSceneList({ kind: "idle" }, { type: "load_error", message }));
     }
   }, [api, onUnauthorized]);
 
@@ -137,9 +124,7 @@ export function SceneList({
           try {
             const scenes = await api.listScenes();
             if (cancelled || ac.signal.aborted) break;
-            setList((s) =>
-              reduceSceneList(s, { type: "replace", scenes }),
-            );
+            setList((s) => reduceSceneList(s, { type: "replace", scenes }));
           } catch (err) {
             if (cancelled || ac.signal.aborted) break;
             if (err instanceof ApiError && err.isUnauthorized) {
@@ -186,18 +171,11 @@ export function SceneList({
           const self = selfNameRef.current;
           setList((s) => {
             if (s.kind !== "ready") return s;
-            const { scenes, changed } = applyGlobalEventsToList(
-              s.scenes,
-              batch.events,
-              self,
-            );
+            const { scenes, changed } = applyGlobalEventsToList(s.scenes, batch.events, self);
             // Events for unknown slugs (created elsewhere) need a full reload.
             const known = new Set(s.scenes.map((sc) => sc.slug));
             const unknown = batch.events.some(
-              (e) =>
-                Boolean(e.slug) &&
-                !known.has(e.slug) &&
-                shouldApplyGlobalEvent(e, self),
+              (e) => Boolean(e.slug) && !known.has(e.slug) && shouldApplyGlobalEvent(e, self),
             );
             if (unknown) {
               needsFullReloadRef.current = true;
@@ -246,9 +224,7 @@ export function SceneList({
         onUnauthorized?.();
         return;
       }
-      setCreateError(
-        err instanceof Error ? err.message : "Could not create scene.",
-      );
+      setCreateError(err instanceof Error ? err.message : "Could not create scene.");
     } finally {
       setCreateBusy(false);
     }
@@ -275,9 +251,7 @@ export function SceneList({
         onUnauthorized?.();
         return;
       }
-      setRenameError(
-        err instanceof Error ? err.message : "Could not rename scene.",
-      );
+      setRenameError(err instanceof Error ? err.message : "Could not rename scene.");
     } finally {
       setRenameBusy(false);
     }
@@ -289,9 +263,7 @@ export function SceneList({
     setActionError(null);
     try {
       await api.deleteScene(deleting.slug);
-      setList((s) =>
-        reduceSceneList(s, { type: "remove", slug: deleting.slug }),
-      );
+      setList((s) => reduceSceneList(s, { type: "remove", slug: deleting.slug }));
       setDeleting(null);
     } catch (err) {
       if (err instanceof ApiError && err.isUnauthorized) {
@@ -299,9 +271,7 @@ export function SceneList({
         onUnauthorized?.();
         return;
       }
-      setActionError(
-        err instanceof Error ? err.message : "Could not delete scene.",
-      );
+      setActionError(err instanceof Error ? err.message : "Could not delete scene.");
       setDeleting(null);
     } finally {
       setDeleteBusy(false);
@@ -366,14 +336,10 @@ export function SceneList({
           </div>
           <h3>No scenes yet</h3>
           <p>
-            Create a scene to start drawing. Agents and humans share the same
-            boards with turn-based commits.
+            Create a scene to start drawing. Agents and humans share the same boards with turn-based
+            commits.
           </p>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => setCreateOpen(true)}
-          >
+          <button type="button" className="btn btn-primary" onClick={() => setCreateOpen(true)}>
             Create your first scene
           </button>
         </div>
@@ -386,9 +352,7 @@ export function SceneList({
               <SceneCard
                 scene={item}
                 api={api}
-                onOpen={(e) =>
-                  onNavigate(`/s/${encodeURIComponent(item.slug)}`, e)
-                }
+                onOpen={(e) => onNavigate(`/s/${encodeURIComponent(item.slug)}`, e)}
                 onRename={() => {
                   setRenaming(item);
                   setRenameName(item.name);
@@ -402,10 +366,7 @@ export function SceneList({
       ) : null}
 
       {createOpen ? (
-        <Modal
-          title="New scene"
-          onClose={() => !createBusy && setCreateOpen(false)}
-        >
+        <Modal title="New scene" onClose={() => !createBusy && setCreateOpen(false)}>
           <form onSubmit={handleCreate} className="modal-form">
             <label className="field-label" htmlFor="create-name">
               Name
@@ -453,11 +414,7 @@ export function SceneList({
               >
                 Cancel
               </button>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={createBusy}
-              >
+              <button type="submit" className="btn btn-primary" disabled={createBusy}>
                 {createBusy ? "Creating…" : "Create"}
               </button>
             </div>
@@ -466,10 +423,7 @@ export function SceneList({
       ) : null}
 
       {renaming ? (
-        <Modal
-          title="Rename scene"
-          onClose={() => !renameBusy && setRenaming(null)}
-        >
+        <Modal title="Rename scene" onClose={() => !renameBusy && setRenaming(null)}>
           <form onSubmit={handleRename} className="modal-form">
             <p className="form-hint modal-lede">
               Slug <code>{renaming.slug}</code> stays the same.
@@ -501,11 +455,7 @@ export function SceneList({
               >
                 Cancel
               </button>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={renameBusy}
-              >
+              <button type="submit" className="btn btn-primary" disabled={renameBusy}>
                 {renameBusy ? "Saving…" : "Save"}
               </button>
             </div>
@@ -514,15 +464,11 @@ export function SceneList({
       ) : null}
 
       {deleting ? (
-        <Modal
-          title="Delete scene?"
-          onClose={() => !deleteBusy && setDeleting(null)}
-        >
+        <Modal title="Delete scene?" onClose={() => !deleteBusy && setDeleting(null)}>
           <div className="modal-form">
             <p className="modal-lede">
-              Soft-delete <strong>{deleting.name}</strong> (
-              <code>{deleting.slug}</code>). Version history is retained but
-              the scene disappears from the list.
+              Soft-delete <strong>{deleting.name}</strong> (<code>{deleting.slug}</code>). Version
+              history is retained but the scene disappears from the list.
             </p>
             <div className="modal-actions">
               <button
@@ -654,10 +600,7 @@ function SceneCard({
             </a>
           </h3>
           {lockLive && scene.lock ? (
-            <span
-              className="lock-badge"
-              title={`Turn held by ${scene.lock.holder}`}
-            >
+            <span className="lock-badge" title={`Turn held by ${scene.lock.holder}`}>
               <span className="lock-badge-icon" aria-hidden="true">
                 🔒
               </span>
@@ -675,9 +618,7 @@ function SceneCard({
           <span className="meta-sep" aria-hidden="true">
             ·
           </span>
-          <span>
-            {versions === 1 ? "1 version" : `${versions} versions`}
-          </span>
+          <span>{versions === 1 ? "1 version" : `${versions} versions`}</span>
         </p>
 
         <p className="scene-card-slug">
@@ -685,25 +626,13 @@ function SceneCard({
         </p>
 
         <div className="scene-card-actions">
-          <a
-            href={href}
-            className="btn btn-secondary btn-sm"
-            onClick={(e) => onOpen(e)}
-          >
+          <a href={href} className="btn btn-secondary btn-sm" onClick={(e) => onOpen(e)}>
             Open
           </a>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={onRename}
-          >
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onRename}>
             Rename
           </button>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm btn-danger-text"
-            onClick={onDelete}
-          >
+          <button type="button" className="btn btn-ghost btn-sm btn-danger-text" onClick={onDelete}>
             Delete
           </button>
         </div>
@@ -739,12 +668,7 @@ function Modal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div
-        className="modal-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-      >
+      <div className="modal-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <div className="modal-header">
           <h2 id={titleId} className="modal-title">
             {title}

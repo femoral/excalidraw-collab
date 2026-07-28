@@ -11,10 +11,7 @@ import type { FastifyInstance } from "fastify";
 import { buildApp } from "./app.js";
 import { loadConfig, type Config } from "./config.js";
 import { openDatabase, type Database } from "./db.js";
-import {
-  SceneEventHub,
-  type MultiplexedEventsResponse,
-} from "./events.js";
+import { SceneEventHub, type MultiplexedEventsResponse } from "./events.js";
 import { LockExpiryScheduler } from "./lock-expiry.js";
 
 const tempDirs: string[] = [];
@@ -188,14 +185,9 @@ describe("lock TTL expiry via HTTP", () => {
     const elapsed = Date.now() - t0;
 
     assert.equal(res.statusCode, 200, res.body);
-    assert.ok(
-      elapsed < 3_000,
-      `expiry should wake within ~1s, took ${elapsed}ms`,
-    );
+    assert.ok(elapsed < 3_000, `expiry should wake within ~1s, took ${elapsed}ms`);
     const body = res.json() as MultiplexedEventsResponse;
-    const freeEv = body.events.find(
-      (e) => e.kind === "lock" && e.lock === null,
-    );
+    const freeEv = body.events.find((e) => e.kind === "lock" && e.lock === null);
     assert.ok(freeEv, `expected free lock event, got ${res.body}`);
   });
 });

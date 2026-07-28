@@ -9,10 +9,7 @@ import {
   ErrorCode as ServerErrorCode,
   exitCodeForError as serverExitCodeForError,
 } from "@excalidraw-collab/server";
-import {
-  SERVER_ERROR_CODES,
-  exitCodeForError as cliExitCodeForError,
-} from "./errors.js";
+import { SERVER_ERROR_CODES, exitCodeForError as cliExitCodeForError } from "./errors.js";
 
 test("SERVER_ERROR_CODES covers exactly server ErrorCode values", () => {
   const serverCodes = Object.values(ServerErrorCode).slice().sort();

@@ -50,9 +50,11 @@ afterEach(async () => {
   }
 });
 
-async function harness(opts: {
-  converter?: SkeletonConverter | null;
-} = {}) {
+async function harness(
+  opts: {
+    converter?: SkeletonConverter | null;
+  } = {},
+) {
   const dataDir = tempDir("skeleton-test-");
   const token = "skeleton-bootstrap-token";
   const db = openDatabase(dataDir);
@@ -104,11 +106,7 @@ test("validateSkeletonEntry: unknown type names index", () => {
 
 test("validateSkeletonEntry: rectangle requires finite x/y", () => {
   assert.throws(
-    () =>
-      validateSkeletonEntry(
-        { type: "rectangle", x: "left", y: 0, width: 10, height: 10 },
-        0,
-      ),
+    () => validateSkeletonEntry({ type: "rectangle", x: "left", y: 0, width: 10, height: 10 }, 0),
     (err: Error & { details?: { reason: string } }) => {
       assert.match(err.details?.reason ?? "", /"x" must be a finite number/);
       return true;

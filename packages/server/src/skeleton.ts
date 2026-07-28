@@ -51,14 +51,7 @@ export const SKELETON_TYPES = new Set([
 ]);
 
 /** Types that need numeric x/y on the skeleton. */
-const POSITIONED_TYPES = new Set([
-  "rectangle",
-  "ellipse",
-  "diamond",
-  "text",
-  "image",
-  "line",
-]);
+const POSITIONED_TYPES = new Set(["rectangle", "ellipse", "diamond", "text", "image", "line"]);
 
 export type SkeletonErrorDetails = {
   index: number;
@@ -82,12 +75,10 @@ export type SkeletonConverter = {
  */
 export function validateSkeletonEntry(entry: unknown, index: number): void {
   const fail = (reason: string): never => {
-    throw new AppError(
-      ErrorCode.VALIDATION,
-      `skeleton[${index}]: ${reason}`,
-      400,
-      { index, reason } satisfies SkeletonErrorDetails,
-    );
+    throw new AppError(ErrorCode.VALIDATION, `skeleton[${index}]: ${reason}`, 400, {
+      index,
+      reason,
+    } satisfies SkeletonErrorDetails);
   };
 
   if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
@@ -102,9 +93,7 @@ export function validateSkeletonEntry(entry: unknown, index: number): void {
   // Indexed Record access is not narrowed by control-flow; re-bind after guard.
   const type: string = el.type as string;
   if (!SKELETON_TYPES.has(type)) {
-    fail(
-      `unknown type ${JSON.stringify(type)}; expected one of ${[...SKELETON_TYPES].join(", ")}`,
-    );
+    fail(`unknown type ${JSON.stringify(type)}; expected one of ${[...SKELETON_TYPES].join(", ")}`);
   }
 
   if (el.id !== undefined && typeof el.id !== "string") {
@@ -178,7 +167,7 @@ export function validateSkeletonElements(elements: unknown[]): void {
   if (!Array.isArray(elements)) {
     throw new AppError(
       ErrorCode.VALIDATION,
-      'body.elements must be an array of skeleton entries',
+      "body.elements must be an array of skeleton entries",
       400,
     );
   }
@@ -214,8 +203,7 @@ export function validateSkeletonElements(elements: unknown[]): void {
       if (typeof id !== "string" || id.length === 0) continue;
       // Inline shapes may carry type+id of a not-yet-listed element; only
       // fail pure id refs that point nowhere.
-      const hasInlineType =
-        typeof (ref as Record<string, unknown>).type === "string";
+      const hasInlineType = typeof (ref as Record<string, unknown>).type === "string";
       if (!hasInlineType && !ids.has(id)) {
         throw new AppError(
           ErrorCode.VALIDATION,
@@ -308,12 +296,9 @@ export async function registerSkeletonRoutes(
     async (request) => {
       const converter = resolveConverter(opts.converter);
       if (!converter) {
-        throw new AppError(
-          ErrorCode.NOT_IMPLEMENTED,
-          SKELETON_WORKER_DISABLED_MESSAGE,
-          501,
-          { reason: "disabled" },
-        );
+        throw new AppError(ErrorCode.NOT_IMPLEMENTED, SKELETON_WORKER_DISABLED_MESSAGE, 501, {
+          reason: "disabled",
+        });
       }
 
       const body = request.body as {
@@ -343,25 +328,18 @@ export async function registerSkeletonRoutes(
             },
           );
         }
-        const message =
-          err instanceof Error ? err.message : "skeleton conversion failed";
+        const message = err instanceof Error ? err.message : "skeleton conversion failed";
         // Surface worker-reported skeleton[i]: reason when present.
         const match = /^skeleton\[(\d+)\]:\s*(.*)$/.exec(message);
         if (match) {
           const index = Number(match[1]);
           const reason = match[2] || message;
-          throw new AppError(
-            ErrorCode.VALIDATION,
-            `skeleton[${index}]: ${reason}`,
-            400,
-            { index, reason } satisfies SkeletonErrorDetails,
-          );
+          throw new AppError(ErrorCode.VALIDATION, `skeleton[${index}]: ${reason}`, 400, {
+            index,
+            reason,
+          } satisfies SkeletonErrorDetails);
         }
-        throw new AppError(
-          ErrorCode.INTERNAL,
-          `skeleton conversion failed: ${message}`,
-          500,
-        );
+        throw new AppError(ErrorCode.INTERNAL, `skeleton conversion failed: ${message}`, 500);
       }
     },
   );

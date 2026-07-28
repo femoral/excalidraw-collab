@@ -20,16 +20,11 @@ test("pack/unpack round-trips file contents and names", () => {
   assert.equal(out[0]!.name, "README.md");
   assert.equal(out[0]!.data.toString("utf8"), "hello backup\n");
   assert.equal(out[1]!.name, "scenes/arch/meta.json");
-  assert.deepEqual(
-    out[2]!.data,
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0xff]),
-  );
+  assert.deepEqual(out[2]!.data, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0xff]));
 });
 
 test("packTarGz is gunzip-compatible and still unpacks", () => {
-  const entries = [
-    { name: "MANIFEST.json", data: Buffer.from('{"formatVersion":1}\n') },
-  ];
+  const entries = [{ name: "MANIFEST.json", data: Buffer.from('{"formatVersion":1}\n') }];
   const gz = packTarGz(entries);
   assert.equal(gz[0], 0x1f);
   assert.equal(gz[1], 0x8b);

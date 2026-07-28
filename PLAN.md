@@ -48,7 +48,7 @@ It stores blobs and, when merging, delegates to upstream's own `reconcileElement
                     │  <Excalidraw>│  │  HTTP + Bearer token
                     └──────────────┘  │
                                       ▼
-   agent ──▶ excalicli ──────────▶ ┌─────────────────┐    ┌──────────────┐
+   agent ──▶ excali ──────────▶ ┌─────────────────┐    ┌──────────────┐
                                    │ server (Fastify)│───▶│ SQLite + FS  │
                                    └─────────────────┘    │  data/       │
                                             │             └──────────────┘
@@ -66,7 +66,7 @@ pnpm-workspace.yaml
 packages/
   core/     # pure TS, no DOM, no I/O: types, diff engine, scene digest, validation
   server/   # Fastify HTTP API + SQLite + file store
-  cli/      # `excalicli` — thin API client, node:util parseArgs
+  cli/      # `excali` — thin API client, node:util parseArgs
   web/      # Vite + React 19 + @excalidraw/excalidraw
   render/   # optional Playwright worker (PNG/SVG, skeleton conversion)
 docker/     # Dockerfile + compose
@@ -185,7 +185,7 @@ scene "arch"  v7 → v9   +4 -1 ~3
 - ellipse   "Legacy cache"
 ```
 
-### Scene digest — `excalicli describe`
+### Scene digest — `excali describe`
 
 Separate from diffing, and just as important: agents can't see a canvas. `describe` flattens
 a scene into an outline (frames → children, containment, groups, arrows as an edge list),
@@ -232,7 +232,7 @@ first run. The web app keeps its token in `localStorage` behind a one-field logi
 Same token type for humans and agents — no reason to build two auth systems for a
 single-tenant tool.
 
-## 8. CLI (`excalicli`)
+## 8. CLI (`excali`)
 
 Design rules: **every command accepts `--json`** (agents parse, humans read), **exit codes are
 meaningful** (`0` ok, `1` error, `4` conflict, `5` lock held), and state lives in
@@ -240,21 +240,21 @@ meaningful** (`0` ok, `1` error, `4` conflict, `5` lock held), and state lives i
 `diff --since-last-pull` works with no arguments — the single most-used agent command.
 
 ```
-excalicli login --server URL --token T
-excalicli ls
-excalicli new "Architecture" [--slug arch]
-excalicli pull  arch [-o arch.excalidraw] [--png out.png] [--version N]
-excalicli push  arch [-f arch.excalidraw] -m "added retry queue" [--force|--merge]
-excalicli diff  arch [--from head~1] [--to head] [--since-last-pull] [--json]
-excalicli describe arch [--json]        # text outline of the scene
-excalicli log   arch
-excalicli export arch --format png|svg|json [--scale 2] [-o file]
-excalicli turn  claim|release arch
-excalicli watch arch                    # long-poll; prints diff on each new version
-excalicli token create|ls|revoke NAME   # admin token required
+excali login --server URL --token T
+excali ls
+excali new "Architecture" [--slug arch]
+excali pull  arch [-o arch.excalidraw] [--png out.png] [--version N]
+excali push  arch [-f arch.excalidraw] -m "added retry queue" [--force|--merge]
+excali diff  arch [--from head~1] [--to head] [--since-last-pull] [--json]
+excali describe arch [--json]        # text outline of the scene
+excali log   arch
+excali export arch --format png|svg|json [--scale 2] [-o file]
+excali turn  claim|release arch
+excali watch arch                    # long-poll; prints diff on each new version
+excali token create|ls|revoke NAME   # admin token required
 ```
 
-Ships an agent skill (`excalicli skills install`) documenting the loop, so Claude Code
+Ships an agent skill (`excali skills install`) documenting the loop, so Claude Code
 picks up the workflow without prompting:
 
 ```
@@ -311,7 +311,7 @@ Each phase is independently useful — the tool is usable end-to-end from Phase 
 | Phase | Deliverable | Done when |
 |---|---|---|
 | **0** | pnpm workspace, TS config, `core` types + fixtures | `pnpm build` green |
-| **1** | server: SQLite, scenes/versions/files, named-token auth, push/pull; `excalicli` login/token/ls/new/pull/push/log | agent can round-trip a scene over HTTP |
+| **1** | server: SQLite, scenes/versions/files, named-token auth, push/pull; `excali` login/token/ls/new/pull/push/log | agent can round-trip a scene over HTTP |
 | **2** | web app: editor, draft autosave, commit turn, scene list | human draws in browser, agent pulls it |
 | **3** | diff engine + `describe` + 409-with-diff + `diff --since-last-pull` + history/diff UI | both sides can see the other's turn |
 | **4** | render worker: PNG/SVG export, thumbnails, `--merge`, `push --skeleton` | agent can *look* at the drawing |

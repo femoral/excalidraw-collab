@@ -1,5 +1,5 @@
 /**
- * `excalicli skills` — bundled skill discovery and installation.
+ * `excali skills` — bundled skill discovery and installation.
  *
  * Also a packaging tripwire: the skill must ship inside the CLI package and
  * stay resolvable from the built `dist/`, since that is how an installed CLI
@@ -40,7 +40,7 @@ function capture() {
 }
 
 function tempDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), "excalicli-skills-"));
+  return fs.mkdtempSync(path.join(os.tmpdir(), "excali-skills-"));
 }
 
 /** Env with a sandboxed HOME so --scope user never touches the real one. */

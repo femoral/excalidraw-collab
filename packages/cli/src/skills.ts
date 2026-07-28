@@ -1,5 +1,5 @@
 /**
- * `excalicli skills ls|install` — install the bundled agent skill into a
+ * `excali skills ls|install` — install the bundled agent skill into a
  * client's skills directory.
  *
  * The skill ships inside this package (`packages/cli/skills/<name>/`) so an
@@ -29,7 +29,7 @@ const CLIENT_DIRNAME: Record<SkillClient, string> = {
 };
 
 const USAGE =
-  "excalicli skills ls | install [NAME] [options] [--json]\n\n" +
+  "excali skills ls | install [NAME] [options] [--json]\n\n" +
   "  ls                 List skills bundled with this CLI\n" +
   "  install [NAME]     Copy a bundled skill into a skills directory\n\n" +
   "  --client NAME      claude (default) | agents — picks .claude/ or .agents/\n" +
@@ -217,7 +217,7 @@ function runLs(): CommandResult {
     data: rows,
     human:
       formatTable(human, ["name", "description"]) +
-      `\nInstall with: excalicli skills install ${skills[0]?.name ?? "NAME"}\n`,
+      `\nInstall with: excali skills install ${skills[0]?.name ?? "NAME"}\n`,
   };
 }
 

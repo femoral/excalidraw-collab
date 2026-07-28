@@ -6,10 +6,7 @@ import { afterEach, describe, test } from "node:test";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "./app.js";
 import { loadConfig, type Config } from "./config.js";
-import {
-  openDatabase,
-  type Database,
-} from "./db.js";
+import { openDatabase, type Database } from "./db.js";
 import { ErrorCode, type ErrorEnvelope } from "./errors.js";
 import { FileStore, hashFileContent } from "./files.js";
 import type { SceneMergeService } from "./merge.js";
@@ -535,10 +532,7 @@ describe("POST/GET /api/scenes/:slug/scene", () => {
       { force: true, merge: true },
     );
     assert.equal(res.statusCode, 400, res.body);
-    assert.equal(
-      (res.json() as ErrorEnvelope).error.code,
-      ErrorCode.VALIDATION,
-    );
+    assert.equal((res.json() as ErrorEnvelope).error.code, ErrorCode.VALIDATION);
   });
 
   test("merge of divergent edits to different elements keeps both", async () => {
@@ -826,24 +820,12 @@ describe("POST/GET /api/scenes/:slug/scene", () => {
       elements: Array<{ id: string; backgroundColor?: string }>;
     };
     const byId = Object.fromEntries(doc.elements.map((e) => [e.id, e]));
-    assert.equal(
-      byId.api!.backgroundColor,
-      "#b2f2bb",
-      "agent hand-edit to API must survive merge",
-    );
-    assert.equal(
-      byId.db!.backgroundColor,
-      "#ffc9c9",
-      "human edit to DB must survive merge",
-    );
+    assert.equal(byId.api!.backgroundColor, "#b2f2bb", "agent hand-edit to API must survive merge");
+    assert.equal(byId.db!.backgroundColor, "#ffc9c9", "human edit to DB must survive merge");
 
     const diff = body.diff!;
     const nonEmpty =
-      diff.summary.added +
-        diff.summary.deleted +
-        diff.summary.updated +
-        diff.summary.reordered >
-      0;
+      diff.summary.added + diff.summary.deleted + diff.summary.updated + diff.summary.reordered > 0;
     assert.ok(
       nonEmpty,
       "merge-decided diff must not be empty when committed version differs from remote head",
@@ -853,9 +835,7 @@ describe("POST/GET /api/scenes/:slug/scene", () => {
         (c) =>
           c.op === "update" &&
           c.id === "api" &&
-          c.props.some(
-            (p) => p.key === "backgroundColor" && p.to === "#b2f2bb",
-          ),
+          c.props.some((p) => p.key === "backgroundColor" && p.to === "#b2f2bb"),
       ),
       "merge-decided diff must report the API fill from the client",
     );
@@ -944,11 +924,7 @@ describe("POST/GET /api/scenes/:slug/scene", () => {
       bEl === undefined || bEl.isDeleted === true,
       "client deletion of B must survive merge",
     );
-    assert.equal(
-      byId.a!.backgroundColor,
-      "#ffc9c9",
-      "remote restyle of A must survive",
-    );
+    assert.equal(byId.a!.backgroundColor, "#ffc9c9", "remote restyle of A must survive");
     assert.ok(
       live.some((e) => e.id === "a"),
       "remote-edited A must remain live",
@@ -1112,10 +1088,7 @@ describe("POST/GET /api/scenes/:slug/scene", () => {
       },
     });
     assert.equal(missing.statusCode, 400);
-    assert.equal(
-      (missing.json() as ErrorEnvelope).error.code,
-      ErrorCode.VALIDATION,
-    );
+    assert.equal((missing.json() as ErrorEnvelope).error.code, ErrorCode.VALIDATION);
 
     const empty = await pushScene(app, token, {
       parentVersion: 0,
@@ -1123,10 +1096,7 @@ describe("POST/GET /api/scenes/:slug/scene", () => {
       message: "   ",
     });
     assert.equal(empty.statusCode, 400);
-    assert.equal(
-      (empty.json() as ErrorEnvelope).error.code,
-      ErrorCode.VALIDATION,
-    );
+    assert.equal((empty.json() as ErrorEnvelope).error.code, ErrorCode.VALIDATION);
   });
 
   test("files round-trip: pushed image rehydrates identically on pull", async () => {
@@ -1158,10 +1128,7 @@ describe("POST/GET /api/scenes/:slug/scene", () => {
     assert.equal(pull.statusCode, 200, pull.body);
     const doc = pull.json() as {
       elements: Array<{ fileId?: string }>;
-      files: Record<
-        string,
-        { id: string; mimeType: string; dataURL: string; created: number }
-      >;
+      files: Record<string, { id: string; mimeType: string; dataURL: string; created: number }>;
     };
     assert.equal(doc.elements[0]!.fileId, PNG_FILE_ID);
     assert.ok(doc.files[PNG_FILE_ID]);
@@ -1303,8 +1270,7 @@ describe("optimistic concurrency", () => {
     const winner = r1.statusCode === 201 ? r1 : r2;
     const loser = r1.statusCode === 409 ? r1 : r2;
     assert.equal((winner.json() as PushVersionResponse).version, 2);
-    const details = (loser.json() as ErrorEnvelope).error
-      .details as ConflictDetails;
+    const details = (loser.json() as ErrorEnvelope).error.details as ConflictDetails;
     assert.equal(details.code, "conflict");
     assert.equal(details.head, 2);
     assert.equal(details.parentVersion, 1);
@@ -1547,8 +1513,7 @@ describe("thumbnailFileId on commit", () => {
       headers: bearer(token),
     });
     assert.equal(list.statusCode, 200);
-    const scenes = (list.json() as { scenes: Array<{ thumbnailFileId: string | null }> })
-      .scenes;
+    const scenes = (list.json() as { scenes: Array<{ thumbnailFileId: string | null }> }).scenes;
     assert.equal(scenes.length, 1);
     assert.equal(scenes[0]!.thumbnailFileId, PNG_FILE_ID);
 
@@ -1558,10 +1523,7 @@ describe("thumbnailFileId on commit", () => {
       headers: bearer(token),
     });
     assert.equal(meta.statusCode, 200);
-    assert.equal(
-      (meta.json() as { thumbnailFileId: string | null }).thumbnailFileId,
-      PNG_FILE_ID,
-    );
+    assert.equal((meta.json() as { thumbnailFileId: string | null }).thumbnailFileId, PNG_FILE_ID);
 
     // Thumbnail is anchored for GC (not only scene image file_ids).
     const refs = db.listReferencedFileIds();
@@ -1594,8 +1556,7 @@ describe("thumbnailFileId on commit", () => {
       url: "/api/scenes",
       headers: bearer(token),
     });
-    const scenes = (list.json() as { scenes: Array<{ thumbnailFileId: string | null }> })
-      .scenes;
+    const scenes = (list.json() as { scenes: Array<{ thumbnailFileId: string | null }> }).scenes;
     assert.equal(scenes[0]!.thumbnailFileId, null);
   });
 

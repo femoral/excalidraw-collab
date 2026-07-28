@@ -1,6 +1,6 @@
 /**
- * `excalicli pull SLUG [-o file] [--version N]`
- * `excalicli pull --all -o dir/`
+ * `excali pull SLUG [-o file] [--version N]`
+ * `excali pull --all -o dir/`
  *
  * Writes a `.excalidraw` file (or stdout with `-`) and records the pulled
  * version in local state so subsequent `push` can send parentVersion.
@@ -31,7 +31,7 @@ export type SceneDocument = {
 function requireAuth(ctx: CommandContext): void {
   if (!ctx.config.server || !ctx.config.token) {
     throw new CliError(
-      "No server/token configured. Set EXCALICLI_SERVER and EXCALICLI_TOKEN, or run `excalicli login`.",
+      "No server/token configured. Set EXCALI_SERVER and EXCALI_TOKEN, or run `excali login`.",
       { code: "USAGE" },
     );
   }
@@ -86,18 +86,16 @@ function parsePullArgs(args: string[]): {
     if (positionals.length > 0) {
       throw new UsageError(
         `pull --all does not take a SLUG (got ${positionals.join(" ")})\n\n` +
-          "Usage: excalicli pull --all -o dir/",
+          "Usage: excali pull --all -o dir/",
       );
     }
     if (version !== undefined) {
-      throw new UsageError(
-        "pull --all does not accept --version (pulls each scene head)",
-      );
+      throw new UsageError("pull --all does not accept --version (pulls each scene head)");
     }
     if (!output || output.trim().length === 0 || output === "-") {
       throw new UsageError(
         "pull --all requires -o DIR (a directory path, not -)\n\n" +
-          "Usage: excalicli pull --all -o dir/",
+          "Usage: excali pull --all -o dir/",
       );
     }
     return { all: true, output: output.trim() };
@@ -106,14 +104,14 @@ function parsePullArgs(args: string[]): {
   if (positionals.length === 0) {
     throw new UsageError(
       "pull requires SLUG (or --all)\n\n" +
-        "Usage: excalicli pull SLUG [-o file] [--version N]\n" +
-        "       excalicli pull --all -o dir/",
+        "Usage: excali pull SLUG [-o file] [--version N]\n" +
+        "       excali pull --all -o dir/",
     );
   }
   if (positionals.length > 1) {
     throw new UsageError(
       `unexpected arguments: ${positionals.slice(1).join(" ")}\n\n` +
-        "Usage: excalicli pull SLUG [-o file] [--version N]",
+        "Usage: excali pull SLUG [-o file] [--version N]",
     );
   }
 
@@ -148,10 +146,7 @@ async function pullOne(
     version = meta.headVersion;
   }
 
-  const qs =
-    opts.version !== undefined
-      ? `?v=${encodeURIComponent(String(opts.version))}`
-      : "";
+  const qs = opts.version !== undefined ? `?v=${encodeURIComponent(String(opts.version))}` : "";
   const scene = await apiFetch<SceneDocument>({
     path: `/api/scenes/${encodeURIComponent(slug)}/scene${qs}`,
     method: "GET",
@@ -174,10 +169,7 @@ async function pullOne(
   return { slug, version, path: outPath };
 }
 
-async function runPullAll(
-  ctx: CommandContext,
-  outDir: string,
-): Promise<CommandResult> {
+async function runPullAll(ctx: CommandContext, outDir: string): Promise<CommandResult> {
   const list = await apiFetch<{ scenes: SceneInfo[] }>({
     path: "/api/scenes",
     method: "GET",
@@ -245,10 +237,7 @@ async function runPull(ctx: CommandContext): Promise<CommandResult> {
     version = meta.headVersion;
   }
 
-  const qs =
-    parsed.version !== undefined
-      ? `?v=${encodeURIComponent(String(parsed.version))}`
-      : "";
+  const qs = parsed.version !== undefined ? `?v=${encodeURIComponent(String(parsed.version))}` : "";
   const scene = await apiFetch<SceneDocument>({
     path: `/api/scenes/${encodeURIComponent(slug)}/scene${qs}`,
     method: "GET",
@@ -279,11 +268,10 @@ async function runPull(ctx: CommandContext): Promise<CommandResult> {
 
 export const pullCommand: Command = {
   name: "pull",
-  description:
-    "Download a scene as .excalidraw (or all heads with --all) and record local state",
+  description: "Download a scene as .excalidraw (or all heads with --all) and record local state",
   usage:
-    "excalicli pull SLUG [-o file] [--version N] [--json]\n" +
-    "excalicli pull --all -o dir/ [--json]\n\n" +
+    "excali pull SLUG [-o file] [--version N] [--json]\n" +
+    "excali pull --all -o dir/ [--json]\n\n" +
     "  -o file       Output path (default: SLUG.excalidraw). Use - for stdout.\n" +
     "  --version N   Pull a specific version instead of head.\n" +
     "  --all -o dir  Write every scene head as plain .excalidraw files under dir/\n" +

@@ -1,5 +1,5 @@
 /**
- * `excalicli login --server URL --token T`
+ * `excali login --server URL --token T`
  *
  * Validates credentials against GET /api/scenes before writing config, so a bad
  * token fails immediately rather than mysteriously later.
@@ -31,13 +31,11 @@ function parseLoginArgs(args: string[]): { server: string; token: string } {
 
   if (!values.server || values.server.trim() === "") {
     throw new UsageError(
-      "login requires --server URL\n\nUsage: excalicli login --server URL --token T",
+      "login requires --server URL\n\nUsage: excali login --server URL --token T",
     );
   }
   if (!values.token || values.token.trim() === "") {
-    throw new UsageError(
-      "login requires --token T\n\nUsage: excalicli login --server URL --token T",
-    );
+    throw new UsageError("login requires --token T\n\nUsage: excali login --server URL --token T");
   }
 
   // Normalize trailing slash so relative URL joins stay consistent.
@@ -79,8 +77,7 @@ async function runLogin(ctx: CommandContext): Promise<CommandResult> {
 
 export const loginCommand: Command = {
   name: "login",
-  description:
-    "Save server URL and token after validating against GET /api/scenes",
-  usage: "excalicli login --server URL --token T [--json]",
+  description: "Save server URL and token after validating against GET /api/scenes",
+  usage: "excali login --server URL --token T [--json]",
   run: runLogin,
 };

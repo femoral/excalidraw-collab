@@ -7,11 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, test } from "node:test";
-import {
-  buildApp,
-  openDatabase,
-  type Database,
-} from "@excalidraw-collab/server";
+import { buildApp, openDatabase, type Database } from "@excalidraw-collab/server";
 import { run } from "./dispatch.js";
 import { ExitCode } from "./errors.js";
 import { getPulledVersion, statePath } from "./state.js";
@@ -64,9 +60,9 @@ type Harness = {
 };
 
 async function startServer(): Promise<Harness> {
-  const dataDir = tempDir("excalicli-e2e-data-");
-  const cwd = tempDir("excalicli-e2e-cwd-");
-  const configHome = tempDir("excalicli-e2e-xdg-");
+  const dataDir = tempDir("excali-e2e-data-");
+  const cwd = tempDir("excali-e2e-cwd-");
+  const configHome = tempDir("excali-e2e-xdg-");
   const token = "test-bootstrap-token-scenes-cli";
 
   const db = openDatabase(dataDir);
@@ -97,8 +93,8 @@ async function startServer(): Promise<Harness> {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     XDG_CONFIG_HOME: configHome,
-    EXCALICLI_SERVER: baseUrl,
-    EXCALICLI_TOKEN: token,
+    EXCALI_SERVER: baseUrl,
+    EXCALI_TOKEN: token,
   };
 
   return { app, db, baseUrl, token, dataDir, cwd, env };
@@ -212,7 +208,7 @@ test("push without local state on head>0 without --force exits usage suggesting 
     error: { code: string; message: string };
   };
   assert.equal(parsed.error.code, "USAGE");
-  assert.match(parsed.error.message, /excalicli pull arch/);
+  assert.match(parsed.error.message, /excali pull arch/);
   // Still no local state recorded on refusal.
   assert.equal(getPulledVersion(h.cwd, h.baseUrl, "arch"), undefined);
 });
@@ -441,9 +437,9 @@ test("new → pull → edit → push → pull returns the edit", async () => {
     const pulled = JSON.parse(c.stdout) as { version: number };
     assert.equal(pulled.version, 1);
 
-    const scene = JSON.parse(
-      fs.readFileSync(path.join(h.cwd, "arch.excalidraw"), "utf8"),
-    ) as { appState: { viewBackgroundColor?: string } };
+    const scene = JSON.parse(fs.readFileSync(path.join(h.cwd, "arch.excalidraw"), "utf8")) as {
+      appState: { viewBackgroundColor?: string };
+    };
     assert.equal(scene.appState.viewBackgroundColor, "#ff00aa");
   }
 });
@@ -530,8 +526,8 @@ test("stale push exits 4, renders server diff, leaves head unchanged", async () 
   assert.match(conflict.stderr, /parentVersion|does not match head|Conflict/i);
   assert.match(conflict.stderr, /v1\s*→\s*v2|v1 → v2/);
   // Exact resolution commands
-  assert.match(conflict.stderr, /excalicli pull race/);
-  assert.match(conflict.stderr, /excalicli push race -m "stale attempt"/);
+  assert.match(conflict.stderr, /excali pull race/);
+  assert.match(conflict.stderr, /excali push race -m "stale attempt"/);
   assert.match(conflict.stderr, /--force/);
   // Local state unchanged
   assert.equal(getPulledVersion(h.cwd, h.baseUrl, "race"), 1);
@@ -570,14 +566,8 @@ test("stale push exits 4, renders server diff, leaves head unchanged", async () 
   assert.equal(envelope.error.details.parentVersion, 1);
   assert.equal(envelope.error.details.diff.from, 1);
   assert.equal(envelope.error.details.diff.to, 2);
-  assert.ok(
-    envelope.error.details.resolution.some((c) =>
-      c.includes("excalicli pull race"),
-    ),
-  );
-  assert.ok(
-    envelope.error.details.resolution.some((c) => c.includes("--force")),
-  );
+  assert.ok(envelope.error.details.resolution.some((c) => c.includes("excali pull race")));
+  assert.ok(envelope.error.details.resolution.some((c) => c.includes("--force")));
 
   // Head still 2 after second failed push
   const meta2 = (await (
@@ -595,7 +585,7 @@ test("pull records version per server; same slug on two servers is isolated", as
   const a = await startServer();
   const b = await startServer();
   // Shared cwd so state.json holds both.
-  const cwd = tempDir("excalicli-e2e-shared-cwd-");
+  const cwd = tempDir("excali-e2e-shared-cwd-");
 
   for (const h of [a, b]) {
     const c = capture();

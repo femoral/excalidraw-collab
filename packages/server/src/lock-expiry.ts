@@ -44,12 +44,7 @@ export class LockExpiryScheduler {
    * Arm (or reschedule) expiry for a live claim.
    * `expiresAt` is the ISO string stored in the DB.
    */
-  arm(
-    sceneId: string,
-    slug: string,
-    holder: string,
-    expiresAt: string,
-  ): void {
+  arm(sceneId: string, slug: string, holder: string, expiresAt: string): void {
     this.disarm(sceneId);
     if (this.closed) return;
 
@@ -105,20 +100,10 @@ export class LockExpiryScheduler {
   private armFromRow(scene: SceneRow): void {
     if (!isSceneLockActive(scene)) return;
     if (!scene.lock_holder || !scene.lock_expires_at) return;
-    this.arm(
-      scene.id,
-      scene.slug,
-      scene.lock_holder,
-      scene.lock_expires_at,
-    );
+    this.arm(scene.id, scene.slug, scene.lock_holder, scene.lock_expires_at);
   }
 
-  private expireIfDue(
-    sceneId: string,
-    slug: string,
-    holder: string,
-    expiresAt: string,
-  ): void {
+  private expireIfDue(sceneId: string, slug: string, holder: string, expiresAt: string): void {
     if (this.closed) return;
 
     const scene = this.db.getSceneById(sceneId);

@@ -1,5 +1,5 @@
 /**
- * `excalicli token create|ls|revoke NAME` — admin-only token management.
+ * `excali token create|ls|revoke NAME` — admin-only token management.
  *
  * Server DELETE is by id; revoke looks up NAME via the list endpoint first.
  * token create prints the secret once with a plain warning.
@@ -22,8 +22,7 @@ export type TokenCreated = TokenInfo & {
   token: string;
 };
 
-const SECRET_WARNING =
-  "This secret is shown once and cannot be retrieved again. Save it now.";
+const SECRET_WARNING = "This secret is shown once and cannot be retrieved again. Save it now.";
 
 const ADMIN_REQUIRED_MESSAGE =
   "Admin token required. Your current token cannot create, list, or revoke tokens.";
@@ -31,7 +30,7 @@ const ADMIN_REQUIRED_MESSAGE =
 function requireAuthConfig(ctx: CommandContext): void {
   if (!ctx.config.server || !ctx.config.token) {
     throw new CliError(
-      "No server/token configured. Set EXCALICLI_SERVER and EXCALICLI_TOKEN, or run `excalicli login`.",
+      "No server/token configured. Set EXCALI_SERVER and EXCALI_TOKEN, or run `excali login`.",
       { code: "USAGE" },
     );
   }
@@ -47,10 +46,7 @@ function rethrowAdmin(err: unknown): never {
   throw err;
 }
 
-async function runCreate(
-  ctx: CommandContext,
-  name: string,
-): Promise<CommandResult> {
+async function runCreate(ctx: CommandContext, name: string): Promise<CommandResult> {
   requireAuthConfig(ctx);
   let created: TokenCreated;
   try {
@@ -108,20 +104,11 @@ async function runLs(ctx: CommandContext): Promise<CommandResult> {
 
   return {
     data: { tokens },
-    human: formatTable(tokens, [
-      "name",
-      "id",
-      "isAdmin",
-      "createdAt",
-      "lastUsed",
-    ]),
+    human: formatTable(tokens, ["name", "id", "isAdmin", "createdAt", "lastUsed"]),
   };
 }
 
-async function runRevoke(
-  ctx: CommandContext,
-  name: string,
-): Promise<CommandResult> {
+async function runRevoke(ctx: CommandContext, name: string): Promise<CommandResult> {
   requireAuthConfig(ctx);
 
   let body: { tokens: TokenInfo[] };
@@ -186,9 +173,9 @@ function parseTokenArgs(args: string[]): {
     throw new UsageError(
       "token requires a subcommand: create | ls | revoke\n\n" +
         "Usage:\n" +
-        "  excalicli token create NAME\n" +
-        "  excalicli token ls\n" +
-        "  excalicli token revoke NAME",
+        "  excali token create NAME\n" +
+        "  excali token ls\n" +
+        "  excali token revoke NAME",
     );
   }
   if (extra.length > 0) {
@@ -204,9 +191,7 @@ function parseTokenArgs(args: string[]): {
 
   if (sub === "create" || sub === "revoke") {
     if (!name || name.trim() === "") {
-      throw new UsageError(
-        `token ${sub} requires NAME\n\nUsage: excalicli token ${sub} NAME`,
-      );
+      throw new UsageError(`token ${sub} requires NAME\n\nUsage: excali token ${sub} NAME`);
     }
     return { sub, name: name.trim() };
   }
@@ -214,9 +199,9 @@ function parseTokenArgs(args: string[]): {
   throw new UsageError(
     `unknown token subcommand: ${sub}\n\n` +
       "Usage:\n" +
-      "  excalicli token create NAME\n" +
-      "  excalicli token ls\n" +
-      "  excalicli token revoke NAME",
+      "  excali token create NAME\n" +
+      "  excali token ls\n" +
+      "  excali token revoke NAME",
   );
 }
 
@@ -233,10 +218,9 @@ async function runToken(ctx: CommandContext): Promise<CommandResult> {
 
 export const tokenCommand: Command = {
   name: "token",
-  description:
-    "Create, list, or revoke named tokens (admin token required)",
+  description: "Create, list, or revoke named tokens (admin token required)",
   usage:
-    "excalicli token create NAME | ls | revoke NAME [--json]\n\n" +
+    "excali token create NAME | ls | revoke NAME [--json]\n\n" +
     "Requires an admin token. Non-admin tokens fail with a clear message.\n" +
     "`token create` prints the secret once — it cannot be retrieved again.",
   run: runToken,

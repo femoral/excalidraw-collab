@@ -19,7 +19,7 @@ import {
 const tempDirs: string[] = [];
 
 function tempCwd(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "excalicli-state-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "excali-state-"));
   tempDirs.push(dir);
   return dir;
 }

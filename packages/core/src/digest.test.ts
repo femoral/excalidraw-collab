@@ -16,9 +16,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = join(HERE, "..", "test", "fixtures");
 
 function loadFixture(name: string): SceneDocument {
-  const raw = JSON.parse(
-    readFileSync(join(FIXTURES_DIR, name), "utf8"),
-  ) as {
+  const raw = JSON.parse(readFileSync(join(FIXTURES_DIR, name), "utf8")) as {
     elements: ExcalidrawElement[];
     appState?: SceneDocument["appState"];
     files?: SceneDocument["files"];
@@ -85,10 +83,7 @@ describe("digestScene", () => {
     assert.equal(d.frames[0]!.name, "Pipeline");
     assert.equal(d.frames[0]!.id, "frame-main");
     // children: listable only (rect + ellipse), not the bound text
-    assert.deepEqual(d.frames[0]!.children.slice().sort(), [
-      "child-ellipse",
-      "child-rect",
-    ]);
+    assert.deepEqual(d.frames[0]!.children.slice().sort(), ["child-ellipse", "child-rect"]);
 
     // Bound text is counted but not listed separately
     assert.equal(d.countsByType["text"], 1);
@@ -147,12 +142,7 @@ describe("digestScene", () => {
     const d = digestScene(doc);
     // All shapes at y=100 (rect, ellipse, diamond) then text at y=220
     const ids = d.elements.map((e) => e.id);
-    assert.deepEqual(ids, [
-      "rect-1",
-      "ellipse-1",
-      "diamond-1",
-      "text-standalone",
-    ]);
+    assert.deepEqual(ids, ["rect-1", "ellipse-1", "diamond-1", "text-standalone"]);
   });
 
   test("deterministic: same input → byte-identical digest + text", () => {
@@ -171,12 +161,7 @@ describe("digestScene", () => {
     };
     const shuffled: SceneDocument = {
       ...doc,
-      elements: [
-        doc.elements[2]!,
-        doc.elements[0]!,
-        doc.elements[3]!,
-        doc.elements[1]!,
-      ],
+      elements: [doc.elements[2]!, doc.elements[0]!, doc.elements[3]!, doc.elements[1]!],
     };
     const base = digestScene(doc);
     assert.equal(JSON.stringify(digestScene(reversed)), JSON.stringify(base));
@@ -290,14 +275,15 @@ describe("formatDigest", () => {
     const text = formatDigest(digestScene(doc));
 
     // Exact rendering for the report — lock readability.
-    const expected = [
-      "4 elements · ellipse:1 frame:1 rectangle:1 text:1 · 1 frame · bbox (130,130 260x100)",
-      "",
-      "frames:",
-      '  frame "Pipeline"  (130,130 260x100)',
-      '    rectangle "Worker"  (140,140 120x60)',
-      "    ellipse  (300,140 80x80)",
-    ].join("\n") + "\n";
+    const expected =
+      [
+        "4 elements · ellipse:1 frame:1 rectangle:1 text:1 · 1 frame · bbox (130,130 260x100)",
+        "",
+        "frames:",
+        '  frame "Pipeline"  (130,130 260x100)',
+        '    rectangle "Worker"  (140,140 120x60)',
+        "    ellipse  (300,140 80x80)",
+      ].join("\n") + "\n";
 
     // Allow the free-elements section to be absent (all kids are in the frame).
     // Print actual on mismatch for easier debugging.

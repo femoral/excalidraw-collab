@@ -53,27 +53,27 @@ client-side merge.
 Someone else holds the advisory turn lock.
 
 - From `turn claim`: the message names the holder and the expiry. Wait with
-  `excalicli watch SLUG --for-turn`, or proceed anyway — the lock is advisory
+  `excali watch SLUG --for-turn`, or proceed anyway — the lock is advisory
   and does not block `push`.
 - From `push --respect-lock`: drop the flag to push regardless, or wait.
 - A stale lock from a crashed agent can be cleared by anyone:
-  `excalicli turn release SLUG`. Locks also expire on their own TTL.
+  `excali turn release SLUG`. Locks also expire on their own TTL.
 
 ## Exit 2 — USAGE
 
 One of:
 
-- **Bad arguments.** Check `excalicli <command> --help`; do not guess flags.
+- **Bad arguments.** Check `excali <command> --help`; do not guess flags.
 - **No server/token configured.** See [setup.md](setup.md).
 - **Push without a prior pull** when head is already past v0. Run
-  `excalicli pull SLUG` first, re-apply your edits, then push.
+  `excali pull SLUG` first, re-apply your edits, then push.
 
 ## Exit 1 — ERROR
 
 Server, network, or I/O failure — including "scene not found".
 
-- Confirm the slug with `excalicli ls`.
-- Confirm connectivity and identity with `excalicli whoami`.
+- Confirm the slug with `excali ls`.
+- Confirm connectivity and identity with `excali whoami`.
 - If a feature reports it is unavailable (`export --format png`,
   `push --skeleton`, `push --merge`), the server's render worker is off. Use the
   text path instead: `describe` for reading, a full-document push for writing.
@@ -98,5 +98,5 @@ Server, network, or I/O failure — including "scene not found".
   owns exit-code mapping, conflict diffs, and local state.
 - Hand-edit `.excalidraw-collab/state.json` or invent version numbers.
 - Busy-poll `diff` in a loop while waiting for a human. Use
-  `excalicli watch SLUG --once --timeout SECONDS`.
+  `excali watch SLUG --once --timeout SECONDS`.
 - Commit tokens, bootstrap secrets, or absolute host paths into a repository.

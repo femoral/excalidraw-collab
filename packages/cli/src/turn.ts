@@ -1,5 +1,5 @@
 /**
- * `excalicli turn claim|release SLUG` — advisory turn lock.
+ * `excali turn claim|release SLUG` — advisory turn lock.
  *
  * Purely polite: claim fails with exit 5 when someone else holds an active
  * lock, but the scene can still be pushed without the lock.
@@ -18,7 +18,7 @@ export type LockInfo = {
 function requireAuth(ctx: CommandContext): void {
   if (!ctx.config.server || !ctx.config.token) {
     throw new CliError(
-      "No server/token configured. Set EXCALICLI_SERVER and EXCALICLI_TOKEN, or run `excalicli login`.",
+      "No server/token configured. Set EXCALI_SERVER and EXCALI_TOKEN, or run `excali login`.",
       { code: "USAGE" },
     );
   }
@@ -52,21 +52,21 @@ function parseTurnArgs(args: string[]): {
     throw new UsageError(
       "turn requires a subcommand: claim | release\n\n" +
         "Usage:\n" +
-        "  excalicli turn claim SLUG [--ttl SECONDS]\n" +
-        "  excalicli turn release SLUG",
+        "  excali turn claim SLUG [--ttl SECONDS]\n" +
+        "  excali turn release SLUG",
     );
   }
   if (sub !== "claim" && sub !== "release") {
     throw new UsageError(
       `unknown turn subcommand: ${sub}\n\n` +
         "Usage:\n" +
-        "  excalicli turn claim SLUG [--ttl SECONDS]\n" +
-        "  excalicli turn release SLUG",
+        "  excali turn claim SLUG [--ttl SECONDS]\n" +
+        "  excali turn release SLUG",
     );
   }
   if (!slug || slug.trim() === "") {
     throw new UsageError(
-      `turn ${sub} requires SLUG\n\nUsage: excalicli turn ${sub} SLUG` +
+      `turn ${sub} requires SLUG\n\nUsage: excali turn ${sub} SLUG` +
         (sub === "claim" ? " [--ttl SECONDS]" : ""),
     );
   }
@@ -89,11 +89,7 @@ function parseTurnArgs(args: string[]): {
   return { sub, slug: slug.trim(), ttl };
 }
 
-async function runClaim(
-  ctx: CommandContext,
-  slug: string,
-  ttl?: number,
-): Promise<CommandResult> {
+async function runClaim(ctx: CommandContext, slug: string, ttl?: number): Promise<CommandResult> {
   requireAuth(ctx);
 
   const body: { ttl?: number } = {};
@@ -111,12 +107,10 @@ async function runClaim(
     if (err instanceof CliError && err.code === "LOCK_HELD") {
       const details = err.details as LockInfo | undefined;
       const holder = details?.holder ?? "another identity";
-      const until = details?.expiresAt
-        ? ` until ${details.expiresAt}`
-        : "";
+      const until = details?.expiresAt ? ` until ${details.expiresAt}` : "";
       throw new CliError(
         `Turn held by ${holder}${until}.\n` +
-          `Release with: excalicli turn release ${slug}\n` +
+          `Release with: excali turn release ${slug}\n` +
           `Or push without the lock (advisory only).`,
         {
           code: "LOCK_HELD",
@@ -136,16 +130,11 @@ async function runClaim(
 
   return {
     data,
-    human:
-      `Claimed turn on ${slug} as ${lock.holder}\n` +
-      `expires: ${lock.expiresAt}\n`,
+    human: `Claimed turn on ${slug} as ${lock.holder}\n` + `expires: ${lock.expiresAt}\n`,
   };
 }
 
-async function runRelease(
-  ctx: CommandContext,
-  slug: string,
-): Promise<CommandResult> {
+async function runRelease(ctx: CommandContext, slug: string): Promise<CommandResult> {
   requireAuth(ctx);
 
   await apiFetch<void>({
@@ -175,10 +164,9 @@ async function runTurn(ctx: CommandContext): Promise<CommandResult> {
 
 export const turnCommand: Command = {
   name: "turn",
-  description:
-    "Claim or release the advisory turn lock on a scene (politeness, not enforcement)",
+  description: "Claim or release the advisory turn lock on a scene (politeness, not enforcement)",
   usage:
-    "excalicli turn claim SLUG [--ttl SECONDS] | release SLUG [--json]\n\n" +
+    "excali turn claim SLUG [--ttl SECONDS] | release SLUG [--json]\n\n" +
     "  claim    Hold the turn for this token's identity (default TTL 30 min)\n" +
     "  release  Free the turn (any identity may release — crash recovery)\n" +
     "  --ttl    Claim lifetime in seconds\n\n" +

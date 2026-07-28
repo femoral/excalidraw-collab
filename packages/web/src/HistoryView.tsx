@@ -15,12 +15,7 @@ import {
   type ReactElement,
   type SetStateAction,
 } from "react";
-import {
-  ApiError,
-  type ApiClient,
-  type SceneDiffResponse,
-  type VersionInfo,
-} from "./api.ts";
+import { ApiError, type ApiClient, type SceneDiffResponse, type VersionInfo } from "./api.ts";
 import {
   appendRemoteVersion,
   buildRestorePayload,
@@ -85,20 +80,12 @@ type DiffState =
       view: PrioritizedDiffView;
     };
 
-export function HistoryView({
-  slug,
-  api,
-  onNavigate,
-}: HistoryViewProps): ReactElement {
+export function HistoryView({ slug, api, onNavigate }: HistoryViewProps): ReactElement {
   const [timeline, setTimeline] = useState<TimelineState>({ kind: "loading" });
   const [selected, setSelected] = useState<number[]>([]);
   const [diff, setDiff] = useState<DiffState>({ kind: "idle" });
-  const [expandedSections, setExpandedSections] = useState<
-    Record<string, boolean>
-  >({});
-  const [showAllInSection, setShowAllInSection] = useState<
-    Record<string, boolean>
-  >({});
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const [showAllInSection, setShowAllInSection] = useState<Record<string, boolean>>({});
   const [restoreBusy, setRestoreBusy] = useState<number | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [banner, setBanner] = useState<string | null>(null);
@@ -141,9 +128,7 @@ export function HistoryView({
         }
       }
       await Promise.all(
-        Array.from({ length: Math.min(CONCURRENCY, versions.length) }, () =>
-          worker(),
-        ),
+        Array.from({ length: Math.min(CONCURRENCY, versions.length) }, () => worker()),
       );
 
       headVersionRef.current = page.headVersion;
@@ -212,10 +197,7 @@ export function HistoryView({
             continue;
           }
 
-          const to =
-            typeof event.headVersion === "number"
-              ? event.headVersion
-              : event.version;
+          const to = typeof event.headVersion === "number" ? event.headVersion : event.version;
           if (!Number.isInteger(to) || to <= pollSinceRef.current) {
             poll = pollOnTimeout(poll);
             continue;
@@ -234,9 +216,7 @@ export function HistoryView({
             // Self-authored or already known — advance head watermark only.
             if (to > headVersionRef.current) {
               headVersionRef.current = to;
-              setTimeline((s) =>
-                s.kind === "ready" ? { ...s, headVersion: to } : s,
-              );
+              setTimeline((s) => (s.kind === "ready" ? { ...s, headVersion: to } : s));
             }
             continue;
           }
@@ -247,11 +227,7 @@ export function HistoryView({
           // Fetch parent→version change counts for the new row (non-fatal).
           let countLabel = "";
           try {
-            const d = await api.getDiff(
-              slug,
-              parentRefForVersion(info),
-              info.version,
-            );
+            const d = await api.getDiff(slug, parentRefForVersion(info), info.version);
             countLabel = formatChangeCounts(d.summary);
           } catch {
             countLabel = "";
@@ -369,8 +345,7 @@ export function HistoryView({
           elements: doc.elements ?? [],
           appState: doc.appState,
           files: doc.files as
-            | Record<string, import("./api.ts").BinaryFilePayload | undefined>
-            | undefined,
+            Record<string, import("./api.ts").BinaryFilePayload | undefined> | undefined,
         },
         timeline.headVersion,
         version,
@@ -385,13 +360,10 @@ export function HistoryView({
       if (err instanceof ApiError && err.isUnauthorized) return;
       if (err instanceof ApiError && err.isConflict) {
         setRestoreError(
-          err.message ||
-            "Conflict: head moved while restoring. Reload history and try again.",
+          err.message || "Conflict: head moved while restoring. Reload history and try again.",
         );
       } else {
-        setRestoreError(
-          err instanceof Error ? err.message : "Restore failed.",
-        );
+        setRestoreError(err instanceof Error ? err.message : "Restore failed.");
       }
     } finally {
       setRestoreBusy(null);
@@ -408,15 +380,8 @@ export function HistoryView({
   function toggleSection(key: string) {
     setExpandedSections((prev) => {
       const section =
-        diff.kind === "ready"
-          ? diff.view.sections.find((s) => s.key === key)
-          : undefined;
-      const currently =
-        key in prev
-          ? prev[key]!
-          : section
-            ? !section.defaultCollapsed
-            : true;
+        diff.kind === "ready" ? diff.view.sections.find((s) => s.key === key) : undefined;
+      const currently = key in prev ? prev[key]! : section ? !section.defaultCollapsed : true;
       return { ...prev, [key]: !currently };
     });
   }
@@ -440,11 +405,7 @@ export function HistoryView({
         <div className="history-state history-state-error" role="alert">
           <p>{timeline.message}</p>
           <div className="history-state-actions">
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => void loadTimeline()}
-            >
+            <button type="button" className="btn btn-secondary" onClick={() => void loadTimeline()}>
               Retry
             </button>
             <button
@@ -518,8 +479,8 @@ export function HistoryView({
         <div className="history-empty">
           <h3>Nothing committed yet</h3>
           <p>
-            Drafts never appear here. Open the editor and use{" "}
-            <strong>Commit turn</strong> to create the first version.
+            Drafts never appear here. Open the editor and use <strong>Commit turn</strong> to create
+            the first version.
           </p>
           <button
             type="button"
@@ -531,10 +492,7 @@ export function HistoryView({
         </div>
       ) : (
         <div className="history-layout">
-          <section
-            className="history-timeline"
-            aria-labelledby={titleId}
-          >
+          <section className="history-timeline" aria-labelledby={titleId}>
             <ol className="version-list">
               {versions.map((v) => {
                 const selectedHere = isVersionSelected(selected, v.version);
@@ -545,13 +503,7 @@ export function HistoryView({
 
                 return (
                   <li key={v.version}>
-                    <div
-                      className={
-                        selectedHere
-                          ? "version-row is-selected"
-                          : "version-row"
-                      }
-                    >
+                    <div className={selectedHere ? "version-row is-selected" : "version-row"}>
                       <button
                         type="button"
                         className="version-select"
@@ -566,49 +518,33 @@ export function HistoryView({
                           <span className="version-row-top">
                             <span className="version-number">
                               v{v.version}
-                              {isHead ? (
-                                <span className="version-head-badge">head</span>
-                              ) : null}
+                              {isHead ? <span className="version-head-badge">head</span> : null}
                               {role === "from" ? (
-                                <span className="version-role-badge role-from">
-                                  from
-                                </span>
+                                <span className="version-role-badge role-from">from</span>
                               ) : null}
                               {role === "to" ? (
-                                <span className="version-role-badge role-to">
-                                  to
-                                </span>
+                                <span className="version-role-badge role-to">to</span>
                               ) : null}
                             </span>
                             {counts ? (
-                              <span
-                                className="version-counts"
-                                title="Changes vs parent"
-                              >
+                              <span className="version-counts" title="Changes vs parent">
                                 {counts}
                               </span>
                             ) : null}
                           </span>
-                          <span className="version-message">
-                            {v.message || "(no message)"}
-                          </span>
+                          <span className="version-message">{v.message || "(no message)"}</span>
                           <span className="version-meta">
                             <span className="version-author">{v.author}</span>
                             <span className="meta-sep" aria-hidden="true">
                               ·
                             </span>
-                            <time
-                              dateTime={v.createdAt}
-                              title={ts.absolute}
-                            >
+                            <time dateTime={v.createdAt} title={ts.absolute}>
                               {ts.relative || ts.absolute}
                             </time>
                             <span className="meta-sep" aria-hidden="true">
                               ·
                             </span>
-                            <span className="version-elcount">
-                              {v.elementCount} el
-                            </span>
+                            <span className="version-elcount">{v.elementCount} el</span>
                           </span>
                         </span>
                       </button>
@@ -623,20 +559,13 @@ export function HistoryView({
                         <button
                           type="button"
                           className="btn btn-secondary btn-sm"
-                          disabled={
-                            isHead ||
-                            restoreBusy !== null
-                          }
+                          disabled={isHead || restoreBusy !== null}
                           title={
-                            isHead
-                              ? "Already head"
-                              : "Commit this version’s content as a new head"
+                            isHead ? "Already head" : "Commit this version’s content as a new head"
                           }
                           onClick={() => void handleRestore(v.version)}
                         >
-                          {restoreBusy === v.version
-                            ? "Restoring…"
-                            : "Restore"}
+                          {restoreBusy === v.version ? "Restoring…" : "Restore"}
                         </button>
                       </div>
                     </div>
@@ -646,10 +575,7 @@ export function HistoryView({
             </ol>
           </section>
 
-          <section
-            className="history-diff"
-            aria-label="Version diff"
-          >
+          <section className="history-diff" aria-label="Version diff">
             <DiffPanel
               selected={selected}
               diff={diff}
@@ -692,9 +618,8 @@ function DiffPanel({
       <div className="diff-empty">
         <h3>Compare versions</h3>
         <p>
-          Click two versions in the timeline to see what changed between them.
-          Diffs prioritise adds, deletes, and content edits so a large scene
-          stays scannable.
+          Click two versions in the timeline to see what changed between them. Diffs prioritise
+          adds, deletes, and content edits so a large scene stays scannable.
         </p>
       </div>
     );
@@ -705,14 +630,10 @@ function DiffPanel({
       <div className="diff-empty">
         <h3>Select a second version</h3>
         <p>
-          <strong>v{selected[0]}</strong> is selected. Pick another version to
-          build the diff (older → newer).
+          <strong>v{selected[0]}</strong> is selected. Pick another version to build the diff (older
+          → newer).
         </p>
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          onClick={onClearSelection}
-        >
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onClearSelection}>
           Clear selection
         </button>
       </div>
@@ -759,11 +680,7 @@ function DiffPanel({
             <SummaryPills summary={view.summary} appState={view.appStateCount} />
           </p>
         </div>
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          onClick={onClearSelection}
-        >
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onClearSelection}>
           Clear
         </button>
       </header>
@@ -774,8 +691,7 @@ function DiffPanel({
         </div>
       ) : (
         <>
-          {view.topChanges.length > 0 &&
-          totalChangeCount(view.summary) > view.topChanges.length ? (
+          {view.topChanges.length > 0 && totalChangeCount(view.summary) > view.topChanges.length ? (
             <div className="diff-top">
               <h4 className="diff-section-heading">
                 Top changes
@@ -794,19 +710,13 @@ function DiffPanel({
           {view.sections.map((section) => {
             const open = sectionIsExpanded(section);
             const showAll = showAllInSection[section.key] === true;
-            const visible = showAll
-              ? section.items
-              : section.items.slice(0, section.previewCount);
+            const visible = showAll ? section.items : section.items.slice(0, section.previewCount);
             const hidden = section.items.length - visible.length;
 
             return (
               <section
                 key={section.key}
-                className={
-                  open
-                    ? "diff-section"
-                    : "diff-section is-collapsed"
-                }
+                className={open ? "diff-section" : "diff-section is-collapsed"}
               >
                 <button
                   type="button"
@@ -819,9 +729,7 @@ function DiffPanel({
                   </span>
                   <span className="diff-section-heading">
                     {section.title}
-                    <span className="diff-section-count">
-                      {section.items.length}
-                    </span>
+                    <span className="diff-section-count">{section.items.length}</span>
                   </span>
                   {section.defaultCollapsed && !open ? (
                     <span className="diff-section-hint">collapsed</span>
@@ -831,10 +739,7 @@ function DiffPanel({
                   <>
                     <ul className="diff-item-list">
                       {visible.map((item, i) => (
-                        <DiffItemRow
-                          key={`${section.key}-${i}`}
-                          item={item}
-                        />
+                        <DiffItemRow key={`${section.key}-${i}`} item={item} />
                       ))}
                     </ul>
                     {hidden > 0 ? (
@@ -885,9 +790,7 @@ function SummaryPills({
 }): ReactElement {
   return (
     <span className="diff-pills">
-      {summary.added > 0 ? (
-        <span className="diff-pill diff-pill-add">+{summary.added}</span>
-      ) : null}
+      {summary.added > 0 ? <span className="diff-pill diff-pill-add">+{summary.added}</span> : null}
       {summary.deleted > 0 ? (
         <span className="diff-pill diff-pill-delete">−{summary.deleted}</span>
       ) : null}
@@ -897,9 +800,7 @@ function SummaryPills({
       {summary.reordered > 0 ? (
         <span className="diff-pill diff-pill-reorder">↻{summary.reordered}</span>
       ) : null}
-      {appState > 0 ? (
-        <span className="diff-pill diff-pill-appstate">⚙{appState}</span>
-      ) : null}
+      {appState > 0 ? <span className="diff-pill diff-pill-appstate">⚙{appState}</span> : null}
       {totalChangeCount(summary) === 0 && appState === 0 ? (
         <span className="diff-pill">no changes</span>
       ) : null}
@@ -917,9 +818,7 @@ function DiffItemRow({ item }: { item: DiffViewItem }): ReactElement {
         </span>
         <span className="diff-item-body">
           <span className="diff-item-headline">{item.headline}</span>
-          {item.detail ? (
-            <span className="diff-item-detail">{item.detail}</span>
-          ) : null}
+          {item.detail ? <span className="diff-item-detail">{item.detail}</span> : null}
         </span>
       </li>
     );
@@ -936,11 +835,8 @@ function DiffItemRow({ item }: { item: DiffViewItem }): ReactElement {
         <span className="diff-item-headline" title={`id: ${id}`}>
           {item.headline || elementHeadline(item.change)}
         </span>
-        {item.detail ? (
-          <span className="diff-item-detail">{item.detail}</span>
-        ) : null}
+        {item.detail ? <span className="diff-item-detail">{item.detail}</span> : null}
       </span>
     </li>
   );
 }
-

@@ -41,10 +41,7 @@ export function sceneListOnUnauthorized(): SceneListStatus {
   return { kind: "idle" };
 }
 
-export function reduceSceneList(
-  state: SceneListStatus,
-  action: SceneListAction,
-): SceneListStatus {
+export function reduceSceneList(state: SceneListStatus, action: SceneListAction): SceneListStatus {
   switch (action.type) {
     case "load_start":
       return { kind: "loading" };
@@ -96,10 +93,7 @@ export function sortScenesByUpdatedAt(scenes: SceneInfo[]): SceneInfo[] {
  * Whether the advisory lock should show as held. Expired locks are treated
  * as inactive (the server never hard-blocks on them).
  */
-export function isLockActive(
-  lock: SceneInfo["lock"],
-  nowMs: number = Date.now(),
-): boolean {
+export function isLockActive(lock: SceneInfo["lock"], nowMs: number = Date.now()): boolean {
   if (lock === null) return false;
   if (!lock.expiresAt) return true;
   const expires = Date.parse(lock.expiresAt);
@@ -125,10 +119,7 @@ export function isValidSlug(slug: string): boolean {
  * Human-readable relative time. Falls back to the absolute ISO date when
  * the delta is large or parsing fails.
  */
-export function formatUpdatedAt(
-  iso: string,
-  nowMs: number = Date.now(),
-): string {
+export function formatUpdatedAt(iso: string, nowMs: number = Date.now()): string {
   const then = Date.parse(iso);
   if (Number.isNaN(then)) return iso;
 
@@ -178,9 +169,7 @@ export function headAuthorLabel(scene: SceneInfo): string {
 export function buildCreatePayload(
   nameRaw: string,
   slugRaw: string,
-):
-  | { ok: true; body: { name: string; slug?: string } }
-  | { ok: false; error: string } {
+): { ok: true; body: { name: string; slug?: string } } | { ok: false; error: string } {
   const name = nameRaw.trim();
   if (name.length === 0) {
     return { ok: false, error: "Name is required." };
@@ -196,8 +185,7 @@ export function buildCreatePayload(
   if (!isValidSlug(slug)) {
     return {
       ok: false,
-      error:
-        "Slug must be 1–64 lowercase letters, digits, or single hyphens.",
+      error: "Slug must be 1–64 lowercase letters, digits, or single hyphens.",
     };
   }
   return { ok: true, body: { name, slug } };
@@ -270,30 +258,17 @@ export function applyGlobalEventToScene(
 
   return {
     ...scene,
-    headVersion:
-      typeof event.headVersion === "number"
-        ? event.headVersion
-        : scene.headVersion,
-    elementCount:
-      typeof event.elementCount === "number"
-        ? event.elementCount
-        : scene.elementCount,
-    headAuthor:
-      typeof event.author === "string" ? event.author : scene.headAuthor,
-    updatedAt:
-      typeof event.createdAt === "string" ? event.createdAt : scene.updatedAt,
+    headVersion: typeof event.headVersion === "number" ? event.headVersion : scene.headVersion,
+    elementCount: typeof event.elementCount === "number" ? event.elementCount : scene.elementCount,
+    headAuthor: typeof event.author === "string" ? event.author : scene.headAuthor,
+    updatedAt: typeof event.createdAt === "string" ? event.createdAt : scene.updatedAt,
     thumbnailFileId:
-      event.thumbnailFileId !== undefined
-        ? event.thumbnailFileId
-        : scene.thumbnailFileId,
+      event.thumbnailFileId !== undefined ? event.thumbnailFileId : scene.thumbnailFileId,
     lock,
   };
 }
 
-function normalizeLock(
-  lock: SceneInfo["lock"],
-  nowMs: number,
-): SceneInfo["lock"] {
+function normalizeLock(lock: SceneInfo["lock"], nowMs: number): SceneInfo["lock"] {
   if (!lock) return null;
   return isLockActive(lock, nowMs) ? lock : null;
 }
@@ -313,9 +288,7 @@ export function applyGlobalEventsToList(
 
   for (const event of events) {
     if (!shouldApplyGlobalEvent(event, selfName)) continue;
-    const idx = next.findIndex(
-      (s) => s.slug === event.slug || s.id === event.sceneId,
-    );
+    const idx = next.findIndex((s) => s.slug === event.slug || s.id === event.sceneId);
     if (idx < 0) {
       // Unknown scene (created elsewhere) — signal caller to refetch.
       changed = true;

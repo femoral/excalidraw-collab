@@ -392,11 +392,7 @@ export class Database {
   private readonly raw: DatabaseSync;
   private closed = false;
 
-  private constructor(
-    dataDir: string,
-    dbPath: string,
-    raw: DatabaseSync,
-  ) {
+  private constructor(dataDir: string, dbPath: string, raw: DatabaseSync) {
     this.dataDir = dataDir;
     this.dbPath = dbPath;
     this.raw = raw;
@@ -406,17 +402,12 @@ export class Database {
    * Open (or create) the database under `dataDir`, apply pragmas, and run
    * any pending migrations. Creates `dataDir` if it does not exist.
    */
-  static open(
-    dataDir: string,
-    options: OpenDatabaseOptions = {},
-  ): Database {
+  static open(dataDir: string, options: OpenDatabaseOptions = {}): Database {
     const resolvedDir = path.resolve(dataDir);
     if (!options.memory) {
       mkdirSync(resolvedDir, { recursive: true });
     }
-    const dbPath = options.memory
-      ? ":memory:"
-      : path.join(resolvedDir, DB_FILENAME);
+    const dbPath = options.memory ? ":memory:" : path.join(resolvedDir, DB_FILENAME);
 
     const raw = new DatabaseSync(dbPath, {
       enableForeignKeyConstraints: true,
@@ -452,9 +443,9 @@ export class Database {
 
     const applied = new Set(
       (
-        this.raw
-          .prepare(`SELECT id FROM schema_migrations ORDER BY id`)
-          .all() as Array<{ id: number }>
+        this.raw.prepare(`SELECT id FROM schema_migrations ORDER BY id`).all() as Array<{
+          id: number;
+        }>
       ).map((r) => r.id),
     );
 
@@ -465,9 +456,7 @@ export class Database {
       try {
         this.raw.exec(migration.sql);
         this.raw
-          .prepare(
-            `INSERT INTO schema_migrations (id, name, applied_at) VALUES (?, ?, ?)`,
-          )
+          .prepare(`INSERT INTO schema_migrations (id, name, applied_at) VALUES (?, ?, ?)`)
           .run(migration.id, migration.name, nowIso());
         this.raw.exec("COMMIT");
       } catch (err) {
@@ -490,9 +479,7 @@ export class Database {
   isHealthy(): boolean {
     if (this.closed) return false;
     try {
-      const row = this.raw.prepare("SELECT 1 AS ok").get() as
-        | { ok: number }
-        | undefined;
+      const row = this.raw.prepare("SELECT 1 AS ok").get() as { ok: number } | undefined;
       return row?.ok === 1;
     } catch {
       return false;
@@ -529,9 +516,7 @@ export class Database {
   /** Applied migration rows, ordered by id. */
   listMigrations(): SchemaMigrationRow[] {
     return this.raw
-      .prepare(
-        `SELECT id, name, applied_at FROM schema_migrations ORDER BY id`,
-      )
+      .prepare(`SELECT id, name, applied_at FROM schema_migrations ORDER BY id`)
       .all() as SchemaMigrationRow[];
   }
 
@@ -585,9 +570,8 @@ export class Database {
   }
 
   getSceneById(id: string): SceneRow | undefined {
-    const row = this.raw
-      .prepare(`SELECT * FROM scenes WHERE id = ?`)
-      .get(id) as Record<string, unknown> | undefined;
+    const row = this.raw.prepare(`SELECT * FROM scenes WHERE id = ?`).get(id) as
+      Record<string, unknown> | undefined;
     return row ? mapScene(row) : undefined;
   }
 
@@ -596,9 +580,7 @@ export class Database {
    */
   getSceneBySlug(slug: string): SceneRow | undefined {
     const row = this.raw
-      .prepare(
-        `SELECT * FROM scenes WHERE slug = ? AND deleted_at IS NULL`,
-      )
+      .prepare(`SELECT * FROM scenes WHERE slug = ? AND deleted_at IS NULL`)
       .get(slug) as Record<string, unknown> | undefined;
     return row ? mapScene(row) : undefined;
   }
@@ -608,9 +590,8 @@ export class Database {
    * checks and tests that assert rows survive soft delete.
    */
   getSceneBySlugIncludingDeleted(slug: string): SceneRow | undefined {
-    const row = this.raw
-      .prepare(`SELECT * FROM scenes WHERE slug = ?`)
-      .get(slug) as Record<string, unknown> | undefined;
+    const row = this.raw.prepare(`SELECT * FROM scenes WHERE slug = ?`).get(slug) as
+      Record<string, unknown> | undefined;
     return row ? mapScene(row) : undefined;
   }
 
@@ -619,9 +600,8 @@ export class Database {
    * Soft-deleted scenes still hold their slug under the UNIQUE constraint.
    */
   slugExists(slug: string): boolean {
-    const row = this.raw
-      .prepare(`SELECT 1 AS ok FROM scenes WHERE slug = ? LIMIT 1`)
-      .get(slug) as { ok: number } | undefined;
+    const row = this.raw.prepare(`SELECT 1 AS ok FROM scenes WHERE slug = ? LIMIT 1`).get(slug) as
+      { ok: number } | undefined;
     return row !== undefined;
   }
 
@@ -651,9 +631,9 @@ export class Database {
    * Used by backup so history of deleted scenes is not silently dropped.
    */
   listAllScenes(): SceneRow[] {
-    const rows = this.raw
-      .prepare(`SELECT * FROM scenes ORDER BY slug ASC`)
-      .all() as Array<Record<string, unknown>>;
+    const rows = this.raw.prepare(`SELECT * FROM scenes ORDER BY slug ASC`).all() as Array<
+      Record<string, unknown>
+    >;
     return rows.map(mapScene);
   }
 
@@ -682,11 +662,7 @@ export class Database {
    * closed when `fn` returns. Migrations are **not** re-applied — the file is
    * assumed to already be at the current schema (it came from this process).
    */
-  static withReadonlyFile<T>(
-    dbPath: string,
-    dataDir: string,
-    fn: (db: Database) => T,
-  ): T {
+  static withReadonlyFile<T>(dbPath: string, dataDir: string, fn: (db: Database) => T): T {
     const raw = new DatabaseSync(dbPath, {
       readOnly: true,
       enableForeignKeyConstraints: true,
@@ -719,15 +695,9 @@ export class Database {
     return row ? mapSceneList(row) : undefined;
   }
 
-  updateSceneHead(
-    id: string,
-    headVersion: number,
-    updatedAt: string = nowIso(),
-  ): void {
+  updateSceneHead(id: string, headVersion: number, updatedAt: string = nowIso()): void {
     this.raw
-      .prepare(
-        `UPDATE scenes SET head_version = ?, updated_at = ? WHERE id = ?`,
-      )
+      .prepare(`UPDATE scenes SET head_version = ?, updated_at = ? WHERE id = ?`)
       .run(headVersion, updatedAt, id);
   }
 
@@ -735,11 +705,7 @@ export class Database {
    * Rename a live scene. Returns the updated row, or undefined if the scene
    * is missing or soft-deleted. Does not change the slug.
    */
-  updateSceneName(
-    id: string,
-    name: string,
-    updatedAt: string = nowIso(),
-  ): SceneRow | undefined {
+  updateSceneName(id: string, name: string, updatedAt: string = nowIso()): SceneRow | undefined {
     this.raw
       .prepare(
         `UPDATE scenes SET name = ?, updated_at = ?
@@ -879,12 +845,8 @@ export class Database {
     this.raw.exec("BEGIN IMMEDIATE");
     try {
       const sceneRow = this.raw
-        .prepare(
-          `SELECT head_version, deleted_at FROM scenes WHERE id = ?`,
-        )
-        .get(input.sceneId) as
-        | { head_version: number; deleted_at: string | null }
-        | undefined;
+        .prepare(`SELECT head_version, deleted_at FROM scenes WHERE id = ?`)
+        .get(input.sceneId) as { head_version: number; deleted_at: string | null } | undefined;
 
       if (!sceneRow || sceneRow.deleted_at != null) {
         this.raw.exec("ROLLBACK");
@@ -940,16 +902,12 @@ export class Database {
 
       // Same transaction: head and updated_at move with the insert.
       this.raw
-        .prepare(
-          `UPDATE scenes SET head_version = ?, updated_at = ? WHERE id = ?`,
-        )
+        .prepare(`UPDATE scenes SET head_version = ?, updated_at = ? WHERE id = ?`)
         .run(newVersion, created_at, input.sceneId);
 
       // A committed turn replaces the working copy — clear the draft so
       // the editor does not resurrect pre-commit keystrokes as "ahead".
-      this.raw
-        .prepare(`DELETE FROM drafts WHERE scene_id = ?`)
-        .run(input.sceneId);
+      this.raw.prepare(`DELETE FROM drafts WHERE scene_id = ?`).run(input.sceneId);
 
       // Advisory turn lock: holder releases on their own successful push.
       // Anyone else's push leaves the lock alone (still advisory, still
@@ -990,18 +948,14 @@ export class Database {
 
   getVersion(sceneId: string, version: number): VersionRow | undefined {
     const row = this.raw
-      .prepare(
-        `SELECT * FROM versions WHERE scene_id = ? AND version = ?`,
-      )
+      .prepare(`SELECT * FROM versions WHERE scene_id = ? AND version = ?`)
       .get(sceneId, version) as Record<string, unknown> | undefined;
     return row ? mapVersion(row) : undefined;
   }
 
   listVersions(sceneId: string): VersionRow[] {
     const rows = this.raw
-      .prepare(
-        `SELECT * FROM versions WHERE scene_id = ? ORDER BY version ASC`,
-      )
+      .prepare(`SELECT * FROM versions WHERE scene_id = ? ORDER BY version ASC`)
       .all(sceneId) as Array<Record<string, unknown>>;
     return rows.map(mapVersion);
   }
@@ -1015,7 +969,7 @@ export class Database {
     options: {
       limit: number;
       offset: number;
-      /** Default `"desc"` (newest first) for history UIs / `excalicli log`. */
+      /** Default `"desc"` (newest first) for history UIs / `excali log`. */
       order?: "asc" | "desc";
     },
   ): { versions: VersionRow[]; total: number } {
@@ -1034,9 +988,9 @@ export class Database {
         ? `SELECT * FROM versions WHERE scene_id = ? ORDER BY version ASC LIMIT ? OFFSET ?`
         : `SELECT * FROM versions WHERE scene_id = ? ORDER BY version DESC LIMIT ? OFFSET ?`;
 
-    const rows = this.raw
-      .prepare(sql)
-      .all(sceneId, limit, offset) as Array<Record<string, unknown>>;
+    const rows = this.raw.prepare(sql).all(sceneId, limit, offset) as Array<
+      Record<string, unknown>
+    >;
 
     return { versions: rows.map(mapVersion), total };
   }
@@ -1067,10 +1021,7 @@ export class Database {
           }
         }
       }
-      if (
-        typeof row.thumbnail_file_id === "string" &&
-        row.thumbnail_file_id.length > 0
-      ) {
+      if (typeof row.thumbnail_file_id === "string" && row.thumbnail_file_id.length > 0) {
         ids.add(row.thumbnail_file_id);
       }
     }
@@ -1087,9 +1038,7 @@ export class Database {
     const elements = asBuffer(input.elements);
     const app_state = asBuffer(input.app_state);
     const based_on_version =
-      input.based_on_version === undefined
-        ? 0
-        : Math.max(0, Math.trunc(input.based_on_version));
+      input.based_on_version === undefined ? 0 : Math.max(0, Math.trunc(input.based_on_version));
 
     this.raw
       .prepare(
@@ -1119,9 +1068,8 @@ export class Database {
   }
 
   getDraft(sceneId: string): DraftRow | undefined {
-    const row = this.raw
-      .prepare(`SELECT * FROM drafts WHERE scene_id = ?`)
-      .get(sceneId) as Record<string, unknown> | undefined;
+    const row = this.raw.prepare(`SELECT * FROM drafts WHERE scene_id = ?`).get(sceneId) as
+      Record<string, unknown> | undefined;
     return row ? mapDraft(row) : undefined;
   }
 
@@ -1130,9 +1078,9 @@ export class Database {
    * Used by explicit discard; commits clear drafts inside {@link commitVersion}.
    */
   deleteDraft(sceneId: string): boolean {
-    const result = this.raw
-      .prepare(`DELETE FROM drafts WHERE scene_id = ?`)
-      .run(sceneId) as { changes: number };
+    const result = this.raw.prepare(`DELETE FROM drafts WHERE scene_id = ?`).run(sceneId) as {
+      changes: number;
+    };
     return Number(result.changes) > 0;
   }
 
@@ -1144,9 +1092,7 @@ export class Database {
         .get(sceneId) as { n: number };
       return Number(row.n);
     }
-    const row = this.raw
-      .prepare(`SELECT COUNT(*) AS n FROM drafts`)
-      .get() as { n: number };
+    const row = this.raw.prepare(`SELECT COUNT(*) AS n FROM drafts`).get() as { n: number };
     return Number(row.n);
   }
 
@@ -1163,9 +1109,8 @@ export class Database {
   // -------------------------------------------------------------------------
 
   getMeta(key: string): string | undefined {
-    const row = this.raw
-      .prepare(`SELECT value FROM meta WHERE key = ?`)
-      .get(key) as { value: string } | undefined;
+    const row = this.raw.prepare(`SELECT value FROM meta WHERE key = ?`).get(key) as
+      { value: string } | undefined;
     return row?.value;
   }
 
@@ -1197,43 +1142,32 @@ export class Database {
         `INSERT INTO tokens (id, name, token_hash, created_at, last_used_at, is_admin)
          VALUES (?, ?, ?, ?, ?, ?)`,
       )
-      .run(
-        input.id,
-        input.name,
-        input.token_hash,
-        created_at,
-        last_used_at,
-        is_admin,
-      );
+      .run(input.id, input.name, input.token_hash, created_at, last_used_at, is_admin);
 
     return this.getTokenById(input.id)!;
   }
 
   getTokenById(id: string): TokenRow | undefined {
-    const row = this.raw
-      .prepare(`SELECT * FROM tokens WHERE id = ?`)
-      .get(id) as Record<string, unknown> | undefined;
+    const row = this.raw.prepare(`SELECT * FROM tokens WHERE id = ?`).get(id) as
+      Record<string, unknown> | undefined;
     return row ? mapToken(row) : undefined;
   }
 
   getTokenByHash(tokenHash: string): TokenRow | undefined {
-    const row = this.raw
-      .prepare(`SELECT * FROM tokens WHERE token_hash = ?`)
-      .get(tokenHash) as Record<string, unknown> | undefined;
+    const row = this.raw.prepare(`SELECT * FROM tokens WHERE token_hash = ?`).get(tokenHash) as
+      Record<string, unknown> | undefined;
     return row ? mapToken(row) : undefined;
   }
 
   listTokens(): TokenRow[] {
-    const rows = this.raw
-      .prepare(`SELECT * FROM tokens ORDER BY created_at ASC`)
-      .all() as Array<Record<string, unknown>>;
+    const rows = this.raw.prepare(`SELECT * FROM tokens ORDER BY created_at ASC`).all() as Array<
+      Record<string, unknown>
+    >;
     return rows.map(mapToken);
   }
 
   touchToken(id: string, lastUsedAt: string = nowIso()): void {
-    this.raw
-      .prepare(`UPDATE tokens SET last_used_at = ? WHERE id = ?`)
-      .run(lastUsedAt, id);
+    this.raw.prepare(`UPDATE tokens SET last_used_at = ? WHERE id = ?`).run(lastUsedAt, id);
   }
 
   deleteToken(id: string): void {
@@ -1250,11 +1184,7 @@ export class Database {
    * Token insert and meta flag share one transaction so they cannot disagree.
    * Returns true when a new admin row was inserted.
    */
-  runBootstrapSeed(input: {
-    id: string;
-    name: string;
-    token_hash: string;
-  }): boolean {
+  runBootstrapSeed(input: { id: string; name: string; token_hash: string }): boolean {
     this.raw.exec("BEGIN");
     try {
       const existing = this.raw
@@ -1265,9 +1195,7 @@ export class Database {
         return false;
       }
 
-      const countRow = this.raw
-        .prepare(`SELECT COUNT(*) AS n FROM tokens`)
-        .get() as { n: number };
+      const countRow = this.raw.prepare(`SELECT COUNT(*) AS n FROM tokens`).get() as { n: number };
       const tokenCount = Number(countRow.n);
 
       let seeded = false;
@@ -1316,25 +1244,18 @@ function mapScene(row: Record<string, unknown> | SceneRow): SceneRow {
     created_at: String(r.created_at),
     updated_at: String(r.updated_at),
     lock_holder:
-      r.lock_holder === null || r.lock_holder === undefined
-        ? null
-        : String(r.lock_holder),
+      r.lock_holder === null || r.lock_holder === undefined ? null : String(r.lock_holder),
     lock_expires_at:
       r.lock_expires_at === null || r.lock_expires_at === undefined
         ? null
         : String(r.lock_expires_at),
-    deleted_at:
-      r.deleted_at === null || r.deleted_at === undefined
-        ? null
-        : String(r.deleted_at),
+    deleted_at: r.deleted_at === null || r.deleted_at === undefined ? null : String(r.deleted_at),
   };
 }
 
 function mapSceneList(row: Record<string, unknown>): SceneListRow {
   const headAuthor =
-    row.head_author === null || row.head_author === undefined
-      ? null
-      : String(row.head_author);
+    row.head_author === null || row.head_author === undefined ? null : String(row.head_author);
   const thumb =
     row.thumbnail_file_id === null || row.thumbnail_file_id === undefined
       ? null
@@ -1390,17 +1311,12 @@ function mapToken(row: Record<string, unknown>): TokenRow {
     token_hash: String(row.token_hash),
     created_at: String(row.created_at),
     last_used_at:
-      row.last_used_at === null || row.last_used_at === undefined
-        ? null
-        : String(row.last_used_at),
+      row.last_used_at === null || row.last_used_at === undefined ? null : String(row.last_used_at),
     is_admin: Number(row.is_admin ?? 0) === 1,
   };
 }
 
 /** Convenience alias matching the issue brief. */
-export function openDatabase(
-  dataDir: string,
-  options?: OpenDatabaseOptions,
-): Database {
+export function openDatabase(dataDir: string, options?: OpenDatabaseOptions): Database {
   return Database.open(dataDir, options);
 }

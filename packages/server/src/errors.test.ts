@@ -1,11 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import {
-  ErrorCode,
-  ExitCode,
-  exitCodeForError,
-  errorEnvelope,
-} from "./errors.js";
+import { ErrorCode, ExitCode, exitCodeForError, errorEnvelope } from "./errors.js";
 
 describe("exitCodeForError", () => {
   test("maps validation/bad request to usage (2)", () => {
@@ -33,15 +28,12 @@ describe("errorEnvelope", () => {
   });
 
   test("includes details when provided", () => {
-    assert.deepEqual(
-      errorEnvelope(ErrorCode.VALIDATION, "bad", [{ field: "name" }]),
-      {
-        error: {
-          code: "VALIDATION",
-          message: "bad",
-          details: [{ field: "name" }],
-        },
+    assert.deepEqual(errorEnvelope(ErrorCode.VALIDATION, "bad", [{ field: "name" }]), {
+      error: {
+        code: "VALIDATION",
+        message: "bad",
+        details: [{ field: "name" }],
       },
-    );
+    });
   });
 });

@@ -1,18 +1,7 @@
 import { parseArgs } from "node:util";
 import { loadConfig } from "./config.js";
-import {
-  getCommand,
-  listCommands,
-  type CommandContext,
-  type IoStreams,
-} from "./commands.js";
-import {
-  CliError,
-  ExitCode,
-  UsageError,
-  toErrorEnvelope,
-  type ExitCodeValue,
-} from "./errors.js";
+import { getCommand, listCommands, type CommandContext, type IoStreams } from "./commands.js";
+import { CliError, ExitCode, UsageError, toErrorEnvelope, type ExitCodeValue } from "./errors.js";
 import { formatHuman, formatJson, type CommandResult } from "./format.js";
 
 export type { IoStreams };
@@ -38,7 +27,7 @@ export type RunOptions = {
 function globalUsage(): string {
   const cmds = listCommands();
   const lines = [
-    "Usage: excalicli [--json] <command> [options]",
+    "Usage: excali [--json] <command> [options]",
     "",
     "Global options:",
     "  --json       Emit exactly one JSON value on stdout",
@@ -51,7 +40,7 @@ function globalUsage(): string {
     lines.push(`  ${c.name.padEnd(width)}  ${c.description}`);
   }
   lines.push("");
-  lines.push("Run `excalicli <command> --help` for command-specific help.");
+  lines.push("Run `excali <command> --help` for command-specific help.");
   lines.push("");
   return lines.join("\n");
 }
@@ -62,7 +51,7 @@ function commandUsage(name: string): string {
     return globalUsage();
   }
   const lines = [
-    `Usage: ${cmd.usage ?? `excalicli ${cmd.name} [options]`}`,
+    `Usage: ${cmd.usage ?? `excali ${cmd.name} [options]`}`,
     "",
     cmd.description,
     "",
@@ -74,15 +63,9 @@ function commandUsage(name: string): string {
   return lines.join("\n");
 }
 
-function writeSuccess(
-  io: IoStreams,
-  result: CommandResult,
-  json: boolean,
-): void {
+function writeSuccess(io: IoStreams, result: CommandResult, json: boolean): void {
   if (result.warning) {
-    const msg = result.warning.endsWith("\n")
-      ? result.warning
-      : `${result.warning}\n`;
+    const msg = result.warning.endsWith("\n") ? result.warning : `${result.warning}\n`;
     io.stderr.write(msg);
   }
   // Streaming commands (watch JSONL) already wrote; do not emit a trailer.
@@ -94,11 +77,7 @@ function writeSuccess(
   }
 }
 
-function writeFailure(
-  io: IoStreams,
-  err: CliError,
-  json: boolean,
-): ExitCodeValue {
+function writeFailure(io: IoStreams, err: CliError, json: boolean): ExitCodeValue {
   // Stream discipline: human diagnostics always on stderr.
   // Under --json, also emit exactly one JSON error object on stdout so
   // agents can parse without half-JSON or mixed streams on the data channel.
@@ -187,9 +166,7 @@ export async function run(options: RunOptions): Promise<ExitCodeValue> {
       help = peeled.help;
       argvRest = peeled.rest;
     } catch (err) {
-      throw new UsageError(
-        err instanceof Error ? err.message : String(err),
-      );
+      throw new UsageError(err instanceof Error ? err.message : String(err));
     }
 
     const [commandName, ...rest] = argvRest;
@@ -199,7 +176,7 @@ export async function run(options: RunOptions): Promise<ExitCodeValue> {
       if (json) {
         io.stdout.write(
           formatJson({
-            name: "excalicli",
+            name: "excali",
             commands: listCommands().map((c) => ({
               name: c.name,
               description: c.description,
@@ -214,19 +191,17 @@ export async function run(options: RunOptions): Promise<ExitCodeValue> {
 
     const command = getCommand(commandName);
     if (!command) {
-      throw new UsageError(
-        `Unknown command: ${commandName}\n\n${globalUsage().trimEnd()}`,
-      );
+      throw new UsageError(`Unknown command: ${commandName}\n\n${globalUsage().trimEnd()}`);
     }
 
-    // Per-command help: `excalicli version --help`
+    // Per-command help: `excali version --help`
     if (help || rest.includes("--help") || rest.includes("-h")) {
       if (json) {
         io.stdout.write(
           formatJson({
             name: command.name,
             description: command.description,
-            usage: command.usage ?? `excalicli ${command.name}`,
+            usage: command.usage ?? `excali ${command.name}`,
           }),
         );
       } else {
@@ -274,16 +249,13 @@ export async function run(options: RunOptions): Promise<ExitCodeValue> {
       return writeFailure(io, err, json);
     }
     // Abort from SIGINT / test controller is a clean stop for watch.
-    if (
-      err instanceof Error &&
-      (err.name === "AbortError" || err.name === "TimeoutError")
-    ) {
+    if (err instanceof Error && (err.name === "AbortError" || err.name === "TimeoutError")) {
       return ExitCode.OK;
     }
-    const wrapped = new CliError(
-      err instanceof Error ? err.message : String(err),
-      { code: "ERROR", cause: err },
-    );
+    const wrapped = new CliError(err instanceof Error ? err.message : String(err), {
+      code: "ERROR",
+      cause: err,
+    });
     return writeFailure(io, wrapped, json);
   }
 }

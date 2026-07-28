@@ -1,5 +1,5 @@
 /**
- * `excalicli log SLUG [-n N]`
+ * `excali log SLUG [-n N]`
  *
  * Version history: version, author, message, and per-version change counts
  * (from consecutive parent→version diffs via GET /diff).
@@ -51,7 +51,7 @@ const DEFAULT_LIMIT = 20;
 function requireAuth(ctx: CommandContext): void {
   if (!ctx.config.server || !ctx.config.token) {
     throw new CliError(
-      "No server/token configured. Set EXCALICLI_SERVER and EXCALICLI_TOKEN, or run `excalicli login`.",
+      "No server/token configured. Set EXCALI_SERVER and EXCALI_TOKEN, or run `excali login`.",
       { code: "USAGE" },
     );
   }
@@ -77,14 +77,12 @@ function parseLogArgs(args: string[]): { slug: string; limit: number } {
   }
 
   if (positionals.length === 0) {
-    throw new UsageError(
-      "log requires SLUG\n\nUsage: excalicli log SLUG [-n N]",
-    );
+    throw new UsageError("log requires SLUG\n\nUsage: excali log SLUG [-n N]");
   }
   if (positionals.length > 1) {
     throw new UsageError(
       `unexpected arguments: ${positionals.slice(1).join(" ")}\n\n` +
-        "Usage: excalicli log SLUG [-n N]",
+        "Usage: excali log SLUG [-n N]",
     );
   }
 
@@ -96,9 +94,7 @@ function parseLogArgs(args: string[]): { slug: string; limit: number } {
   let limit = DEFAULT_LIMIT;
   if (values.n !== undefined) {
     if (!/^\d+$/.test(values.n.trim()) || Number(values.n) < 1) {
-      throw new UsageError(
-        `-n must be a positive integer, got ${JSON.stringify(values.n)}`,
-      );
+      throw new UsageError(`-n must be a positive integer, got ${JSON.stringify(values.n)}`);
     }
     limit = Number(values.n);
   }
@@ -121,11 +117,7 @@ export function formatChangeCounts(c: {
   return parts.length > 0 ? parts.join(" ") : "·";
 }
 
-function formatLogHuman(
-  slug: string,
-  headVersion: number,
-  entries: VersionLogEntry[],
-): string {
+function formatLogHuman(slug: string, headVersion: number, entries: VersionLogEntry[]): string {
   if (entries.length === 0) {
     return `scene ${slug}  head v${headVersion}\n(no versions)\n`;
   }
@@ -133,18 +125,9 @@ function formatLogHuman(
   const lines: string[] = [`scene ${slug}  head v${headVersion}`];
 
   // Column widths for a compact aligned table.
-  const verW = Math.max(
-    2,
-    ...entries.map((e) => String(e.version).length),
-  );
-  const authorW = Math.max(
-    6,
-    ...entries.map((e) => e.author.length),
-  );
-  const changeW = Math.max(
-    7,
-    ...entries.map((e) => formatChangeCounts(e.changes).length),
-  );
+  const verW = Math.max(2, ...entries.map((e) => String(e.version).length));
+  const authorW = Math.max(6, ...entries.map((e) => e.author.length));
+  const changeW = Math.max(7, ...entries.map((e) => formatChangeCounts(e.changes).length));
 
   for (const e of entries) {
     const ver = String(e.version).padStart(verW, " ");
@@ -225,10 +208,9 @@ async function runLog(ctx: CommandContext): Promise<CommandResult> {
 
 export const logCommand: Command = {
   name: "log",
-  description:
-    "Show version history (version, author, message, change counts)",
+  description: "Show version history (version, author, message, change counts)",
   usage:
-    "excalicli log SLUG [-n N] [--json]\n\n" +
+    "excali log SLUG [-n N] [--json]\n\n" +
     `  -n N   Number of versions to show (default: ${DEFAULT_LIMIT})\n` +
     "Newest first. Change counts are parent→version diffs.",
   run: runLog,

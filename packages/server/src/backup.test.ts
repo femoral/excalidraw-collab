@@ -63,10 +63,7 @@ function seedRichData(dataDir: string): {
   openDbs.push(db);
   const store = new FileStore(dataDir, 10 * 1024 * 1024);
 
-  const imageBytes = Buffer.from(
-    "fake-png-payload-for-backup-test-" + "x".repeat(64),
-    "utf8",
-  );
+  const imageBytes = Buffer.from("fake-png-payload-for-backup-test-" + "x".repeat(64), "utf8");
   const fileId = sha1(imageBytes);
   store.put({
     bytes: imageBytes,
@@ -174,9 +171,7 @@ test("sqlite.backupTo produces a readable consistent snapshot file", async () =>
       n: number;
     };
     assert.equal(Number(n.n), 2);
-    const versions = ro
-      .prepare("SELECT COUNT(*) AS n FROM versions")
-      .get() as { n: number };
+    const versions = ro.prepare("SELECT COUNT(*) AS n FROM versions").get() as { n: number };
     assert.equal(Number(versions.n), 4);
   } finally {
     ro.close();
@@ -213,9 +208,7 @@ test("buildBackupArchive documents layout and includes history + files", async (
   assert.ok(BACKUP_README.includes("MANIFEST.json"));
 
   const v3 = JSON.parse(
-    entries.find((e) => e.name === "scenes/arch/versions/3.json")!.data.toString(
-      "utf8",
-    ),
+    entries.find((e) => e.name === "scenes/arch/versions/3.json")!.data.toString("utf8"),
   ) as {
     version: number;
     parentVersion: number;
@@ -235,8 +228,7 @@ test("buildBackupArchive documents layout and includes history + files", async (
 
 test("restore into empty DATA_DIR preserves versions, authors, messages, images", async () => {
   const srcDir = tempDir("backup-src-");
-  const { db: srcDb, store: srcStore, imageBytes, fileId, sceneA, sceneB } =
-    seedRichData(srcDir);
+  const { db: srcDb, store: srcStore, imageBytes, fileId, sceneA, sceneB } = seedRichData(srcDir);
   const { bytes } = await buildBackupArchive(srcDb, srcStore);
 
   // Wipe source and open a fresh empty target.
@@ -452,12 +444,15 @@ test("HTTP GET /api/backup and POST /api/restore round-trip via inject", async (
       });
       assert.equal(versions.statusCode, 200);
       const list = versions.json() as {
-        versions: Array<{ version: number; author: string; message: string; parentVersion: number | null }>;
+        versions: Array<{
+          version: number;
+          author: string;
+          message: string;
+          parentVersion: number | null;
+        }>;
       };
       assert.equal(list.versions.length, 3);
-      const byV = Object.fromEntries(
-        list.versions.map((v) => [v.version, v]),
-      );
+      const byV = Object.fromEntries(list.versions.map((v) => [v.version, v]));
       assert.equal(byV[1]!.author, "admin");
       assert.equal(byV[2]!.author, "agent");
       assert.equal(byV[3]!.author, "human");

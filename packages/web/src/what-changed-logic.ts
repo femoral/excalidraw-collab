@@ -8,12 +8,7 @@
  * Kept free of React so `node:test` can cover the review UX without a browser.
  */
 
-import type {
-  DiffElementChange,
-  DiffSummary,
-  SceneDiffResponse,
-  VersionInfo,
-} from "./api.ts";
+import type { DiffElementChange, DiffSummary, SceneDiffResponse, VersionInfo } from "./api.ts";
 import {
   formatChangeCounts,
   prioritizeDiff,
@@ -45,10 +40,7 @@ export type VersionStorage = {
  * Read the last-seen version for a scene, or `null` if never recorded
  * (first visit — no panel; there is nothing "changed since last visit").
  */
-export function getLastSeenVersion(
-  storage: VersionStorage,
-  slug: string,
-): number | null {
+export function getLastSeenVersion(storage: VersionStorage, slug: string): number | null {
   const raw = storage.getItem(lastSeenStorageKey(slug));
   if (raw === null || raw.trim() === "") return null;
   const n = Number(raw);
@@ -57,11 +49,7 @@ export function getLastSeenVersion(
 }
 
 /** Persist the last-seen head version for a scene. */
-export function setLastSeenVersion(
-  storage: VersionStorage,
-  slug: string,
-  version: number,
-): void {
+export function setLastSeenVersion(storage: VersionStorage, slug: string, version: number): void {
   if (!Number.isInteger(version) || version < 0) return;
   storage.setItem(lastSeenStorageKey(slug), String(version));
 }
@@ -70,10 +58,7 @@ export function setLastSeenVersion(
  * Whether the what-changed panel should open on load.
  * True when we have a prior visit and head has advanced since then.
  */
-export function shouldShowWhatChangedOnOpen(
-  lastSeen: number | null,
-  headVersion: number,
-): boolean {
+export function shouldShowWhatChangedOnOpen(lastSeen: number | null, headVersion: number): boolean {
   if (lastSeen === null) return false;
   if (!Number.isInteger(headVersion) || headVersion <= 0) return false;
   return headVersion > lastSeen;
@@ -83,11 +68,7 @@ export function shouldShowWhatChangedOnOpen(
  * After first visit or successful review, mark head as seen so the next
  * open only surfaces newer work.
  */
-export function markSceneSeen(
-  storage: VersionStorage,
-  slug: string,
-  headVersion: number,
-): void {
+export function markSceneSeen(storage: VersionStorage, slug: string, headVersion: number): void {
   if (!Number.isInteger(headVersion) || headVersion < 0) return;
   const prev = getLastSeenVersion(storage, slug);
   // Never move last-seen backwards (stale race / out-of-order apply).
@@ -104,18 +85,13 @@ export function markSceneSeen(
  * Deletes are listed for review but are not navigable.
  * App-state-only rows have no element target either.
  */
-export function isChangeNavigable(
-  change: DiffElementChange | { op: "appState" },
-): boolean {
+export function isChangeNavigable(change: DiffElementChange | { op: "appState" }): boolean {
   if (change.op === "delete" || change.op === "appState") return false;
   return true;
 }
 
 /** True when a prioritised list item can be clicked to scroll. */
-export function isDiffItemNavigable(item: {
-  kind: string;
-  change?: DiffElementChange;
-}): boolean {
+export function isDiffItemNavigable(item: { kind: string; change?: DiffElementChange }): boolean {
   if (item.kind !== "element" || !item.change) return false;
   return isChangeNavigable(item.change);
 }
@@ -223,10 +199,9 @@ export type RemoteVersionToast = {
 
 export function toastFromSceneEvent(
   fromVersion: number,
-  event: Pick<
-    VersionInfo,
-    "version" | "author" | "message" | "createdAt"
-  > & { headVersion?: number },
+  event: Pick<VersionInfo, "version" | "author" | "message" | "createdAt"> & {
+    headVersion?: number;
+  },
 ): RemoteVersionToast {
   const toVersion =
     typeof event.headVersion === "number" && event.headVersion > 0
@@ -259,10 +234,7 @@ export type ToastState =
   | { kind: "applying"; toast: RemoteVersionToast; action: "load" | "merge" }
   | { kind: "error"; toast: RemoteVersionToast; message: string };
 
-export function toastShow(
-  _state: ToastState,
-  toast: RemoteVersionToast,
-): ToastState {
+export function toastShow(_state: ToastState, toast: RemoteVersionToast): ToastState {
   return { kind: "visible", toast };
 }
 
@@ -270,18 +242,12 @@ export function toastDismiss(_state: ToastState): ToastState {
   return { kind: "hidden" };
 }
 
-export function toastBeginApply(
-  state: ToastState,
-  action: "load" | "merge",
-): ToastState {
+export function toastBeginApply(state: ToastState, action: "load" | "merge"): ToastState {
   if (state.kind !== "visible" && state.kind !== "error") return state;
   return { kind: "applying", toast: state.toast, action };
 }
 
-export function toastApplyFailed(
-  state: ToastState,
-  message: string,
-): ToastState {
+export function toastApplyFailed(state: ToastState, message: string): ToastState {
   if (state.kind !== "applying") return state;
   return { kind: "error", toast: state.toast, message };
 }
@@ -301,11 +267,7 @@ export const POLL_BACKOFF_MAX_MS = 30_000;
 /** Multiplier applied after each consecutive failure. */
 export const POLL_BACKOFF_FACTOR = 2;
 
-export type PollPhase =
-  | "idle"
-  | "waiting"
-  | "backoff"
-  | "stopped";
+export type PollPhase = "idle" | "waiting" | "backoff" | "stopped";
 
 export type PollState = {
   phase: PollPhase;
@@ -350,15 +312,9 @@ export function pollOnTimeout(state: PollState): PollState {
  * Long-poll returned a new head. Advance `since` and reset backoff.
  * Caller surfaces a toast from the event body.
  */
-export function pollOnEvent(
-  state: PollState,
-  newHead: number,
-): PollState {
+export function pollOnEvent(state: PollState, newHead: number): PollState {
   if (state.phase === "stopped") return state;
-  const nextSince =
-    Number.isInteger(newHead) && newHead > state.since
-      ? newHead
-      : state.since;
+  const nextSince = Number.isInteger(newHead) && newHead > state.since ? newHead : state.since;
   return {
     phase: "idle",
     since: nextSince,
@@ -376,9 +332,7 @@ export function pollOnError(state: PollState): PollState {
   const failures = state.failures + 1;
   const backoffMs = Math.min(
     POLL_BACKOFF_MAX_MS,
-    Math.round(
-      POLL_BACKOFF_INITIAL_MS * Math.pow(POLL_BACKOFF_FACTOR, failures - 1),
-    ),
+    Math.round(POLL_BACKOFF_INITIAL_MS * Math.pow(POLL_BACKOFF_FACTOR, failures - 1)),
   );
   return {
     ...state,
@@ -451,9 +405,7 @@ export function buildRemoteSceneUpdate(data: {
  * Assert the remote-load payload will not land in undo history.
  * Used by tests as a tripwire if the constant ever drifts.
  */
-export function remoteUpdateSkipsUndoHistory(payload: {
-  captureUpdate?: string;
-}): boolean {
+export function remoteUpdateSkipsUndoHistory(payload: { captureUpdate?: string }): boolean {
   return payload.captureUpdate === REMOTE_CAPTURE_UPDATE;
 }
 
@@ -473,24 +425,16 @@ export type WhatChangedPanelState =
       dismissed: boolean;
     };
 
-export function panelBeginLoad(
-  from: number,
-  to: number,
-): WhatChangedPanelState {
+export function panelBeginLoad(from: number, to: number): WhatChangedPanelState {
   return { kind: "loading", range: { from, to } };
 }
 
-export function panelLoadSucceeded(
-  model: WhatChangedPanelModel,
-): WhatChangedPanelState {
+export function panelLoadSucceeded(model: WhatChangedPanelModel): WhatChangedPanelState {
   // Empty diffs still succeed; UI can choose not to surface the panel.
   return { kind: "ready", model, dismissed: false };
 }
 
-export function panelLoadFailed(
-  range: WhatChangedRange,
-  message: string,
-): WhatChangedPanelState {
+export function panelLoadFailed(range: WhatChangedRange, message: string): WhatChangedPanelState {
   return { kind: "error", range, message };
 }
 
@@ -523,9 +467,7 @@ export function canReopenPanel(state: WhatChangedPanelState): boolean {
  * After applying a remote version (Load), open the panel for from→to so the
  * reviewer can still walk the agent's changes.
  */
-export function panelAfterRemoteLoad(
-  model: WhatChangedPanelModel,
-): WhatChangedPanelState {
+export function panelAfterRemoteLoad(model: WhatChangedPanelModel): WhatChangedPanelState {
   if (model.view.isEmpty || totalChangeCount(model.view.summary) === 0) {
     return { kind: "hidden" };
   }

@@ -38,19 +38,14 @@ export type ConflictDetails = {
   diff?: ConflictDiff;
 };
 
-export function resolutionCommands(
-  slug: string,
-  message?: string,
-): string[] {
+export function resolutionCommands(slug: string, message?: string): string[] {
   const m =
-    message && message.trim().length > 0
-      ? JSON.stringify(message.trim())
-      : '"your message"';
+    message && message.trim().length > 0 ? JSON.stringify(message.trim()) : '"your message"';
   return [
-    `excalicli pull ${slug}`,
-    `excalicli push ${slug} -m ${m}`,
-    `excalicli push ${slug} -m ${m} --merge`,
-    `excalicli push ${slug} -m ${m} --force`,
+    `excali pull ${slug}`,
+    `excali push ${slug} -m ${m}`,
+    `excali push ${slug} -m ${m} --merge`,
+    `excali push ${slug} -m ${m} --force`,
   ];
 }
 
@@ -74,32 +69,17 @@ export function formatConflictDiff(diff: ConflictDiff | undefined): string {
   const countStr = counts.length > 0 ? counts.join(" ") : "(empty)";
 
   const hasVersions = diff.from !== undefined && diff.to !== undefined;
-  const header = hasVersions
-    ? `v${diff.from} → v${diff.to}   ${countStr}`
-    : countStr;
+  const header = hasVersions ? `v${diff.from} → v${diff.to}   ${countStr}` : countStr;
 
   const lines: string[] = [header];
 
   for (const change of diff.elements ?? []) {
-    if (
-      change &&
-      typeof change === "object" &&
-      "op" in change &&
-      change.op === "reorder"
-    ) {
+    if (change && typeof change === "object" && "op" in change && change.op === "reorder") {
       const type = typeof change.type === "string" ? change.type : "element";
       const label =
-        typeof change.label === "string" && change.label.length > 0
-          ? ` "${change.label}"`
-          : "";
-      lines.push(
-        `↕ ${type}${label}  ${change.from ?? "?"} → ${change.to ?? "?"}`,
-      );
-    } else if (
-      change &&
-      typeof change === "object" &&
-      typeof change.describe === "string"
-    ) {
+        typeof change.label === "string" && change.label.length > 0 ? ` "${change.label}"` : "";
+      lines.push(`↕ ${type}${label}  ${change.from ?? "?"} → ${change.to ?? "?"}`);
+    } else if (change && typeof change === "object" && typeof change.describe === "string") {
       lines.push(change.describe);
     }
   }
@@ -107,9 +87,7 @@ export function formatConflictDiff(diff: ConflictDiff | undefined): string {
   if (diff.appState && diff.appState.length > 0) {
     lines.push("appState:");
     for (const p of diff.appState) {
-      lines.push(
-        `  ${p.key}: ${formatAppStateValue(p.from)} → ${formatAppStateValue(p.to)}`,
-      );
+      lines.push(`  ${p.key}: ${formatAppStateValue(p.from)} → ${formatAppStateValue(p.to)}`);
     }
   }
 

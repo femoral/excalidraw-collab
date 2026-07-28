@@ -80,45 +80,23 @@ export function readLocalState(cwd: string): LocalState {
   if (serversRaw === undefined) {
     return emptyLocalState();
   }
-  if (
-    serversRaw === null ||
-    typeof serversRaw !== "object" ||
-    Array.isArray(serversRaw)
-  ) {
-    throw new Error(
-      `Invalid local state at ${file}: "servers" must be an object`,
-    );
+  if (serversRaw === null || typeof serversRaw !== "object" || Array.isArray(serversRaw)) {
+    throw new Error(`Invalid local state at ${file}: "servers" must be an object`);
   }
 
   const servers: Record<string, ServerState> = {};
-  for (const [serverKey, serverVal] of Object.entries(
-    serversRaw as Record<string, unknown>,
-  )) {
-    if (
-      serverVal === null ||
-      typeof serverVal !== "object" ||
-      Array.isArray(serverVal)
-    ) {
+  for (const [serverKey, serverVal] of Object.entries(serversRaw as Record<string, unknown>)) {
+    if (serverVal === null || typeof serverVal !== "object" || Array.isArray(serverVal)) {
       continue;
     }
     const scenesRaw = (serverVal as { scenes?: unknown }).scenes;
-    if (
-      scenesRaw === null ||
-      typeof scenesRaw !== "object" ||
-      Array.isArray(scenesRaw)
-    ) {
+    if (scenesRaw === null || typeof scenesRaw !== "object" || Array.isArray(scenesRaw)) {
       servers[serverKey] = { scenes: {} };
       continue;
     }
     const scenes: Record<string, SceneState> = {};
-    for (const [slug, sceneVal] of Object.entries(
-      scenesRaw as Record<string, unknown>,
-    )) {
-      if (
-        sceneVal === null ||
-        typeof sceneVal !== "object" ||
-        Array.isArray(sceneVal)
-      ) {
+    for (const [slug, sceneVal] of Object.entries(scenesRaw as Record<string, unknown>)) {
+      if (sceneVal === null || typeof sceneVal !== "object" || Array.isArray(sceneVal)) {
         continue;
       }
       const ver = (sceneVal as { version?: unknown }).version;
@@ -143,11 +121,7 @@ export function writeLocalState(cwd: string, state: LocalState): string {
 }
 
 /** Last pulled version for (server, slug), or `undefined` if never recorded. */
-export function getPulledVersion(
-  cwd: string,
-  server: string,
-  slug: string,
-): number | undefined {
+export function getPulledVersion(cwd: string, server: string, slug: string): number | undefined {
   const state = readLocalState(cwd);
   const key = normalizeServerKey(server);
   return state.servers[key]?.scenes[slug]?.version;
@@ -157,12 +131,7 @@ export function getPulledVersion(
  * Record last pulled/pushed version for (server, slug). Other servers' entries
  * for the same slug are left intact.
  */
-export function setPulledVersion(
-  cwd: string,
-  server: string,
-  slug: string,
-  version: number,
-): void {
+export function setPulledVersion(cwd: string, server: string, slug: string, version: number): void {
   if (!Number.isInteger(version) || version < 0) {
     throw new Error(`invalid version: ${version}`);
   }

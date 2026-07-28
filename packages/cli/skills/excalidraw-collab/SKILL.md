@@ -1,6 +1,6 @@
 ---
 name: excalidraw-collab
-description: Read and edit Excalidraw diagrams hosted on an excalidraw-collab server with the `excalicli` CLI. Use when asked to draw, update, review, explain, or describe a diagram, architecture sketch, flowchart, or whiteboard that lives in Excalidraw, when a scene slug or `.excalidraw` file comes up, or when handing a canvas back to a human collaborator. Covers the turn loop — pull, diff, describe, edit, push, watch.
+description: Read and edit Excalidraw diagrams hosted on an excalidraw-collab server with the `excali` CLI. Use when asked to draw, update, review, explain, or describe a diagram, architecture sketch, flowchart, or whiteboard that lives in Excalidraw, when a scene slug or `.excalidraw` file comes up, or when handing a canvas back to a human collaborator. Covers the turn loop — pull, diff, describe, edit, push, watch.
 ---
 
 # excalidraw-collab
@@ -9,8 +9,8 @@ Diagrams live on a server. You edit them as JSON; a human edits the same scene i
 a browser. Both sides take **turns**, and either side can ask exactly what the
 other changed.
 
-The binary is always `excalicli`. Do not invent flags or call HTTP endpoints
-directly — `excalicli <command> --help` is authoritative, and the CLI already
+The binary is always `excali`. Do not invent flags or call HTTP endpoints
+directly — `excali <command> --help` is authoritative, and the CLI already
 maps exit codes, conflict diffs, and local state for you.
 
 **Run every command from one stable project directory.** Local state
@@ -20,8 +20,8 @@ process cwd.
 ## Start of session
 
 ```sh
-excalicli whoami          # identity check — this name is the author on your pushes
-excalicli ls              # scenes on the server
+excali whoami          # identity check — this name is the author on your pushes
+excali ls              # scenes on the server
 ```
 
 If `whoami` fails, stop and read [reference/setup.md](reference/setup.md).
@@ -33,26 +33,26 @@ credentials on your own.
 Do this every turn, in this order:
 
 ```sh
-excalicli pull SLUG                        # writes SLUG.excalidraw, records the version
-excalicli diff SLUG --since-last-pull      # what changed since your last pull/push
-excalicli describe SLUG                    # read the canvas as text — you cannot see pixels
+excali pull SLUG                        # writes SLUG.excalidraw, records the version
+excali diff SLUG --since-last-pull      # what changed since your last pull/push
+excali describe SLUG                    # read the canvas as text — you cannot see pixels
 # … edit SLUG.excalidraw …
-excalicli push SLUG -m "what you changed"  # message is required
+excali push SLUG -m "what you changed"  # message is required
 ```
 
 - An empty diff is success (exit 0), not an error.
 - `describe --verbose` adds element ids, for surgical edits.
 - Add `--json` to any command when you will branch on the output:
-  `excalicli --json diff SLUG --since-last-pull`.
+  `excali --json diff SLUG --since-last-pull`.
 - After a successful push, local state advances to the new head automatically.
 
 Creating a scene:
 
 ```sh
-excalicli new "Architecture" --slug arch
-excalicli pull arch          # brand-new scene is v0 with empty elements — normal
+excali new "Architecture" --slug arch
+excali pull arch          # brand-new scene is v0 with empty elements — normal
 # … write elements …
-excalicli push arch -m "initial architecture"
+excali push arch -m "initial architecture"
 ```
 
 ## Editing the scene file
@@ -94,7 +94,7 @@ For greenfield diagrams, author a **skeleton** instead of full element blobs:
 ```
 
 ```sh
-excalicli push SLUG --skeleton -m "boxes and arrow"   # reads SLUG.skeleton.json
+excali push SLUG --skeleton -m "boxes and arrow"   # reads SLUG.skeleton.json
 ```
 
 Prefer skeletons when creating from scratch; prefer the full document when
@@ -102,12 +102,12 @@ editing a human's existing scene.
 
 ## Reading the canvas
 
-| Need                                                | Command                                            |
-| --------------------------------------------------- | -------------------------------------------------- |
-| Structure — frames, labels, arrows as edges, groups | `excalicli describe SLUG`                          |
-| Element ids alongside the outline                   | `excalicli describe SLUG --verbose`                |
-| Pixel image for a vision model                      | `excalicli export SLUG --format png -o out.png`    |
-| SVG / raw scene JSON                                | `excalicli export SLUG --format svg\|json -o FILE` |
+| Need                                                | Command                                         |
+| --------------------------------------------------- | ----------------------------------------------- |
+| Structure — frames, labels, arrows as edges, groups | `excali describe SLUG`                          |
+| Element ids alongside the outline                   | `excali describe SLUG --verbose`                |
+| Pixel image for a vision model                      | `excali export SLUG --format png -o out.png`    |
+| SVG / raw scene JSON                                | `excali export SLUG --format svg\|json -o FILE` |
 
 **Always start with `describe`.** It is cheap and always available. Reach for
 PNG only when you need layout or geometry that text cannot convey.
@@ -118,11 +118,11 @@ After you finish, hand the canvas back and **block** — never busy-poll `diff` 
 leave a streaming `watch` running forever.
 
 ```sh
-excalicli push SLUG -m "agent turn done"
-excalicli watch SLUG --once --timeout 900   # exit 0 = something landed, exit 6 = timeout
-excalicli pull SLUG
-excalicli diff SLUG --since-last-pull
-excalicli describe SLUG
+excali push SLUG -m "agent turn done"
+excali watch SLUG --once --timeout 900   # exit 0 = something landed, exit 6 = timeout
+excali pull SLUG
+excali diff SLUG --since-last-pull
+excali describe SLUG
 ```
 
 Watch flags worth knowing:
@@ -138,17 +138,17 @@ Optional politeness — the advisory turn lock. It never blocks anyone unless
 asked to:
 
 ```sh
-excalicli turn claim SLUG      # exit 5 if someone else holds it
-excalicli push SLUG -m "…"     # a successful push releases the lock server-side
-excalicli turn release SLUG    # only if you abort without pushing
+excali turn claim SLUG      # exit 5 if someone else holds it
+excali push SLUG -m "…"     # a successful push releases the lock server-side
+excali turn release SLUG    # only if you abort without pushing
 ```
 
 ## Other commands
 
 ```sh
-excalicli log SLUG -n 20             # version history, newest first
-excalicli diff SLUG --from head~1 --to head
-excalicli pull --all -o ./scenes/    # every scene head as plain .excalidraw files
+excali log SLUG -n 20             # version history, newest first
+excali diff SLUG --from head~1 --to head
+excali pull --all -o ./scenes/    # every scene head as plain .excalidraw files
 ```
 
 ## Exit codes

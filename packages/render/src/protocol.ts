@@ -82,10 +82,7 @@ export type PageRenderResponseErr = {
   error: string;
 };
 
-export type PageRenderResponse =
-  | PageExportResponseOk
-  | PageMergeResponseOk
-  | PageRenderResponseErr;
+export type PageRenderResponse = PageExportResponseOk | PageMergeResponseOk | PageRenderResponseErr;
 
 export type PageSkeletonRequest = {
   type: typeof RENDER_MSG.SKELETON_REQUEST;

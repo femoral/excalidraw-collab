@@ -172,22 +172,19 @@ describe("pickAppState", () => {
   });
 
   test("is a pure allowlist — only declared keys", () => {
-    assert.deepEqual(
-      [...PERSISTED_APP_STATE_KEYS].sort(),
-      [
-        "exportBackground",
-        "exportEmbedScene",
-        "exportScale",
-        "exportWithDarkMode",
-        "frameRendering",
-        "gridModeEnabled",
-        "gridSize",
-        "gridStep",
-        "name",
-        "theme",
-        "viewBackgroundColor",
-      ],
-    );
+    assert.deepEqual([...PERSISTED_APP_STATE_KEYS].sort(), [
+      "exportBackground",
+      "exportEmbedScene",
+      "exportScale",
+      "exportWithDarkMode",
+      "frameRendering",
+      "gridModeEnabled",
+      "gridSize",
+      "gridStep",
+      "name",
+      "theme",
+      "viewBackgroundColor",
+    ]);
   });
 
   test("theme is never written to the scene document (issue #38)", () => {
@@ -299,10 +296,7 @@ describe("normalizeScene", () => {
   test("does not fabricate fractional index fields", () => {
     const el = { id: "no-index", type: "rectangle", versionNonce: 1 };
     const doc = normalizeScene({ elements: [el] });
-    assert.equal(
-      Object.prototype.hasOwnProperty.call(doc.elements[0], "index"),
-      false,
-    );
+    assert.equal(Object.prototype.hasOwnProperty.call(doc.elements[0], "index"), false);
   });
 });
 
@@ -311,10 +305,7 @@ describe("normalizeScene", () => {
 // ---------------------------------------------------------------------------
 
 describe("normalizeScene validation", () => {
-  function assertRejects(
-    input: unknown,
-    expectedSubstrings: string[],
-  ): SceneValidationError {
+  function assertRejects(input: unknown, expectedSubstrings: string[]): SceneValidationError {
     assert.throws(
       () => normalizeScene(input),
       (err: unknown) => {
@@ -351,13 +342,12 @@ describe("normalizeScene validation", () => {
   test("rejects element missing id or type", () => {
     const err = assertRejects(
       {
-        elements: [
-          { type: "rectangle" },
-          { id: "only-id" },
-          { id: "ok", type: "ellipse" },
-        ],
+        elements: [{ type: "rectangle" }, { id: "only-id" }, { id: "ok", type: "ellipse" }],
       },
-      ['elements[0] is missing required field "id"', 'elements[1] is missing required field "type"'],
+      [
+        'elements[0] is missing required field "id"',
+        'elements[1] is missing required field "type"',
+      ],
     );
     // The valid third element must not prevent reporting the others.
     assert.ok(err.problems.length >= 2);
@@ -498,11 +488,7 @@ describe("splitFiles / mergeFiles", () => {
       const doc = normalizeScene(loadRaw(path));
       const { doc: stripped, files } = splitFiles(doc);
       const restored = mergeFiles(stripped, files);
-      assert.deepEqual(
-        restored,
-        doc,
-        `round-trip failed for ${relative(FIXTURES_DIR, path)}`,
-      );
+      assert.deepEqual(restored, doc, `round-trip failed for ${relative(FIXTURES_DIR, path)}`);
     }
   });
 

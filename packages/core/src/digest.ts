@@ -1,6 +1,6 @@
 /**
  * Scene digest — text outline of a canvas for agents that cannot see one
- * (`excalicli describe`, PLAN.md §6).
+ * (`excali describe`, PLAN.md §6).
  *
  * Zero runtime dependencies. Never mutates element internals.
  *
@@ -88,11 +88,7 @@ function compareSpatial(a: AnyEl, b: AnyEl): number {
   return 0;
 }
 
-function compareSpatialById(
-  byId: Map<string, AnyEl>,
-  aId: string,
-  bId: string,
-): number {
+function compareSpatialById(byId: Map<string, AnyEl>, aId: string, bId: string): number {
   const a = byId.get(aId);
   const b = byId.get(bId);
   if (a && b) return compareSpatial(a, b);
@@ -112,10 +108,7 @@ function compareSpatialById(
  * - container with bound text → that text element's `text`
  * - otherwise null
  */
-export function resolveElementLabel(
-  el: AnyEl,
-  byId: ReadonlyMap<string, AnyEl>,
-): string | null {
+export function resolveElementLabel(el: AnyEl, byId: ReadonlyMap<string, AnyEl>): string | null {
   if (el.type === "text") {
     const t = (el as { text?: string }).text;
     return t && t.length > 0 ? t : null;
@@ -171,9 +164,7 @@ export function digestScene(
   options: DigestOptions = {},
 ): SceneDigest {
   const maxElements = options.maxElements ?? DEFAULT_DIGEST_MAX_ELEMENTS;
-  const elements = Array.isArray(doc)
-    ? doc
-    : (doc as Pick<SceneDocument, "elements">).elements;
+  const elements = Array.isArray(doc) ? doc : (doc as Pick<SceneDocument, "elements">).elements;
 
   const live = elements.filter((el) => !isDeleted(el));
   const byId = new Map<string, AnyEl>(live.map((el) => [el.id, el]));
@@ -218,12 +209,7 @@ export function digestScene(
 
   const frames = frameEls.map((frame) => {
     const children = live
-      .filter(
-        (el) =>
-          el.id !== frame.id &&
-          el.frameId === frame.id &&
-          isListable(el),
-      )
+      .filter((el) => el.id !== frame.id && el.frameId === frame.id && isListable(el))
       .slice()
       .sort(compareSpatial)
       .map((el) => el.id);
@@ -320,8 +306,7 @@ export function digestScene(
 
 function fmtBBox(b: ElementBBox): string {
   // Compact integer-ish coords; keep one decimal if needed
-  const n = (v: number) =>
-    Number.isInteger(v) ? String(v) : String(Math.round(v * 10) / 10);
+  const n = (v: number) => (Number.isInteger(v) ? String(v) : String(Math.round(v * 10) / 10));
   return `(${n(b.x)},${n(b.y)} ${n(b.width)}x${n(b.height)})`;
 }
 
@@ -368,20 +353,13 @@ function elementLine(
  *   "A" → "B"
  * ```
  */
-export function formatDigest(
-  digest: SceneDigest,
-  options: FormatDigestOptions = {},
-): string {
+export function formatDigest(digest: SceneDigest, options: FormatDigestOptions = {}): string {
   const verbose = options.verbose === true;
   const lines: string[] = [];
 
   // Summary line
-  const countPart =
-    digest.elementCount === 0
-      ? "0 elements"
-      : `${digest.elementCount} elements`;
-  const typePart =
-    digest.elementCount > 0 ? ` · ${fmtCounts(digest.countsByType)}` : "";
+  const countPart = digest.elementCount === 0 ? "0 elements" : `${digest.elementCount} elements`;
+  const typePart = digest.elementCount > 0 ? ` · ${fmtCounts(digest.countsByType)}` : "";
   const framePart =
     digest.frameCount > 0
       ? ` · ${digest.frameCount} frame${digest.frameCount === 1 ? "" : "s"}`
@@ -416,16 +394,7 @@ export function formatDigest(
       for (const childId of frame.children) {
         const child = elById.get(childId);
         if (child) {
-          lines.push(
-            elementLine(
-              child.type,
-              child.label,
-              child.bbox,
-              child.id,
-              verbose,
-              "    ",
-            ),
-          );
+          lines.push(elementLine(child.type, child.label, child.bbox, child.id, verbose, "    "));
         } else if (verbose) {
           lines.push(`    (child id=${childId})`);
         } else {
@@ -450,31 +419,23 @@ export function formatDigest(
         return el.label ? `${el.type}:"${el.label}"` : el.type;
       });
       const idPart = verbose ? ` id=${g.groupId}` : "";
-      lines.push(
-        `  group (${g.members.length})${idPart}: ${memberLabels.join(", ")}`,
-      );
+      lines.push(`  group (${g.members.length})${idPart}: ${memberLabels.join(", ")}`);
     }
   }
 
   // Free elements (not inside a frame). Frames themselves are listed under
   // frames: — skip them here to avoid double-printing.
-  const free = digest.elements.filter(
-    (e) => e.type !== "frame" && !inFrame.has(e.id),
-  );
+  const free = digest.elements.filter((e) => e.type !== "frame" && !inFrame.has(e.id));
   // When there are no frames, print the full listing under "elements:".
   // When there are frames, only free (non-frame, non-child) elements.
   const toList =
-    digest.frames.length === 0
-      ? digest.elements.filter((e) => e.type !== "frame")
-      : free;
+    digest.frames.length === 0 ? digest.elements.filter((e) => e.type !== "frame") : free;
 
   if (toList.length > 0) {
     lines.push("");
     lines.push("elements:");
     for (const el of toList) {
-      lines.push(
-        elementLine(el.type, el.label, el.bbox, el.id, verbose, "  "),
-      );
+      lines.push(elementLine(el.type, el.label, el.bbox, el.id, verbose, "  "));
     }
   } else if (digest.frames.length === 0 && digest.elementCount === 0) {
     // empty scene — summary line alone is enough

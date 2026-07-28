@@ -190,8 +190,7 @@ globalThis.matchMedia = () => ({
   removeEventListener() {},
   media: "",
 });
-globalThis.getComputedStyle = () =>
-  new Proxy({}, { get: () => () => "" });
+globalThis.getComputedStyle = () => new Proxy({}, { get: () => () => "" });
 globalThis.localStorage = {
   getItem: () => null,
   setItem() {},

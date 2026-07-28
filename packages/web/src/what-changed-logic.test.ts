@@ -62,10 +62,7 @@ function memoryStorage(): VersionStorage & { map: Map<string, string> } {
   };
 }
 
-function add(
-  id: string,
-  label: string | null = "Box",
-): DiffElementChange {
+function add(id: string, label: string | null = "Box"): DiffElementChange {
   return {
     op: "add",
     id,
@@ -97,9 +94,7 @@ function upd(id: string, label: string | null = "Moved"): DiffElementChange {
   };
 }
 
-function sampleDiff(
-  elements: DiffElementChange[],
-): SceneDiffResponse {
+function sampleDiff(elements: DiffElementChange[]): SceneDiffResponse {
   const summary = {
     added: elements.filter((e) => e.op === "add").length,
     deleted: elements.filter((e) => e.op === "delete").length,
@@ -115,10 +110,7 @@ function sampleDiff(
 
 describe("last-seen version tracking", () => {
   test("key is namespaced per slug", () => {
-    assert.equal(
-      lastSeenStorageKey("arch"),
-      "excalidraw-collab.lastSeen.arch",
-    );
+    assert.equal(lastSeenStorageKey("arch"), "excalidraw-collab.lastSeen.arch");
   });
 
   test("get returns null when unset", () => {
@@ -185,14 +177,8 @@ describe("navigability rules", () => {
   });
 
   test("isDiffItemNavigable requires element kind", () => {
-    assert.equal(
-      isDiffItemNavigable({ kind: "element", change: add("a") }),
-      true,
-    );
-    assert.equal(
-      isDiffItemNavigable({ kind: "element", change: del("d") }),
-      false,
-    );
+    assert.equal(isDiffItemNavigable({ kind: "element", change: add("a") }), true);
+    assert.equal(isDiffItemNavigable({ kind: "element", change: del("d") }), false);
     assert.equal(isDiffItemNavigable({ kind: "appState" }), false);
   });
 
@@ -240,10 +226,7 @@ describe("buildWhatChangedModel", () => {
   });
 
   test("title formats version range", () => {
-    assert.equal(
-      formatWhatChangedTitle({ from: 4, to: 7 }),
-      "What changed · v4 → v7",
-    );
+    assert.equal(formatWhatChangedTitle({ from: 4, to: 7 }), "What changed · v4 → v7");
   });
 });
 
@@ -375,10 +358,7 @@ describe("remote scene update (undo stack)", () => {
   });
 
   test("tripwire: IMMEDIATELY would fail the undo contract", () => {
-    assert.equal(
-      remoteUpdateSkipsUndoHistory({ captureUpdate: "IMMEDIATELY" }),
-      false,
-    );
+    assert.equal(remoteUpdateSkipsUndoHistory({ captureUpdate: "IMMEDIATELY" }), false);
     assert.equal(remoteUpdateSkipsUndoHistory({}), false);
   });
 });

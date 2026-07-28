@@ -47,16 +47,12 @@ function capture() {
     },
     get stdout() {
       return stdoutChunks
-        .map((c) =>
-          typeof c === "string" ? c : Buffer.from(c).toString("utf8"),
-        )
+        .map((c) => (typeof c === "string" ? c : Buffer.from(c).toString("utf8")))
         .join("");
     },
     get stdoutBytes() {
       return Buffer.concat(
-        stdoutChunks.map((c) =>
-          typeof c === "string" ? Buffer.from(c, "utf8") : Buffer.from(c),
-        ),
+        stdoutChunks.map((c) => (typeof c === "string" ? Buffer.from(c, "utf8") : Buffer.from(c))),
       );
     },
     get stderr() {
@@ -100,14 +96,10 @@ function createMockWorker(): SceneRenderWorker & {
         darkMode: request.options?.darkMode,
       };
       const label = `${request.format}:s${request.options?.scale ?? 1}:d${request.options?.darkMode ? 1 : 0}`;
-      const bytes =
-        request.format === "png" ? fakePng(label) : fakeSvg(label);
+      const bytes = request.format === "png" ? fakePng(label) : fakeSvg(label);
       return {
         bytes,
-        mimeType:
-          request.format === "png"
-            ? ("image/png" as const)
-            : ("image/svg+xml" as const),
+        mimeType: request.format === "png" ? ("image/png" as const) : ("image/svg+xml" as const),
         format: request.format,
       };
     },
@@ -127,13 +119,15 @@ type Harness = {
   worker: ReturnType<typeof createMockWorker> | null;
 };
 
-async function startServer(opts: {
-  renderWorker?: SceneRenderWorker | null;
-  renderWorkerMode?: "on" | "off";
-} = {}): Promise<Harness> {
-  const dataDir = tempDir("excalicli-export-data-");
-  const cwd = tempDir("excalicli-export-cwd-");
-  const configHome = tempDir("excalicli-export-xdg-");
+async function startServer(
+  opts: {
+    renderWorker?: SceneRenderWorker | null;
+    renderWorkerMode?: "on" | "off";
+  } = {},
+): Promise<Harness> {
+  const dataDir = tempDir("excali-export-data-");
+  const cwd = tempDir("excali-export-cwd-");
+  const configHome = tempDir("excali-export-xdg-");
   const token = "test-bootstrap-token-export-cli";
 
   const db = openDatabase(dataDir);
@@ -180,8 +174,8 @@ async function startServer(opts: {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     XDG_CONFIG_HOME: configHome,
-    EXCALICLI_SERVER: baseUrl,
-    EXCALICLI_TOKEN: token,
+    EXCALI_SERVER: baseUrl,
+    EXCALI_TOKEN: token,
   };
 
   return { app, db, baseUrl, token, cwd, env, worker };
@@ -206,7 +200,7 @@ async function createSceneWithContent(
   const doc = {
     type: "excalidraw",
     version: 2,
-    source: "excalicli-test",
+    source: "excali-test",
     elements: [
       {
         id: "box1",
@@ -330,10 +324,7 @@ test("export png to file produces real PNG bytes", async () => {
   assert.ok(fs.existsSync(out));
   const bytes = fs.readFileSync(out);
   // PNG magic number
-  assert.deepEqual(
-    [...bytes.subarray(0, 8)],
-    [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
-  );
+  assert.deepEqual([...bytes.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   assert.ok(bytes.byteLength > 32, `expected non-trivial PNG, got ${bytes.byteLength}`);
   assert.ok(h.worker && h.worker.callCount >= 1);
 });
@@ -352,10 +343,7 @@ test("export png -o - streams binary cleanly to stdout", async () => {
   assert.equal(code, ExitCode.OK, c.stderr);
   assert.equal(c.stderr, "");
   const bytes = c.stdoutBytes;
-  assert.deepEqual(
-    [...bytes.subarray(0, 8)],
-    [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
-  );
+  assert.deepEqual([...bytes.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   assert.ok(bytes.byteLength > 32);
   // No JSON / text trailer mixed into the stream.
   assert.equal(bytes.toString("utf8").includes("Exported"), false);
@@ -404,10 +392,7 @@ test("export png to file with --json emits metadata only on stdout", async () =>
 
   const fileBytes = fs.readFileSync(path.join(h.cwd, "out.png"));
   assert.equal(fileBytes.byteLength, meta.bytes);
-  assert.deepEqual(
-    [...fileBytes.subarray(0, 8)],
-    [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
-  );
+  assert.deepEqual([...fileBytes.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   // stdout is pure JSON — not mixed with PNG.
   assert.equal(c.stdoutBytes[0], 0x7b); // '{'
 });
@@ -477,9 +462,9 @@ test("export --format json succeeds when render worker is off", async () => {
   };
   assert.equal(meta.format, "json");
   assert.equal(meta.path, "arch.json");
-  const scene = JSON.parse(
-    fs.readFileSync(path.join(h.cwd, "arch.json"), "utf8"),
-  ) as { elements: unknown[] };
+  const scene = JSON.parse(fs.readFileSync(path.join(h.cwd, "arch.json"), "utf8")) as {
+    elements: unknown[];
+  };
   assert.ok(Array.isArray(scene.elements));
   assert.ok(scene.elements.length >= 1);
 });

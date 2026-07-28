@@ -331,10 +331,7 @@ describe("GET /api/scenes/:slug/events", () => {
     const elapsed = Date.now() - t0;
 
     assert.equal(res.statusCode, 200, res.body);
-    assert.ok(
-      elapsed < 1000,
-      `watch/notify should react within 1s, took ${elapsed}ms`,
-    );
+    assert.ok(elapsed < 1000, `watch/notify should react within 1s, took ${elapsed}ms`);
     const body = res.json() as SceneEventResponse;
     assert.equal(body.headVersion, 2);
     assert.equal(body.version, 2);

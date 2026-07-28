@@ -1,5 +1,5 @@
 /**
- * `excalicli ls` — list scenes on the configured server.
+ * `excali ls` — list scenes on the configured server.
  */
 import { apiFetch } from "./api.js";
 import type { Command, CommandContext } from "./commands.js";
@@ -20,7 +20,7 @@ export type SceneInfo = {
 function requireAuth(ctx: CommandContext): void {
   if (!ctx.config.server || !ctx.config.token) {
     throw new CliError(
-      "No server/token configured. Set EXCALICLI_SERVER and EXCALICLI_TOKEN, or run `excalicli login`.",
+      "No server/token configured. Set EXCALI_SERVER and EXCALI_TOKEN, or run `excali login`.",
       { code: "USAGE" },
     );
   }
@@ -72,6 +72,6 @@ async function runLs(ctx: CommandContext): Promise<CommandResult> {
 export const lsCommand: Command = {
   name: "ls",
   description: "List scenes on the server",
-  usage: "excalicli ls [--json]",
+  usage: "excali ls [--json]",
   run: runLs,
 };

@@ -10,28 +10,15 @@ import { registerWhoamiRoute, seedBootstrapToken } from "./auth.js";
 import { registerBackupRoutes } from "./backup.js";
 import { type Config, loadConfig } from "./config.js";
 import type { Database } from "./db.js";
-import {
-  AppError,
-  ErrorCode,
-  errorEnvelope,
-  type ErrorEnvelope,
-} from "./errors.js";
+import { AppError, ErrorCode, errorEnvelope, type ErrorEnvelope } from "./errors.js";
 import { registerDiffRoutes, SceneDiffService } from "./diff.js";
 import { registerDraftRoutes } from "./drafts.js";
-import {
-  EVENTS_TIMEOUT_MS,
-  registerEventRoutes,
-  SceneEventHub,
-} from "./events.js";
+import { EVENTS_TIMEOUT_MS, registerEventRoutes, SceneEventHub } from "./events.js";
 import { FileStore, registerFileRoutes } from "./files.js";
 import { LockExpiryScheduler } from "./lock-expiry.js";
 import { registerLockRoutes } from "./locks.js";
 import type { SceneMergeService } from "./merge.js";
-import {
-  registerRenderRoutes,
-  SceneRenderService,
-  type SceneRenderWorker,
-} from "./render.js";
+import { registerRenderRoutes, SceneRenderService, type SceneRenderWorker } from "./render.js";
 import { RenderCache } from "./render-cache.js";
 import { registerSceneRoutes } from "./scenes.js";
 import { registerSettingsRoutes } from "./settings.js";
@@ -135,12 +122,9 @@ function validationDetails(err: FastifyError): unknown {
  * Build a fully-wired Fastify instance without listening.
  * Tests drive it via `app.inject()`; `main.ts` calls `listen`.
  */
-export async function buildApp(
-  deps: BuildAppDeps = {},
-): Promise<FastifyInstance> {
+export async function buildApp(deps: BuildAppDeps = {}): Promise<FastifyInstance> {
   const config = deps.config ?? loadConfig();
-  const readinessCheck: ReadinessCheck =
-    deps.readinessCheck ?? (() => true);
+  const readinessCheck: ReadinessCheck = deps.readinessCheck ?? (() => true);
 
   // Global body limit must cover JSON BinaryFileData uploads (base64 bloat).
   // Per-route limits on /api/files refine this further.
@@ -160,10 +144,7 @@ export async function buildApp(
   }
 
   const fileStore =
-    deps.fileStore ??
-    (deps.db
-      ? new FileStore(config.dataDir, config.maxFileBytes)
-      : undefined);
+    deps.fileStore ?? (deps.db ? new FileStore(config.dataDir, config.maxFileBytes) : undefined);
   if (fileStore) {
     app.decorate("fileStore", fileStore);
   }
@@ -177,16 +158,11 @@ export async function buildApp(
     try {
       ready = await readinessCheck();
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "readiness check failed";
-      return reply
-        .status(503)
-        .send(errorEnvelope(ErrorCode.NOT_READY, message));
+      const message = err instanceof Error ? err.message : "readiness check failed";
+      return reply.status(503).send(errorEnvelope(ErrorCode.NOT_READY, message));
     }
     if (!ready) {
-      return reply
-        .status(503)
-        .send(errorEnvelope(ErrorCode.NOT_READY, "not ready"));
+      return reply.status(503).send(errorEnvelope(ErrorCode.NOT_READY, "not ready"));
     }
     return { status: "ready" };
   });
@@ -237,8 +213,7 @@ export async function buildApp(
       });
       // One DiffService for GET /diff and 409 conflict bodies so both share
       // the same bounded immutable cache.
-      const diffs =
-        deps.diffs ?? new SceneDiffService(deps.db, fileStore);
+      const diffs = deps.diffs ?? new SceneDiffService(deps.db, fileStore);
       app.decorate("diffs", diffs);
       await registerVersionRoutes(app, {
         db: deps.db,
@@ -256,11 +231,7 @@ export async function buildApp(
 
       // Render service: one shared worker (or null → 501). Injected
       // workers win over config so tests never need Chromium.
-      const { renders, ownedWorker } = await createRenderService(
-        deps,
-        config,
-        fileStore,
-      );
+      const { renders, ownedWorker } = await createRenderService(deps, config, fileStore);
       app.decorate("renders", renders);
       await registerRenderRoutes(app, {
         db: deps.db,
@@ -309,17 +280,13 @@ function registerErrorHandlers(app: FastifyInstance, config: Config): void {
 
     // Other Fastify errors with a known status (e.g. body parse failures)
     if (isFastifyError(err) && err.statusCode && err.statusCode < 500) {
-      const code =
-        err.statusCode === 404 ? ErrorCode.NOT_FOUND : ErrorCode.BAD_REQUEST;
+      const code = err.statusCode === 404 ? ErrorCode.NOT_FOUND : ErrorCode.BAD_REQUEST;
       const body = errorEnvelope(code, err.message);
       return reply.status(err.statusCode).send(body);
     }
 
     request.log.error({ err }, "unhandled error");
-    const body: ErrorEnvelope = errorEnvelope(
-      ErrorCode.INTERNAL,
-      "internal server error",
-    );
+    const body: ErrorEnvelope = errorEnvelope(ErrorCode.INTERNAL, "internal server error");
     return reply.status(500).send(body);
   });
 
@@ -341,19 +308,11 @@ function registerErrorHandlers(app: FastifyInstance, config: Config): void {
 
     return reply
       .status(404)
-      .send(
-        errorEnvelope(
-          ErrorCode.NOT_FOUND,
-          `Route ${request.method}:${request.url} not found`,
-        ),
-      );
+      .send(errorEnvelope(ErrorCode.NOT_FOUND, `Route ${request.method}:${request.url} not found`));
   });
 }
 
-async function registerStatic(
-  app: FastifyInstance,
-  config: Config,
-): Promise<void> {
+async function registerStatic(app: FastifyInstance, config: Config): Promise<void> {
   const root = path.resolve(config.staticRoot);
   if (!existsSync(root)) {
     throw new Error(
@@ -402,12 +361,8 @@ async function createRenderService(
     // openRenderWorker with forced env never loads worker.js when "off";
     // we force "on" here because config already said on.
     const { openRenderWorker } = await import("@excalidraw-collab/render");
-    const baseUrl =
-      deps.renderBaseUrl ?? `http://127.0.0.1:${config.port}`;
-    worker = await openRenderWorker(
-      { baseUrl },
-      { RENDER_WORKER: "on" },
-    );
+    const baseUrl = deps.renderBaseUrl ?? `http://127.0.0.1:${config.port}`;
+    worker = await openRenderWorker({ baseUrl }, { RENDER_WORKER: "on" });
     ownedWorker = worker;
   } else {
     worker = null;

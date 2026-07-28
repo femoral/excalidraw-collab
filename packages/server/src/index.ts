@@ -81,13 +81,7 @@ export {
   type SceneMetaJson,
   type VersionJson,
 } from "./backup.js";
-export {
-  packTar,
-  packTarGz,
-  unpackTar,
-  unpackTarGz,
-  type TarEntry,
-} from "./tar.js";
+export { packTar, packTarGz, unpackTar, unpackTarGz, type TarEntry } from "./tar.js";
 export {
   emptySceneDocument,
   rehydrateSceneFiles,
@@ -125,10 +119,7 @@ export {
 } from "./files.js";
 export type { TokenCreated, TokenInfo } from "./tokens.js";
 export type { SceneInfo } from "./scenes.js";
-export {
-  registerSettingsRoutes,
-  type ThemeSettings,
-} from "./settings.js";
+export { registerSettingsRoutes, type ThemeSettings } from "./settings.js";
 export {
   allocateSlug,
   isSceneLockActive,

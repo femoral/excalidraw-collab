@@ -9,12 +9,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, test } from "node:test";
-import {
-  diffScenes,
-  formatDiff,
-  isEmptyDiff,
-  type SceneDiff,
-} from "@excalidraw-collab/core";
+import { diffScenes, formatDiff, isEmptyDiff, type SceneDiff } from "@excalidraw-collab/core";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "./app.js";
 import { loadConfig, type Config } from "./config.js";
@@ -304,8 +299,7 @@ describe("409 conflict-with-diff", () => {
       message: "stale",
     });
     assert.equal(stale.statusCode, 409);
-    const details = (stale.json() as ErrorEnvelope).error
-      .details as ConflictDetails;
+    const details = (stale.json() as ErrorEnvelope).error.details as ConflictDetails;
     assert.equal(details.parentVersion, 0);
     assert.equal(details.head, 1);
     assert.equal(details.diff.summary.added, 1);
@@ -413,10 +407,7 @@ describe("GET /api/scenes/:slug/diff", () => {
     });
     await pushScene(app, token, {
       parentVersion: 1,
-      elements: [
-        rect("a", { x: 50, y: 0, versionNonce: 9 }),
-        textEl("note", "Cache"),
-      ],
+      elements: [rect("a", { x: 50, y: 0, versionNonce: 9 }), textEl("note", "Cache")],
       message: "v2",
     });
 
@@ -434,10 +425,7 @@ describe("GET /api/scenes/:slug/diff", () => {
       headers: bearer(token),
     });
     assert.equal(textRes.statusCode, 200, textRes.body);
-    assert.match(
-      textRes.headers["content-type"] ?? "",
-      /text\/plain/,
-    );
+    assert.match(textRes.headers["content-type"] ?? "", /text\/plain/);
     assert.equal(textRes.body, formatDiff(structured));
   });
 
@@ -476,10 +464,7 @@ describe("GET /api/scenes/:slug/diff", () => {
       headers: bearer(token),
     });
     assert.equal(res.statusCode, 400);
-    assert.equal(
-      (res.json() as ErrorEnvelope).error.code,
-      ErrorCode.VALIDATION,
-    );
+    assert.equal((res.json() as ErrorEnvelope).error.code, ErrorCode.VALIDATION);
   });
 
   test("unknown scene returns 404", async () => {
@@ -579,11 +564,7 @@ describe("diff cache integration", () => {
       headers: bearer(token),
     });
     assert.equal(second.statusCode, 200, second.body);
-    assert.equal(
-      diffs.computeCount,
-      1,
-      "repeat request must be a cache hit (no recompute)",
-    );
+    assert.equal(diffs.computeCount, 1, "repeat request must be a cache hit (no recompute)");
     assert.deepEqual(second.json(), first.json());
   });
 
@@ -629,8 +610,7 @@ describe("diff cache integration", () => {
     });
     assert.equal(get.statusCode, 200);
     assert.equal(diffs.computeCount, 1, "GET after 409 must not recompute");
-    const from409 = ((stale.json() as ErrorEnvelope).error
-      .details as ConflictDetails).diff;
+    const from409 = ((stale.json() as ErrorEnvelope).error.details as ConflictDetails).diff;
     assert.deepEqual(get.json(), from409);
   });
 
@@ -694,11 +674,7 @@ describe("diff cache integration", () => {
       headers: bearer(token),
     });
     assert.equal(again.statusCode, 200);
-    assert.equal(
-      diffs.computeCount,
-      4,
-      "evicted entry must recompute on next request",
-    );
+    assert.equal(diffs.computeCount, 4, "evicted entry must recompute on next request");
     assert.ok(cache.size <= 2);
   });
 });

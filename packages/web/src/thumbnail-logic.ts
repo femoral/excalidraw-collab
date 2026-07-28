@@ -50,9 +50,7 @@ export function buildThumbnailExportAppState(
  * Empty / all-deleted scenes still get a tiny PNG (consistent cards); only
  * a completely missing elements array skips generation.
  */
-export function shouldGenerateThumbnail(
-  elements: readonly unknown[] | null | undefined,
-): boolean {
+export function shouldGenerateThumbnail(elements: readonly unknown[] | null | undefined): boolean {
   return Array.isArray(elements);
 }
 
@@ -83,11 +81,7 @@ export type ThumbnailAttachResult =
   | { ok: true; fileId: string }
   | {
       ok: false;
-      reason:
-        | "skipped_empty"
-        | "export_failed"
-        | "upload_failed"
-        | "not_attempted";
+      reason: "skipped_empty" | "export_failed" | "upload_failed" | "not_attempted";
       error?: string;
     };
 
@@ -95,9 +89,7 @@ export type ThumbnailAttachResult =
  * Decide whether the commit body should carry `thumbnailFileId`.
  * Only a successful upload attaches; all other outcomes omit the field.
  */
-export function thumbnailFileIdForCommit(
-  result: ThumbnailAttachResult,
-): string | undefined {
+export function thumbnailFileIdForCommit(result: ThumbnailAttachResult): string | undefined {
   return result.ok ? result.fileId : undefined;
 }
 
@@ -123,9 +115,7 @@ export function withThumbnailFileId<T extends Record<string, unknown>>(
 export async function attachThumbnailForCommit(deps: {
   shouldGenerate: boolean;
   exportPng: () => Promise<Blob | ArrayBuffer | Uint8Array>;
-  uploadPng: (
-    bytes: ArrayBuffer,
-  ) => Promise<{ fileId: string }>;
+  uploadPng: (bytes: ArrayBuffer) => Promise<{ fileId: string }>;
 }): Promise<ThumbnailAttachResult> {
   if (!deps.shouldGenerate) {
     return { ok: false, reason: "skipped_empty" };
@@ -159,9 +149,7 @@ export async function attachThumbnailForCommit(deps: {
   }
 }
 
-async function coerceToArrayBuffer(
-  raw: Blob | ArrayBuffer | Uint8Array,
-): Promise<ArrayBuffer> {
+async function coerceToArrayBuffer(raw: Blob | ArrayBuffer | Uint8Array): Promise<ArrayBuffer> {
   if (raw instanceof ArrayBuffer) return raw;
   if (raw instanceof Uint8Array) {
     // Copy into a fresh ArrayBuffer (avoids SharedArrayBuffer typing issues).
@@ -200,9 +188,7 @@ export type ThumbnailSceneInput = {
  * Does **not** call the render worker when an uploaded id is present —
  * that is the "no server render on human commit" guarantee.
  */
-export function resolveThumbnailSource(
-  scene: ThumbnailSceneInput,
-): ThumbnailSource {
+export function resolveThumbnailSource(scene: ThumbnailSceneInput): ThumbnailSource {
   const id = scene.thumbnailFileId;
   if (typeof id === "string" && id.length > 0) {
     return { kind: "uploaded", fileId: id };
@@ -219,8 +205,7 @@ export function resolveThumbnailSource(
 
 /** Final display decision after fetch attempts. */
 export type ThumbnailDisplay =
-  | { kind: "image"; objectUrl: string; source: "uploaded" | "render" }
-  | { kind: "placeholder" };
+  { kind: "image"; objectUrl: string; source: "uploaded" | "render" } | { kind: "placeholder" };
 
 export type ThumbnailLoadDeps = {
   /** Fetch bytes for a content-addressed file id (Bearer auth). */
@@ -262,10 +247,7 @@ export async function loadThumbnailDisplay(
   if (source.kind === "uploaded") {
     try {
       const file = await deps.getFileBytes(source.fileId);
-      const objectUrl = deps.createObjectUrl(
-        file.bytes,
-        file.mimeType || "image/png",
-      );
+      const objectUrl = deps.createObjectUrl(file.bytes, file.mimeType || "image/png");
       return { kind: "image", objectUrl, source: "uploaded" };
     } catch {
       // Broken/missing uploaded blob: fall through to render for this head.
@@ -278,10 +260,7 @@ export async function loadThumbnailDisplay(
   // source.kind === "render"
   try {
     const file = await deps.getRenderPng(source.slug, source.version);
-    const objectUrl = deps.createObjectUrl(
-      file.bytes,
-      file.mimeType || "image/png",
-    );
+    const objectUrl = deps.createObjectUrl(file.bytes, file.mimeType || "image/png");
     return { kind: "image", objectUrl, source: "render" };
   } catch {
     // Worker off (501), missing Playwright, network error, empty scene, …

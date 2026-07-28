@@ -6,11 +6,7 @@ import { afterEach, describe, test } from "node:test";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "./app.js";
 import { loadConfig, type Config } from "./config.js";
-import {
-  DB_FILENAME,
-  openDatabase,
-  type Database,
-} from "./db.js";
+import { DB_FILENAME, openDatabase, type Database } from "./db.js";
 import type { DraftResponse } from "./drafts.js";
 import { ErrorCode, type ErrorEnvelope } from "./errors.js";
 import { FileStore } from "./files.js";
@@ -128,11 +124,7 @@ async function putDraft(
   });
 }
 
-async function getDraft(
-  app: FastifyInstance,
-  token: string,
-  slug = "arch",
-) {
+async function getDraft(app: FastifyInstance, token: string, slug = "arch") {
   return app.inject({
     method: "GET",
     url: `/api/scenes/${slug}/draft`,
@@ -140,11 +132,7 @@ async function getDraft(
   });
 }
 
-async function deleteDraft(
-  app: FastifyInstance,
-  token: string,
-  slug = "arch",
-) {
+async function deleteDraft(app: FastifyInstance, token: string, slug = "arch") {
   return app.inject({
     method: "DELETE",
     url: `/api/scenes/${slug}/draft`,
@@ -224,10 +212,7 @@ describe("PUT/GET /api/scenes/:slug/draft", () => {
     assert.equal((putBody.elements[0] as { id: string }).id, "d1");
     // Non-persistable appState keys must be dropped by normalizeScene.
     assert.equal(putBody.appState.viewBackgroundColor, "#ff0000");
-    assert.equal(
-      (putBody.appState as { collaborators?: unknown }).collaborators,
-      undefined,
-    );
+    assert.equal((putBody.appState as { collaborators?: unknown }).collaborators, undefined);
     assert.deepEqual(putBody.fileIds, ["a".repeat(40)]);
     assert.equal(putBody.updatedBy, "admin");
     assert.equal(putBody.basedOnVersion, 0);
@@ -292,12 +277,7 @@ describe("PUT/GET /api/scenes/:slug/draft", () => {
       bootstrapToken: token,
     });
 
-    const put = await putDraft(
-      app,
-      token,
-      { elements: [], basedOnVersion: 0 },
-      "nope",
-    );
+    const put = await putDraft(app, token, { elements: [], basedOnVersion: 0 }, "nope");
     assert.equal(put.statusCode, 404);
 
     const get = await getDraft(app, token, "nope");
@@ -479,10 +459,7 @@ describe("draft upsert does not grow the database", () => {
     }
 
     assert.equal(db.countDrafts(), 1, "must remain exactly one draft row");
-    assert.equal(
-      db.countDrafts(db.getSceneBySlug("arch")!.id),
-      1,
-    );
+    assert.equal(db.countDrafts(db.getSceneBySlug("arch")!.id), 1);
 
     db.checkpointWal();
     const sizeAfterMany = statSync(dbPath).size;
@@ -505,10 +482,7 @@ describe("draft upsert does not grow the database", () => {
     // Last write wins.
     const get = await getDraft(app, token);
     const body = get.json() as DraftResponse;
-    assert.equal(
-      (body.elements[0] as { versionNonce: number }).versionNonce,
-      N + 1,
-    );
+    assert.equal((body.elements[0] as { versionNonce: number }).versionNonce, N + 1);
   });
 });
 
@@ -621,10 +595,7 @@ describe("DELETE draft and commit clearing", () => {
     assert.equal(page.total, 2);
     assert.equal(page.versions.length, 2);
     assert.equal(page.headVersion, 2);
-    assert.deepEqual(
-      page.versions.map((v) => v.version).sort(),
-      [1, 2],
-    );
+    assert.deepEqual(page.versions.map((v) => v.version).sort(), [1, 2]);
     // No draft authors/messages sneak into history.
     for (const v of page.versions) {
       assert.ok(v.message === "first" || v.message === "second");
@@ -662,9 +633,6 @@ describe("DELETE draft and commit clearing", () => {
     assert.equal(getA.statusCode, 404);
     const getB = await getDraft(app, token, "b");
     assert.equal(getB.statusCode, 200, getB.body);
-    assert.equal(
-      ((getB.json() as DraftResponse).elements[0] as { id: string }).id,
-      "db",
-    );
+    assert.equal(((getB.json() as DraftResponse).elements[0] as { id: string }).id, "db");
   });
 });

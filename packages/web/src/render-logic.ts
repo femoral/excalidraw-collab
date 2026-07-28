@@ -61,9 +61,7 @@ export type RenderMergeRequestMessage = {
   appState?: Record<string, unknown>;
 };
 
-export type RenderRequestMessage =
-  | RenderExportRequestMessage
-  | RenderMergeRequestMessage;
+export type RenderRequestMessage = RenderExportRequestMessage | RenderMergeRequestMessage;
 
 export type RenderExportResponseOk = {
   type: typeof RENDER_MSG.RESPONSE;
@@ -89,9 +87,7 @@ export type RenderResponseErr = {
 };
 
 export type RenderResponseMessage =
-  | RenderExportResponseOk
-  | RenderMergeResponseOk
-  | RenderResponseErr;
+  RenderExportResponseOk | RenderMergeResponseOk | RenderResponseErr;
 
 export type SkeletonRequestMessage = {
   type: typeof RENDER_MSG.SKELETON_REQUEST;
@@ -136,9 +132,7 @@ export function normalizeRenderOptions(
       ? options.scale
       : 1;
   const padding =
-    options?.padding !== undefined &&
-    Number.isFinite(options.padding) &&
-    options.padding >= 0
+    options?.padding !== undefined && Number.isFinite(options.padding) && options.padding >= 0
       ? options.padding
       : 10;
   return {
@@ -174,9 +168,7 @@ export function buildExportAppState(
 }
 
 /** Drop deleted elements — export helpers expect non-deleted only. */
-export function filterExportElements(
-  elements: readonly unknown[],
-): readonly unknown[] {
+export function filterExportElements(elements: readonly unknown[]): readonly unknown[] {
   return elements.filter((el) => {
     if (el === null || typeof el !== "object") return false;
     const rec = el as { isDeleted?: unknown };
@@ -188,9 +180,7 @@ function isElementsArray(value: unknown): value is readonly unknown[] {
   return Array.isArray(value);
 }
 
-export function isExportRequest(
-  data: unknown,
-): data is RenderExportRequestMessage {
+export function isExportRequest(data: unknown): data is RenderExportRequestMessage {
   if (data === null || typeof data !== "object") return false;
   const m = data as Record<string, unknown>;
   if (m.type !== RENDER_MSG.REQUEST) return false;
@@ -204,9 +194,7 @@ export function isExportRequest(
   return true;
 }
 
-export function isMergeRequest(
-  data: unknown,
-): data is RenderMergeRequestMessage {
+export function isMergeRequest(data: unknown): data is RenderMergeRequestMessage {
   if (data === null || typeof data !== "object") return false;
   const m = data as Record<string, unknown>;
   if (m.type !== RENDER_MSG.REQUEST) return false;
@@ -226,9 +214,7 @@ export function isRenderRequest(data: unknown): data is RenderRequestMessage {
   return isExportRequest(data) || isMergeRequest(data);
 }
 
-export function isSkeletonRequest(
-  data: unknown,
-): data is SkeletonRequestMessage {
+export function isSkeletonRequest(data: unknown): data is SkeletonRequestMessage {
   if (data === null || typeof data !== "object") return false;
   const m = data as Record<string, unknown>;
   if (m.type !== RENDER_MSG.SKELETON_REQUEST) return false;
@@ -252,8 +238,7 @@ export function blobToBase64(blob: Blob): Promise<string> {
       const comma = result.indexOf(",");
       resolve(comma >= 0 ? result.slice(comma + 1) : result);
     };
-    reader.onerror = () =>
-      reject(reader.error ?? new Error("FileReader failed"));
+    reader.onerror = () => reject(reader.error ?? new Error("FileReader failed"));
     reader.readAsDataURL(blob);
   });
 }

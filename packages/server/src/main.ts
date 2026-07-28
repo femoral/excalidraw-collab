@@ -55,18 +55,12 @@ async function main(): Promise<void> {
   if (config.renderWorker === "on") {
     const baseUrl = `http://127.0.0.1:${config.port}`;
     try {
-      renderWorker = await openRenderWorker(
-        { baseUrl },
-        { RENDER_WORKER: "on" },
-      );
+      renderWorker = await openRenderWorker({ baseUrl }, { RENDER_WORKER: "on" });
       if (renderWorker) {
         merge = mergeServiceFromWorker(renderWorker);
       }
     } catch (err) {
-      console.error(
-        "failed to open render worker; merge/skeleton/render will return 501:",
-        err,
-      );
+      console.error("failed to open render worker; merge/skeleton/render will return 501:", err);
       renderWorker = null;
       merge = null;
     }

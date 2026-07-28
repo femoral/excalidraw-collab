@@ -18,7 +18,7 @@ afterEach(() => {
 });
 
 function tempEnv(): { env: NodeJS.ProcessEnv; dir: string } {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "excalicli-auth-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "excali-auth-"));
   return {
     dir,
     env: { ...process.env, XDG_CONFIG_HOME: dir },
@@ -60,11 +60,7 @@ function jsonResponse(status: number, body: unknown): Response {
   });
 }
 
-function errorResponse(
-  status: number,
-  code: string,
-  message: string,
-): Response {
+function errorResponse(status: number, code: string, message: string): Response {
   return jsonResponse(status, { error: { code, message } });
 }
 
@@ -80,14 +76,7 @@ test("login rejects a bad token without writing config", async () => {
 
   const c = capture();
   const code = await run({
-    argv: [
-      "login",
-      "--server",
-      "http://example.test",
-      "--token",
-      "bad-token",
-      "--json",
-    ],
+    argv: ["login", "--server", "http://example.test", "--token", "bad-token", "--json"],
     env,
     io: c.io,
   });
@@ -123,14 +112,7 @@ test("login writes 0600 config on success and emits parseable --json", async () 
 
   const c = capture();
   const code = await run({
-    argv: [
-      "--json",
-      "login",
-      "--server",
-      "http://example.test/",
-      "--token",
-      "good-secret",
-    ],
+    argv: ["--json", "login", "--server", "http://example.test/", "--token", "good-secret"],
     env,
     io: c.io,
   });
@@ -444,8 +426,7 @@ test("token revoke unknown name returns NOT_FOUND with JSON", async () => {
     { mode: 0o600 },
   );
 
-  globalThis.fetch = (async () =>
-    jsonResponse(200, { tokens: [] })) as typeof fetch;
+  globalThis.fetch = (async () => jsonResponse(200, { tokens: [] })) as typeof fetch;
 
   const c = capture();
   const code = await run({

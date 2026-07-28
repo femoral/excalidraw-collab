@@ -88,9 +88,7 @@ export type RenderWorker = {
    * Convert skeleton elements to full Excalidraw elements via upstream
    * `convertToExcalidrawElements` inside the browser page.
    */
-  convertSkeleton(
-    request: SkeletonConvertRequest,
-  ): Promise<SkeletonConvertResult>;
+  convertSkeleton(request: SkeletonConvertRequest): Promise<SkeletonConvertResult>;
   /**
    * Merge two element arrays via upstream `restoreElements` +
    * `reconcileElements` in the browser page. Same page pool as export.
@@ -113,11 +111,7 @@ export class RenderError extends Error {
     /** Playwright package missing (optionalDependency skipped at install). */
     | "NOT_INSTALLED";
 
-  constructor(
-    code: RenderError["code"],
-    message: string,
-    options?: { cause?: unknown },
-  ) {
+  constructor(code: RenderError["code"], message: string, options?: { cause?: unknown }) {
     super(message, options?.cause !== undefined ? { cause: options.cause } : undefined);
     this.name = "RenderError";
     this.code = code;

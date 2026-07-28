@@ -102,8 +102,7 @@ test("apiFetch requires server in config", async () => {
 
 test("apiFetchResult surfaces 204 with empty body (long-poll timeout)", async () => {
   const { apiFetchResult } = await import("./api.js");
-  globalThis.fetch = (async () =>
-    new Response(null, { status: 204 })) as typeof fetch;
+  globalThis.fetch = (async () => new Response(null, { status: 204 })) as typeof fetch;
 
   const result = await apiFetchResult({
     path: "/api/scenes/x/events?since=1",

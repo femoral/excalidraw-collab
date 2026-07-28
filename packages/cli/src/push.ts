@@ -1,5 +1,5 @@
 /**
- * `excalicli push SLUG [-f file] -m "message" [--force|--merge] [--respect-lock] [--skeleton]`
+ * `excali push SLUG [-f file] -m "message" [--force|--merge] [--respect-lock] [--skeleton]`
  *
  * Sends the recorded pulled version as `parentVersion` so conflicts are
  * detected without the user tracking version numbers by hand.
@@ -55,7 +55,7 @@ export type SkeletonConvertResponse = {
 function requireAuth(ctx: CommandContext): void {
   if (!ctx.config.server || !ctx.config.token) {
     throw new CliError(
-      "No server/token configured. Set EXCALICLI_SERVER and EXCALICLI_TOKEN, or run `excalicli login`.",
+      "No server/token configured. Set EXCALI_SERVER and EXCALI_TOKEN, or run `excali login`.",
       { code: "USAGE" },
     );
   }
@@ -114,15 +114,13 @@ function parsePushArgs(args: string[]): {
   }
 
   const usage =
-    'Usage: excalicli push SLUG [-f file] -m "message" [--force|--merge] [--respect-lock] [--skeleton]';
+    'Usage: excali push SLUG [-f file] -m "message" [--force|--merge] [--respect-lock] [--skeleton]';
 
   if (positionals.length === 0) {
     throw new UsageError(`push requires SLUG\n\n${usage}`);
   }
   if (positionals.length > 1) {
-    throw new UsageError(
-      `unexpected arguments: ${positionals.slice(1).join(" ")}\n\n${usage}`,
-    );
+    throw new UsageError(`unexpected arguments: ${positionals.slice(1).join(" ")}\n\n${usage}`);
   }
 
   const slug = positionals[0]!.trim();
@@ -151,10 +149,7 @@ function parsePushArgs(args: string[]): {
 }
 
 /** Active advisory lock (null when free or expired). */
-function activeLock(
-  lock: SceneInfo["lock"],
-  nowMs: number = Date.now(),
-): SceneInfo["lock"] {
+function activeLock(lock: SceneInfo["lock"], nowMs: number = Date.now()): SceneInfo["lock"] {
   if (lock === null) return null;
   if (!lock.expiresAt) return lock;
   const expires = Date.parse(lock.expiresAt);
@@ -194,18 +189,16 @@ function readSceneFile(cwd: string, filePath: string): SceneDocument {
   const parsed = readJsonFile(cwd, filePath);
 
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new CliError(
-      `invalid scene file ${filePath}: expected a JSON object`,
-      { code: "VALIDATION" },
-    );
+    throw new CliError(`invalid scene file ${filePath}: expected a JSON object`, {
+      code: "VALIDATION",
+    });
   }
 
   const obj = parsed as Record<string, unknown>;
   if (!Array.isArray(obj.elements)) {
-    throw new CliError(
-      `invalid scene file ${filePath}: "elements" must be an array`,
-      { code: "VALIDATION" },
-    );
+    throw new CliError(`invalid scene file ${filePath}: "elements" must be an array`, {
+      code: "VALIDATION",
+    });
   }
 
   return obj as SceneDocument;
@@ -238,10 +231,9 @@ function readSkeletonFile(
 
   const obj = parsed as Record<string, unknown>;
   if (!Array.isArray(obj.elements)) {
-    throw new CliError(
-      `invalid skeleton file ${filePath}: "elements" must be an array`,
-      { code: "VALIDATION" },
-    );
+    throw new CliError(`invalid skeleton file ${filePath}: "elements" must be an array`, {
+      code: "VALIDATION",
+    });
   }
 
   return {
@@ -286,16 +278,12 @@ async function resolveParentVersion(
   }
 
   throw new CliError(
-    `No local pulled version for scene "${slug}" on ${server}.\n` +
-      `Run: excalicli pull ${slug}`,
+    `No local pulled version for scene "${slug}" on ${server}.\n` + `Run: excali pull ${slug}`,
     { code: "USAGE" },
   );
 }
 
-async function convertSkeleton(
-  ctx: CommandContext,
-  elements: unknown[],
-): Promise<unknown[]> {
+async function convertSkeleton(ctx: CommandContext, elements: unknown[]): Promise<unknown[]> {
   try {
     const result = await apiFetch<SkeletonConvertResponse>({
       path: "/api/skeleton/convert",
@@ -304,17 +292,13 @@ async function convertSkeleton(
       body: JSON.stringify({ elements, regenerateIds: false }),
     });
     if (!result || !Array.isArray(result.elements)) {
-      throw new CliError(
-        "skeleton convert response missing elements array",
-        { code: "ERROR" },
-      );
+      throw new CliError("skeleton convert response missing elements array", { code: "ERROR" });
     }
     return result.elements;
   } catch (err) {
     if (err instanceof CliError && err.code === "NOT_IMPLEMENTED") {
       throw new CliError(
-        err.message ||
-          "Skeleton conversion requires the render worker (RENDER_WORKER=on).",
+        err.message || "Skeleton conversion requires the render worker (RENDER_WORKER=on).",
         { code: "NOT_IMPLEMENTED", details: err.details },
       );
     }
@@ -325,8 +309,7 @@ async function convertSkeleton(
 
 async function runPush(ctx: CommandContext): Promise<CommandResult> {
   requireAuth(ctx);
-  const { slug, file, message, force, merge, respectLock, skeleton } =
-    parsePushArgs(ctx.args);
+  const { slug, file, message, force, merge, respectLock, skeleton } = parsePushArgs(ctx.args);
   const server = ctx.config.server!;
 
   // Advisory lock check (never enforced by the server). Warn, or refuse with
@@ -357,7 +340,7 @@ async function runPush(ctx: CommandContext): Promise<CommandResult> {
             (held.expiresAt ? ` until ${held.expiresAt}` : "") +
             `.\n` +
             `Refusing push because --respect-lock was set.\n` +
-            `Release with: excalicli turn release ${slug}\n` +
+            `Release with: excali turn release ${slug}\n` +
             `Or omit --respect-lock to push anyway.`,
           {
             code: "LOCK_HELD",
@@ -474,14 +457,11 @@ async function runPush(ctx: CommandContext): Promise<CommandResult> {
     (skeleton ? " (from skeleton)" : "") +
     ` — "${result.message}"\n` +
     `parent: v${result.parentVersion ?? parentVersion}  author: ${result.author}` +
-    (skeleton
-      ? `  skeleton: ${skeletonElementCount} → ${result.elementCount} elements`
-      : "") +
+    (skeleton ? `  skeleton: ${skeletonElementCount} → ${result.elementCount} elements` : "") +
     `\n`;
 
   if (result.merged && result.mergeParents) {
-    human +=
-      `merge parents: v${result.mergeParents.local}+v${result.mergeParents.remote}\n`;
+    human += `merge parents: v${result.mergeParents.local}+v${result.mergeParents.remote}\n`;
   }
   if (result.merged && result.diff) {
     // Surface the merge decision so a silent merge is never worse than a
@@ -499,10 +479,9 @@ async function runPush(ctx: CommandContext): Promise<CommandResult> {
 
 export const pushCommand: Command = {
   name: "push",
-  description:
-    "Upload a .excalidraw file (or --skeleton) as a new version",
+  description: "Upload a .excalidraw file (or --skeleton) as a new version",
   usage:
-    'excalicli push SLUG [-f file] -m "message" [--force|--merge] [--respect-lock] [--skeleton] [--json]\n\n' +
+    'excali push SLUG [-f file] -m "message" [--force|--merge] [--respect-lock] [--skeleton] [--json]\n\n' +
     "  -f file          Input path (default: SLUG.excalidraw, or SLUG.skeleton.json with --skeleton)\n" +
     "  -m message       Commit message (required)\n" +
     "  --skeleton       Treat -f as a skeleton element list; convert via render worker then push\n" +

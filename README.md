@@ -14,9 +14,10 @@ dependency. Upgrades are a version bump plus the
 
 | Doc | Audience |
 |---|---|
-| [docs/cli.md](./docs/cli.md) | Full `excalicli` reference (generated from the CLI parsers) |
-| [packages/cli/skills/excalidraw-collab](./packages/cli/skills/excalidraw-collab) | Agent skill — turn loop, conflicts, exit codes (install with `excalicli skills install`) |
+| [docs/cli.md](./docs/cli.md) | Full `excali` reference (generated from the CLI parsers) |
+| [packages/cli/skills/excalidraw-collab](./packages/cli/skills/excalidraw-collab) | Agent skill — turn loop, conflicts, exit codes (install with `excali skills install`) |
 | [docs/upgrade-excalidraw.md](./docs/upgrade-excalidraw.md) | Bumping `@excalidraw/excalidraw` |
+| [docs/release.md](./docs/release.md) | Publishing the CLI to npm |
 | [PLAN.md](./PLAN.md) | Architecture, data model, HTTP API |
 | [deploy/README.md](./deploy/README.md) | Kubernetes / kustomize |
 
@@ -35,22 +36,26 @@ Data is bind-mounted at `./data` (relative to the repo root).
 
 ### Mint a token and use the CLI
 
-The bootstrap token is already an admin credential. From a host with Node 24+
-and a built CLI (`pnpm install && pnpm build` in this repo):
+The bootstrap token is already an admin credential. Install the CLI from npm
+(Node 24+):
 
 ```sh
-# After: pnpm install && pnpm build
-alias excalicli='node packages/cli/bin/excalicli'   # or put the bin on PATH
+npm install -g @excalidraw-collab/cli   # provides the `excali` command
+```
 
-excalicli login --server http://localhost:3000 --token "$BOOTSTRAP_TOKEN"
-excalicli whoami
-excalicli token create agent-bot          # prints a secret once — store it
-excalicli new "Architecture" --slug arch
-excalicli pull arch
+Working from a clone instead? `pnpm install && pnpm build`, then
+`alias excali='node packages/cli/bin/excali'`.
+
+```sh
+excali login --server http://localhost:3000 --token "$BOOTSTRAP_TOKEN"
+excali whoami
+excali token create agent-bot          # prints a secret once — store it
+excali new "Architecture" --slug arch
+excali pull arch
 # edit arch.excalidraw  (or open http://localhost:3000 in a browser)
-excalicli push arch -m "initial diagram"
-excalicli describe arch
-excalicli diff arch --since-last-pull
+excali push arch -m "initial diagram"
+excali describe arch
+excali diff arch --since-last-pull
 ```
 
 ### Teach your coding agent the workflow
@@ -59,10 +64,10 @@ The CLI ships an agent skill (turn loop, conflict handling, exit codes). Install
 it into a skills directory instead of copying instructions by hand:
 
 ```sh
-excalicli skills install                 # ./.claude/skills/excalidraw-collab/
-excalicli skills install --scope user    # ~/.claude/skills/excalidraw-collab/
-excalicli skills install --client agents # .agents/skills/… instead of .claude/
-excalicli skills ls                      # what's bundled
+excali skills install                 # ./.claude/skills/excalidraw-collab/
+excali skills install --scope user    # ~/.claude/skills/excalidraw-collab/
+excali skills install --client agents # .agents/skills/… instead of .claude/
+excali skills ls                      # what's bundled
 ```
 
 `--dir PATH` targets an arbitrary skills directory, `--force` overwrites an
@@ -106,8 +111,8 @@ Compose and the production image set `SERVE_STATIC=true`, `STATIC_ROOT=/app/publ
 
 | Mechanism | Details |
 |---|---|
-| `excalicli login --server URL --token T` | Writes `~/.config/excalicli/config.json` (or `$XDG_CONFIG_HOME/excalicli/`) mode `0600` |
-| `EXCALICLI_SERVER` / `EXCALICLI_TOKEN` | Env overrides the file |
+| `excali login --server URL --token T` | Writes `~/.config/excali/config.json` (or `$XDG_CONFIG_HOME/excali/`) mode `0600` |
+| `EXCALI_SERVER` / `EXCALI_TOKEN` | Env overrides the file |
 | `.excalidraw-collab/state.json` | Per-cwd last pulled/pushed version per scene (not credentials) |
 
 ## Deployment
@@ -137,9 +142,9 @@ kubectl apply -k deploy/overlays/example
 ### Backup
 
 ```sh
-excalicli backup -o backup.tar.gz          # admin token; portable .tar.gz
-excalicli restore backup.tar.gz            # --on-collision skip|overwrite|abort
-excalicli pull --all -o ./export/          # escape hatch: head of every scene as .excalidraw
+excali backup -o backup.tar.gz          # admin token; portable .tar.gz
+excali restore backup.tar.gz            # --on-collision skip|overwrite|abort
+excali pull --all -o ./export/          # escape hatch: head of every scene as .excalidraw
 ```
 
 ## Layout
@@ -148,7 +153,7 @@ excalicli pull --all -o ./export/          # escape hatch: head of every scene a
 packages/
   core/     pure TS: types, diff, digest, normalize (zero runtime deps)
   server/   Fastify HTTP API + SQLite + file store
-  cli/      excalicli (+ skills/ — the agent skill it installs)
+  cli/      excali (+ skills/ — the agent skill it installs)
   web/      Vite + React + @excalidraw/excalidraw
   render/   headless Chromium worker (optional)
 docker/     Dockerfile + compose

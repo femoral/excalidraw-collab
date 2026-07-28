@@ -143,10 +143,12 @@ type MockWorker = SceneRenderWorker & {
  * Mock worker that optionally enforces a concurrency cap (like the real
  * Playwright pool) and records every invocation for cache assertions.
  */
-function createMockWorker(opts: {
-  concurrency?: number;
-  delayMs?: number;
-} = {}): MockWorker {
+function createMockWorker(
+  opts: {
+    concurrency?: number;
+    delayMs?: number;
+  } = {},
+): MockWorker {
   const concurrency = opts.concurrency ?? Infinity;
   const delayMs = opts.delayMs ?? 0;
   let active = 0;
@@ -206,14 +208,10 @@ function createMockWorker(opts: {
           await new Promise((r) => setTimeout(r, delayMs));
         }
         const label = `${request.format}:s${request.options?.scale ?? 1}:d${request.options?.darkMode ? 1 : 0}:n${request.scene.elements.length}`;
-        const bytes =
-          request.format === "png" ? fakePng(label) : fakeSvg(label);
+        const bytes = request.format === "png" ? fakePng(label) : fakeSvg(label);
         return {
           bytes,
-          mimeType:
-            request.format === "png"
-              ? ("image/png" as const)
-              : ("image/svg+xml" as const),
+          mimeType: request.format === "png" ? ("image/png" as const) : ("image/svg+xml" as const),
           format: request.format,
         };
       } finally {
@@ -266,13 +264,7 @@ async function buildRenderApp(opts: {
 
   const renders =
     opts.renders ??
-    new SceneRenderService(
-      db,
-      store,
-      renderWorker,
-      new RenderCache(opts.dataDir),
-      opts.dataDir,
-    );
+    new SceneRenderService(db, store, renderWorker, new RenderCache(opts.dataDir), opts.dataDir);
 
   const app = await buildApp({
     config,
@@ -449,10 +441,7 @@ describe("GET /api/scenes/:slug/render.{png,svg}", () => {
     assert.match(body.error.message, /not available/i);
     assert.match(body.error.message, /Playwright is not installed/i);
     assert.match(body.error.message, /optional|no-optional|without render/i);
-    assert.equal(
-      (body.error.details as { reason?: string } | undefined)?.reason,
-      "not_installed",
-    );
+    assert.equal((body.error.details as { reason?: string } | undefined)?.reason, "not_installed");
     // Must not surface a raw module-resolution failure as the message.
     assert.doesNotMatch(body.error.message, /ERR_MODULE_NOT_FOUND/);
     // Worker was invoked once (cache miss) then mapped to 501 — not a hang.
@@ -606,9 +595,7 @@ describe("GET /api/scenes/:slug/render.{png,svg}", () => {
     for (let i = 0; i < 6; i++) {
       const slug = `cap-${i}`;
       slugs.push(slug);
-      await createSceneWithVersion(app, token, slug, [
-        rect(`el-${i}`, { versionNonce: i + 1 }),
-      ]);
+      await createSceneWithVersion(app, token, slug, [rect(`el-${i}`, { versionNonce: i + 1 })]);
     }
 
     const results = await Promise.all(
@@ -624,10 +611,7 @@ describe("GET /api/scenes/:slug/render.{png,svg}", () => {
       assert.equal(res.statusCode, 200, res.body);
     }
     assert.equal(mock.callCount, 6);
-    assert.ok(
-      mock.maxConcurrent <= cap,
-      `maxConcurrent ${mock.maxConcurrent} exceeded cap ${cap}`,
-    );
+    assert.ok(mock.maxConcurrent <= cap, `maxConcurrent ${mock.maxConcurrent} exceeded cap ${cap}`);
     assert.ok(mock.maxConcurrent >= 1);
   });
 
@@ -651,10 +635,7 @@ describe("GET /api/scenes/:slug/render.{png,svg}", () => {
       headers: bearer(token),
     });
     assert.equal(missing.statusCode, 404);
-    assert.equal(
-      (missing.json() as ErrorEnvelope).error.code,
-      ErrorCode.NOT_FOUND,
-    );
+    assert.equal((missing.json() as ErrorEnvelope).error.code, ErrorCode.NOT_FOUND);
   });
 
   test("invalid scale/dark → 400 VALIDATION", async () => {
@@ -672,10 +653,7 @@ describe("GET /api/scenes/:slug/render.{png,svg}", () => {
       headers: bearer(token),
     });
     assert.equal(badScale.statusCode, 400);
-    assert.equal(
-      (badScale.json() as ErrorEnvelope).error.code,
-      ErrorCode.VALIDATION,
-    );
+    assert.equal((badScale.json() as ErrorEnvelope).error.code, ErrorCode.VALIDATION);
 
     const badDark = await app.inject({
       method: "GET",
@@ -720,10 +698,7 @@ describe("GET /api/scenes/:slug/render.{png,svg}", () => {
     });
     assert.equal(r1.statusCode, 200);
     assert.equal(r2.statusCode, 200);
-    assert.notDeepEqual(
-      Buffer.from(r1.rawPayload),
-      Buffer.from(r2.rawPayload),
-    );
+    assert.notDeepEqual(Buffer.from(r1.rawPayload), Buffer.from(r2.rawPayload));
     assert.equal(worker.callCount, 2);
 
     // Re-fetch v1 from cache.

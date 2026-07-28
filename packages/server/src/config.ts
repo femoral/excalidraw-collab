@@ -1,11 +1,4 @@
-export type LogLevel =
-  | "fatal"
-  | "error"
-  | "warn"
-  | "info"
-  | "debug"
-  | "trace"
-  | "silent";
+export type LogLevel = "fatal" | "error" | "warn" | "info" | "debug" | "trace" | "silent";
 
 export type RenderWorkerMode = "on" | "off";
 
@@ -71,17 +64,11 @@ function parseBool(raw: string, variable: string): boolean {
 
 function parsePort(raw: string): number {
   if (!/^\d+$/.test(raw.trim())) {
-    throw new ConfigError(
-      "PORT",
-      `expected an integer 1–65535, got ${JSON.stringify(raw)}`,
-    );
+    throw new ConfigError("PORT", `expected an integer 1–65535, got ${JSON.stringify(raw)}`);
   }
   const n = Number(raw);
   if (!Number.isInteger(n) || n < 1 || n > 65535) {
-    throw new ConfigError(
-      "PORT",
-      `expected an integer 1–65535, got ${JSON.stringify(raw)}`,
-    );
+    throw new ConfigError("PORT", `expected an integer 1–65535, got ${JSON.stringify(raw)}`);
   }
   return n;
 }
@@ -101,10 +88,7 @@ function parseRenderWorker(raw: string): RenderWorkerMode {
   const v = raw.trim().toLowerCase();
   if (v === "on" || v === "true" || v === "1") return "on";
   if (v === "off" || v === "false" || v === "0") return "off";
-  throw new ConfigError(
-    "RENDER_WORKER",
-    `expected "on" or "off", got ${JSON.stringify(raw)}`,
-  );
+  throw new ConfigError("RENDER_WORKER", `expected "on" or "off", got ${JSON.stringify(raw)}`);
 }
 
 function parseMaxFileBytes(raw: string): number {
@@ -128,19 +112,15 @@ function parseMaxFileBytes(raw: string): number {
  * Load and validate config from an env-like record.
  * Fails fast with {@link ConfigError} naming the offending variable.
  */
-export function loadConfig(
-  env: Record<string, string | undefined> = process.env,
-): Config {
+export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
   const port = env.PORT !== undefined && env.PORT !== "" ? parsePort(env.PORT) : 3000;
 
-  const dataDir =
-    env.DATA_DIR !== undefined && env.DATA_DIR !== "" ? env.DATA_DIR : "./data";
+  const dataDir = env.DATA_DIR !== undefined && env.DATA_DIR !== "" ? env.DATA_DIR : "./data";
   if (dataDir.includes("\0")) {
     throw new ConfigError("DATA_DIR", "path must not contain null bytes");
   }
 
-  const bootstrapToken =
-    env.BOOTSTRAP_TOKEN !== undefined ? env.BOOTSTRAP_TOKEN : "";
+  const bootstrapToken = env.BOOTSTRAP_TOKEN !== undefined ? env.BOOTSTRAP_TOKEN : "";
 
   const renderWorker =
     env.RENDER_WORKER !== undefined && env.RENDER_WORKER !== ""
@@ -148,9 +128,7 @@ export function loadConfig(
       : "off";
 
   const logLevel =
-    env.LOG_LEVEL !== undefined && env.LOG_LEVEL !== ""
-      ? parseLogLevel(env.LOG_LEVEL)
-      : "info";
+    env.LOG_LEVEL !== undefined && env.LOG_LEVEL !== "" ? parseLogLevel(env.LOG_LEVEL) : "info";
 
   const serveStatic =
     env.SERVE_STATIC !== undefined && env.SERVE_STATIC !== ""
@@ -158,9 +136,7 @@ export function loadConfig(
       : false;
 
   const staticRoot =
-    env.STATIC_ROOT !== undefined && env.STATIC_ROOT !== ""
-      ? env.STATIC_ROOT
-      : "./public";
+    env.STATIC_ROOT !== undefined && env.STATIC_ROOT !== "" ? env.STATIC_ROOT : "./public";
   if (staticRoot.includes("\0")) {
     throw new ConfigError("STATIC_ROOT", "path must not contain null bytes");
   }

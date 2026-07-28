@@ -58,7 +58,7 @@ export type Command = {
    * Throw {@link import("./errors.js").CliError} / UsageError on failure.
    */
   run: (ctx: CommandContext) => CommandResult | Promise<CommandResult>;
-  /** Optional extra help lines for `excalicli <cmd> --help`. */
+  /** Optional extra help lines for `excali <cmd> --help`. */
   usage?: string;
 };
 
@@ -85,10 +85,10 @@ export const CLI_VERSION = "0.0.0";
 const versionCommand: Command = {
   name: "version",
   description: "Print CLI version",
-  usage: "excalicli version [--json]",
+  usage: "excali version [--json]",
   run(): CommandResult {
     const data = {
-      name: "excalicli",
+      name: "excali",
       version: CLI_VERSION,
     };
     return {

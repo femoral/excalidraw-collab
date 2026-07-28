@@ -23,22 +23,13 @@ import {
 } from "@excalidraw-collab/core";
 import type { FastifyInstance } from "fastify";
 import { authorFromIdentity, createAuthPreHandler } from "./auth.js";
-import {
-  gunzipJson,
-  gzipJson,
-  type Database,
-  type VersionRow,
-} from "./db.js";
+import { gunzipJson, gzipJson, type Database, type VersionRow } from "./db.js";
 import type { SceneDiffService } from "./diff.js";
 import type { SceneEventHub } from "./events.js";
 import { AppError, ErrorCode } from "./errors.js";
 import type { LockExpiryScheduler } from "./lock-expiry.js";
 import { toLock } from "./scenes.js";
-import {
-  decodeDataURL,
-  FILE_ID_HEX_RE,
-  type FileStore,
-} from "./files.js";
+import { decodeDataURL, FILE_ID_HEX_RE, type FileStore } from "./files.js";
 import {
   collectReferencedFileIds,
   formatMergeCommitMessage,
@@ -134,20 +125,13 @@ export function emptySceneDocument(): SceneDocument & {
  * Throws {@link AppError} VALIDATION on malformed refs. Does not check
  * range — callers map out-of-range to 404.
  */
-export function resolveVersionRef(
-  ref: string | number | undefined,
-  head: number,
-): number {
+export function resolveVersionRef(ref: string | number | undefined, head: number): number {
   if (ref === undefined || ref === "") {
     return head;
   }
   if (typeof ref === "number") {
     if (!Number.isInteger(ref) || ref < 0) {
-      throw new AppError(
-        ErrorCode.VALIDATION,
-        `invalid version ref: ${JSON.stringify(ref)}`,
-        400,
-      );
+      throw new AppError(ErrorCode.VALIDATION, `invalid version ref: ${JSON.stringify(ref)}`, 400);
     }
     return ref;
   }
@@ -206,10 +190,7 @@ export function toPushResponse(row: VersionRow): PushVersionResponse {
  * Empty / missing → null (no thumbnail). Non-hex or missing blob → 400.
  * The id must already exist in the content-addressed store (upload first).
  */
-export function resolveThumbnailFileId(
-  raw: unknown,
-  store: FileStore,
-): string | null {
+export function resolveThumbnailFileId(raw: unknown, store: FileStore): string | null {
   if (raw === undefined || raw === null || raw === "") {
     return null;
   }
@@ -235,20 +216,13 @@ export function resolveThumbnailFileId(
  * Verifies claimed fileId === SHA-1(bytes) (FileStore.put).
  * Returns the ordered list of stored file ids.
  */
-export function storeSceneFiles(
-  store: FileStore,
-  files: BinaryFiles,
-): string[] {
+export function storeSceneFiles(store: FileStore, files: BinaryFiles): string[] {
   const ids: string[] = [];
   for (const [claimedId, entry] of Object.entries(files)) {
     if (entry == null || typeof entry !== "object") continue;
     const data = entry as BinaryFileData;
     if (typeof data.dataURL !== "string") {
-      throw new AppError(
-        ErrorCode.VALIDATION,
-        `files["${claimedId}"].dataURL is required`,
-        400,
-      );
+      throw new AppError(ErrorCode.VALIDATION, `files["${claimedId}"].dataURL is required`, 400);
     }
     const decoded = decodeDataURL(data.dataURL);
     const mimeType =
@@ -273,10 +247,7 @@ export function storeSceneFiles(
  * Rehydrate a files map from the content-addressed store for a version's
  * `file_ids` JSON list. Missing blobs are skipped (no crash).
  */
-export function rehydrateSceneFiles(
-  store: FileStore,
-  fileIdsJson: string,
-): BinaryFiles {
+export function rehydrateSceneFiles(store: FileStore, fileIdsJson: string): BinaryFiles {
   let ids: unknown;
   try {
     ids = JSON.parse(fileIdsJson);
@@ -330,35 +301,25 @@ function parseForceQuery(raw: unknown): boolean {
   return false;
 }
 
-function parseLimitOffset(query: {
-  limit?: string | number;
-  offset?: string | number;
-}): { limit: number; offset: number } {
+function parseLimitOffset(query: { limit?: string | number; offset?: string | number }): {
+  limit: number;
+  offset: number;
+} {
   let limit = VERSIONS_DEFAULT_LIMIT;
   let offset = 0;
 
   if (query.limit !== undefined && query.limit !== "") {
-    const n =
-      typeof query.limit === "number" ? query.limit : Number(query.limit);
+    const n = typeof query.limit === "number" ? query.limit : Number(query.limit);
     if (!Number.isInteger(n) || n < 1) {
-      throw new AppError(
-        ErrorCode.VALIDATION,
-        "limit must be a positive integer",
-        400,
-      );
+      throw new AppError(ErrorCode.VALIDATION, "limit must be a positive integer", 400);
     }
     limit = Math.min(n, VERSIONS_MAX_LIMIT);
   }
 
   if (query.offset !== undefined && query.offset !== "") {
-    const n =
-      typeof query.offset === "number" ? query.offset : Number(query.offset);
+    const n = typeof query.offset === "number" ? query.offset : Number(query.offset);
     if (!Number.isInteger(n) || n < 0) {
-      throw new AppError(
-        ErrorCode.VALIDATION,
-        "offset must be a non-negative integer",
-        400,
-      );
+      throw new AppError(ErrorCode.VALIDATION, "offset must be a non-negative integer", 400);
     }
     offset = n;
   }
@@ -447,17 +408,16 @@ export async function registerVersionRoutes(
         const { slug } = request.params;
         const scene = db.getSceneBySlug(slug);
         if (!scene) {
-          throw new AppError(
-            ErrorCode.NOT_FOUND,
-            `scene not found: ${slug}`,
-            404,
-          );
+          throw new AppError(ErrorCode.NOT_FOUND, `scene not found: ${slug}`, 404);
         }
 
         const head = scene.head_version;
         const resolved = resolveVersionRef(request.query.v, head);
 
-        if (head === 0 && (request.query.v === undefined || request.query.v === "" || request.query.v === "head")) {
+        if (
+          head === 0 &&
+          (request.query.v === undefined || request.query.v === "" || request.query.v === "head")
+        ) {
           return emptySceneDocument();
         }
 
@@ -471,11 +431,7 @@ export async function registerVersionRoutes(
 
         const row = db.getVersion(scene.id, resolved);
         if (!row) {
-          throw new AppError(
-            ErrorCode.NOT_FOUND,
-            `version not found: ${resolved}`,
-            404,
-          );
+          throw new AppError(ErrorCode.NOT_FOUND, `version not found: ${resolved}`, 404);
         }
 
         return versionToDocument(store, row);
@@ -499,26 +455,16 @@ export async function registerVersionRoutes(
           const { slug } = request.params;
           const scene = db.getSceneBySlug(slug);
           if (!scene) {
-            throw new AppError(
-              ErrorCode.NOT_FOUND,
-              `scene not found: ${slug}`,
-              404,
-            );
+            throw new AppError(ErrorCode.NOT_FOUND, `scene not found: ${slug}`, 404);
           }
 
           const identity = request.auth;
           if (!identity) {
-            throw new AppError(
-              ErrorCode.UNAUTHORIZED,
-              "authentication required",
-              401,
-            );
+            throw new AppError(ErrorCode.UNAUTHORIZED, "authentication required", 401);
           }
 
           const message =
-            typeof request.body.message === "string"
-              ? request.body.message.trim()
-              : "";
+            typeof request.body.message === "string" ? request.body.message.trim() : "";
           if (message.length === 0) {
             throw new AppError(
               ErrorCode.VALIDATION,
@@ -561,12 +507,9 @@ export async function registerVersionRoutes(
             });
           } catch (err) {
             if (err instanceof SceneValidationError) {
-              throw new AppError(
-                ErrorCode.VALIDATION,
-                err.message,
-                400,
-                { problems: err.problems },
-              );
+              throw new AppError(ErrorCode.VALIDATION, err.message, 400, {
+                problems: err.problems,
+              });
             }
             throw err;
           }
@@ -580,12 +523,9 @@ export async function registerVersionRoutes(
           // ------------------------------------------------------------------
           if (wantMerge && parentVersion !== head) {
             if (!mergeService) {
-              throw new AppError(
-                ErrorCode.NOT_IMPLEMENTED,
-                MERGE_WORKER_DISABLED_MESSAGE,
-                501,
-                { reason: "disabled" },
-              );
+              throw new AppError(ErrorCode.NOT_IMPLEMENTED, MERGE_WORKER_DISABLED_MESSAGE, 501, {
+                reason: "disabled",
+              });
             }
 
             if (head < 1) {
@@ -645,10 +585,7 @@ export async function registerVersionRoutes(
             // Bump version/versionNonce on elements the client actually
             // changed vs parent so reconcileElements sees honest input.
             // Does not invent a conflict rule — only fixes dishonest fields.
-            const localForMerge = prepareLocalElementsForMerge(
-              doc.elements,
-              parentElements,
-            );
+            const localForMerge = prepareLocalElementsForMerge(doc.elements, parentElements);
 
             let mergedElements: unknown[];
             try {
@@ -674,13 +611,8 @@ export async function registerVersionRoutes(
                   },
                 );
               }
-              const msg =
-                err instanceof Error ? err.message : "merge failed in render worker";
-              throw new AppError(
-                ErrorCode.INTERNAL,
-                `server-side merge failed: ${msg}`,
-                500,
-              );
+              const msg = err instanceof Error ? err.message : "merge failed in render worker";
+              throw new AppError(ErrorCode.INTERNAL, `server-side merge failed: ${msg}`, 500);
             }
 
             // Re-normalize the merged scene (appState stays local/"mine").
@@ -710,11 +642,7 @@ export async function registerVersionRoutes(
             storeSceneFiles(store, doc.files);
             const fileIds = collectReferencedFileIds(mergedDoc.elements);
 
-            const commitMessage = formatMergeCommitMessage(
-              message,
-              parentVersion,
-              head,
-            );
+            const commitMessage = formatMergeCommitMessage(message, parentVersion, head);
             const elementsBlob = gzipJson(mergedDoc.elements);
             const appStateBlob = gzipJson(mergedDoc.appState);
             const elementCount = mergedDoc.elements.length;
@@ -737,11 +665,7 @@ export async function registerVersionRoutes(
 
             if (!result.ok) {
               if (result.reason === "not_found") {
-                throw new AppError(
-                  ErrorCode.NOT_FOUND,
-                  `scene not found: ${slug}`,
-                  404,
-                );
+                throw new AppError(ErrorCode.NOT_FOUND, `scene not found: ${slug}`, 404);
               }
               // Race: head moved again between read and commit.
               throw new AppError(
@@ -753,11 +677,7 @@ export async function registerVersionRoutes(
                   head: result.head,
                   parentVersion: result.parentVersion,
                   diff: diffs
-                    ? diffs.conflictDiff(
-                        scene.id,
-                        result.parentVersion,
-                        result.head,
-                      )
+                    ? diffs.conflictDiff(scene.id, result.parentVersion, result.head)
                     : {
                         from: result.parentVersion,
                         to: result.head,
@@ -818,10 +738,7 @@ export async function registerVersionRoutes(
 
           // Optional client-rendered thumbnail (browser exportToBlob → /files).
           // Must already be in the store; never invented server-side.
-          const thumbnailFileId = resolveThumbnailFileId(
-            request.body.thumbnailFileId,
-            store,
-          );
+          const thumbnailFileId = resolveThumbnailFileId(request.body.thumbnailFileId, store);
 
           const elementsBlob = gzipJson(doc.elements);
           const appStateBlob = gzipJson(doc.appState);
@@ -844,20 +761,12 @@ export async function registerVersionRoutes(
 
           if (!result.ok) {
             if (result.reason === "not_found") {
-              throw new AppError(
-                ErrorCode.NOT_FOUND,
-                `scene not found: ${slug}`,
-                404,
-              );
+              throw new AppError(ErrorCode.NOT_FOUND, `scene not found: ${slug}`, 404);
             }
             // One-round-trip conflict: include what the agent missed so it
             // does not have to call GET /diff (or, worse, --force) next.
             const conflictDiff = diffs
-              ? diffs.conflictDiff(
-                  scene.id,
-                  result.parentVersion,
-                  result.head,
-                )
+              ? diffs.conflictDiff(scene.id, result.parentVersion, result.head)
               : {
                   from: result.parentVersion,
                   to: result.head,
@@ -910,11 +819,7 @@ export async function registerVersionRoutes(
         const { slug } = request.params;
         const scene = db.getSceneBySlug(slug);
         if (!scene) {
-          throw new AppError(
-            ErrorCode.NOT_FOUND,
-            `scene not found: ${slug}`,
-            404,
-          );
+          throw new AppError(ErrorCode.NOT_FOUND, `scene not found: ${slug}`, 404);
         }
 
         const { limit, offset } = parseLimitOffset(request.query);

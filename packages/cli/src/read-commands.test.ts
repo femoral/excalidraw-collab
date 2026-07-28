@@ -6,11 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, test } from "node:test";
-import {
-  buildApp,
-  openDatabase,
-  type Database,
-} from "@excalidraw-collab/server";
+import { buildApp, openDatabase, type Database } from "@excalidraw-collab/server";
 import { run } from "./dispatch.js";
 import { ExitCode } from "./errors.js";
 import { getPulledVersion } from "./state.js";
@@ -63,9 +59,9 @@ type Harness = {
 };
 
 async function startServer(): Promise<Harness> {
-  const dataDir = tempDir("excalicli-read-data-");
-  const cwd = tempDir("excalicli-read-cwd-");
-  const configHome = tempDir("excalicli-read-xdg-");
+  const dataDir = tempDir("excali-read-data-");
+  const cwd = tempDir("excali-read-cwd-");
+  const configHome = tempDir("excali-read-xdg-");
   const token = "test-bootstrap-token-read-cli";
 
   const db = openDatabase(dataDir);
@@ -96,8 +92,8 @@ async function startServer(): Promise<Harness> {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     XDG_CONFIG_HOME: configHome,
-    EXCALICLI_SERVER: baseUrl,
-    EXCALICLI_TOKEN: token,
+    EXCALI_SERVER: baseUrl,
+    EXCALI_TOKEN: token,
   };
 
   return { app, db, baseUrl, token, dataDir, cwd, env };
@@ -265,7 +261,7 @@ test("diff --since-last-pull without prior pull exits usage", async () => {
     error: { code: string; message: string };
   };
   assert.equal(parsed.error.code, "USAGE");
-  assert.match(parsed.error.message, /excalicli pull arch/);
+  assert.match(parsed.error.message, /excali pull arch/);
 });
 
 // ─── diff ───────────────────────────────────────────────────────────────────
@@ -408,12 +404,7 @@ test("diff --since-last-pull shows changes after another push", async () => {
 
 test("diff --from/--to defaults and explicit refs", async () => {
   const h = await startServer();
-  await seedScene(
-    h,
-    "arch",
-    ["v1", "v2"],
-    [["#aa0000"], ["#aa0000", "#00aa00"]],
-  );
+  await seedScene(h, "arch", ["v1", "v2"], [["#aa0000"], ["#aa0000", "#00aa00"]]);
 
   // Explicit from/to
   {
@@ -476,12 +467,7 @@ test("diff --from/--to defaults and explicit refs", async () => {
 
 test("describe head and --version with --json and --verbose", async () => {
   const h = await startServer();
-  await seedScene(
-    h,
-    "arch",
-    ["one", "two"],
-    [["#ff0000"], ["#ff0000", "#00ff00"]],
-  );
+  await seedScene(h, "arch", ["one", "two"], [["#ff0000"], ["#ff0000", "#00ff00"]]);
 
   // Head describe
   {
@@ -557,12 +543,7 @@ test("describe head and --version with --json and --verbose", async () => {
 
 test("log shows version author message and change counts", async () => {
   const h = await startServer();
-  await seedScene(
-    h,
-    "arch",
-    ["first box", "second box"],
-    [["#111111"], ["#111111", "#222222"]],
-  );
+  await seedScene(h, "arch", ["first box", "second box"], [["#111111"], ["#111111", "#222222"]]);
 
   // JSON
   {

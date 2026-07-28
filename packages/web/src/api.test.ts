@@ -1,11 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  ApiError,
-  buildApiUrl,
-  createApiClient,
-  type SceneInfo,
-} from "./api.ts";
+import { ApiError, buildApiUrl, createApiClient, type SceneInfo } from "./api.ts";
 
 function scene(overrides: Partial<SceneInfo> = {}): SceneInfo {
   return {
@@ -46,10 +41,10 @@ test("api client attaches Bearer and returns scenes", async () => {
       const url = String(input);
       const headers = new Headers(init?.headers);
       calls.push({ url, headers });
-      return new Response(
-        JSON.stringify({ scenes: [scene()] }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ scenes: [scene()] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
     },
   });
 

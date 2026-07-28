@@ -18,38 +18,14 @@
  * Restoring never invents credentials; the target server keeps its own tokens.
  */
 import { randomUUID } from "node:crypto";
-import {
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type {
-  FastifyInstance,
-  FastifyRequest,
-  preHandlerHookHandler,
-} from "fastify";
-import {
-  createAuthPreHandler,
-  requireAdminPreHandler,
-} from "./auth.js";
-import {
-  Database,
-  gunzipJson,
-  gzipJson,
-  nowIso,
-  type SceneRow,
-  type VersionRow,
-} from "./db.js";
+import type { FastifyInstance, FastifyRequest, preHandlerHookHandler } from "fastify";
+import { createAuthPreHandler, requireAdminPreHandler } from "./auth.js";
+import { Database, gunzipJson, gzipJson, nowIso, type SceneRow, type VersionRow } from "./db.js";
 import { AppError, ErrorCode } from "./errors.js";
-import {
-  FILE_ID_HEX_RE,
-  FileStore,
-  SIDECAR_SUFFIX,
-  type FileSidecar,
-} from "./files.js";
+import { FILE_ID_HEX_RE, FileStore, SIDECAR_SUFFIX, type FileSidecar } from "./files.js";
 import { packTarGz, unpackTarGz, type TarEntry } from "./tar.js";
 
 /** Format id written into MANIFEST.json. */
@@ -160,14 +136,14 @@ content-addressed id). Version JSON references those ids in \`fileIds\`.
 
 ## Restoring
 
-Use \`excalicli restore ARCHIVE.tar.gz\` against a running server, or
+Use \`excali restore ARCHIVE.tar.gz\` against a running server, or
 \`POST /api/restore\` as an admin. Collision policy (when a slug already
 exists): skip (default), overwrite, or abort — never silent.
 
 To open a single head scene without this tool, copy
 \`scenes/<slug>/versions/<head>.json\`'s \`elements\` / \`appState\` /
 embedded files into a standard \`.excalidraw\` document, or use
-\`excalicli pull --all -o dir/\` for plain \`.excalidraw\` files.
+\`excali pull --all -o dir/\` for plain \`.excalidraw\` files.
 `;
 
 function parseFileIds(fileIdsJson: string): string[] {
@@ -317,23 +293,14 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function parseSceneMeta(raw: unknown, slugFromPath: string): SceneMetaJson {
   if (!isPlainObject(raw)) {
-    throw new AppError(
-      ErrorCode.VALIDATION,
-      `invalid scene meta for ${slugFromPath}`,
-      400,
-    );
+    throw new AppError(ErrorCode.VALIDATION, `invalid scene meta for ${slugFromPath}`, 400);
   }
   const id = typeof raw.id === "string" ? raw.id : "";
-  const slug =
-    typeof raw.slug === "string" && raw.slug.length > 0
-      ? raw.slug
-      : slugFromPath;
+  const slug = typeof raw.slug === "string" && raw.slug.length > 0 ? raw.slug : slugFromPath;
   const name = typeof raw.name === "string" ? raw.name : slug;
   const headVersion = Number(raw.headVersion ?? 0);
-  const createdAt =
-    typeof raw.createdAt === "string" ? raw.createdAt : nowIso();
-  const updatedAt =
-    typeof raw.updatedAt === "string" ? raw.updatedAt : createdAt;
+  const createdAt = typeof raw.createdAt === "string" ? raw.createdAt : nowIso();
+  const updatedAt = typeof raw.updatedAt === "string" ? raw.updatedAt : createdAt;
   const deletedAt =
     raw.deletedAt === null || raw.deletedAt === undefined
       ? null
@@ -341,11 +308,7 @@ function parseSceneMeta(raw: unknown, slugFromPath: string): SceneMetaJson {
         ? raw.deletedAt
         : null;
   if (!id) {
-    throw new AppError(
-      ErrorCode.VALIDATION,
-      `scene meta for ${slug} is missing id`,
-      400,
-    );
+    throw new AppError(ErrorCode.VALIDATION, `scene meta for ${slug} is missing id`, 400);
   }
   return {
     id,
@@ -360,19 +323,11 @@ function parseSceneMeta(raw: unknown, slugFromPath: string): SceneMetaJson {
 
 function parseVersionJson(raw: unknown, label: string): VersionJson {
   if (!isPlainObject(raw)) {
-    throw new AppError(
-      ErrorCode.VALIDATION,
-      `invalid version JSON: ${label}`,
-      400,
-    );
+    throw new AppError(ErrorCode.VALIDATION, `invalid version JSON: ${label}`, 400);
   }
   const version = Number(raw.version);
   if (!Number.isInteger(version) || version < 1) {
-    throw new AppError(
-      ErrorCode.VALIDATION,
-      `invalid version number in ${label}`,
-      400,
-    );
+    throw new AppError(ErrorCode.VALIDATION, `invalid version number in ${label}`, 400);
   }
   const parentVersion =
     raw.parentVersion === null || raw.parentVersion === undefined
@@ -380,24 +335,18 @@ function parseVersionJson(raw: unknown, label: string): VersionJson {
       : Number(raw.parentVersion);
   const author = typeof raw.author === "string" ? raw.author : "unknown";
   const message = typeof raw.message === "string" ? raw.message : "";
-  const createdAt =
-    typeof raw.createdAt === "string" ? raw.createdAt : nowIso();
+  const createdAt = typeof raw.createdAt === "string" ? raw.createdAt : nowIso();
   const elementCount = Number(raw.elementCount ?? 0);
   const sceneHash = typeof raw.sceneHash === "string" ? raw.sceneHash : "";
   const elements = raw.elements ?? [];
   const appState = raw.appState ?? {};
   let fileIds: string[] = [];
   if (Array.isArray(raw.fileIds)) {
-    fileIds = raw.fileIds.filter(
-      (x): x is string => typeof x === "string" && x.length > 0,
-    );
+    fileIds = raw.fileIds.filter((x): x is string => typeof x === "string" && x.length > 0);
   }
   return {
     version,
-    parentVersion:
-      parentVersion !== null && Number.isFinite(parentVersion)
-        ? parentVersion
-        : null,
+    parentVersion: parentVersion !== null && Number.isFinite(parentVersion) ? parentVersion : null,
     author,
     message,
     createdAt,
@@ -417,8 +366,7 @@ function parseManifest(raw: unknown): BackupManifest | null {
   return {
     format: BACKUP_FORMAT,
     formatVersion,
-    createdAt:
-      typeof raw.createdAt === "string" ? raw.createdAt : nowIso(),
+    createdAt: typeof raw.createdAt === "string" ? raw.createdAt : nowIso(),
     sceneCount: Number(raw.sceneCount ?? 0),
     fileCount: Number(raw.fileCount ?? 0),
     notes: typeof raw.notes === "string" ? raw.notes : "",
@@ -427,18 +375,12 @@ function parseManifest(raw: unknown): BackupManifest | null {
 
 type ParsedArchive = {
   manifest: BackupManifest | null;
-  scenes: Map<
-    string,
-    { meta: SceneMetaJson; versions: VersionJson[] }
-  >;
+  scenes: Map<string, { meta: SceneMetaJson; versions: VersionJson[] }>;
   files: Map<string, { bytes: Buffer; sidecar?: FileSidecar }>;
 };
 
 function parseArchive(entries: TarEntry[]): ParsedArchive {
-  const scenes = new Map<
-    string,
-    { meta: SceneMetaJson | null; versions: VersionJson[] }
-  >();
+  const scenes = new Map<string, { meta: SceneMetaJson | null; versions: VersionJson[] }>();
   const files = new Map<string, { bytes?: Buffer; sidecar?: FileSidecar }>();
   let manifest: BackupManifest | null = null;
 
@@ -457,10 +399,7 @@ function parseArchive(entries: TarEntry[]): ParsedArchive {
     const sceneMeta = /^scenes\/([^/]+)\/meta\.json$/.exec(name);
     if (sceneMeta) {
       const slug = sceneMeta[1]!;
-      const meta = parseSceneMeta(
-        JSON.parse(entry.data.toString("utf8")),
-        slug,
-      );
+      const meta = parseSceneMeta(JSON.parse(entry.data.toString("utf8")), slug);
       const cur = scenes.get(slug) ?? { meta: null, versions: [] };
       cur.meta = meta;
       scenes.set(slug, cur);
@@ -470,10 +409,7 @@ function parseArchive(entries: TarEntry[]): ParsedArchive {
     const sceneVer = /^scenes\/([^/]+)\/versions\/(\d+)\.json$/.exec(name);
     if (sceneVer) {
       const slug = sceneVer[1]!;
-      const ver = parseVersionJson(
-        JSON.parse(entry.data.toString("utf8")),
-        name,
-      );
+      const ver = parseVersionJson(JSON.parse(entry.data.toString("utf8")), name);
       const cur = scenes.get(slug) ?? { meta: null, versions: [] };
       cur.versions.push(ver);
       scenes.set(slug, cur);
@@ -513,17 +449,10 @@ function parseArchive(entries: TarEntry[]): ParsedArchive {
     }
   }
 
-  const outScenes = new Map<
-    string,
-    { meta: SceneMetaJson; versions: VersionJson[] }
-  >();
+  const outScenes = new Map<string, { meta: SceneMetaJson; versions: VersionJson[] }>();
   for (const [slug, cur] of scenes) {
     if (!cur.meta) {
-      throw new AppError(
-        ErrorCode.VALIDATION,
-        `archive missing meta.json for scene ${slug}`,
-        400,
-      );
+      throw new AppError(ErrorCode.VALIDATION, `archive missing meta.json for scene ${slug}`, 400);
     }
     cur.versions.sort((a, b) => a.version - b.version);
     outScenes.set(slug, { meta: cur.meta, versions: cur.versions });
@@ -570,11 +499,7 @@ export function restoreBackupArchive(
 
   const parsed = parseArchive(entries);
   if (parsed.scenes.size === 0 && parsed.files.size === 0) {
-    throw new AppError(
-      ErrorCode.VALIDATION,
-      "backup archive contains no scenes or files",
-      400,
-    );
+    throw new AppError(ErrorCode.VALIDATION, "backup archive contains no scenes or files", 400);
   }
 
   const report: RestoreReport = {
@@ -597,9 +522,7 @@ export function restoreBackupArchive(
     report.filesRestored += 1;
   }
   if (report.filesRestored > 0) {
-    report.messages.push(
-      `Restored ${report.filesRestored} content-addressed file(s).`,
-    );
+    report.messages.push(`Restored ${report.filesRestored} content-addressed file(s).`);
   }
 
   // Sort slugs for deterministic reports.
@@ -624,18 +547,14 @@ export function restoreBackupArchive(
       }
       if (collisionPolicy === "skip") {
         report.skipped.push(meta.slug);
-        report.messages.push(
-          `Skipped ${meta.slug}: already exists (policy=skip).`,
-        );
+        report.messages.push(`Skipped ${meta.slug}: already exists (policy=skip).`);
         continue;
       }
       // overwrite: hard-delete then re-import under original id when free,
       // otherwise keep a new id if the archived id collides with a different slug.
       db.deleteScene(existing.id);
       report.overwritten.push(meta.slug);
-      report.messages.push(
-        `Overwrote ${meta.slug}: replaced existing scene (policy=overwrite).`,
-      );
+      report.messages.push(`Overwrote ${meta.slug}: replaced existing scene (policy=overwrite).`);
     }
 
     // Prefer archived id; if another row still holds that id (different slug),
@@ -685,13 +604,9 @@ export function restoreBackupArchive(
     // Re-apply soft-delete if needed (insertScene accepts deleted_at, so already set).
     report.restored.push(meta.slug);
     if (!existing) {
-      report.messages.push(
-        `Restored ${meta.slug}: ${versions.length} version(s), head=${head}.`,
-      );
+      report.messages.push(`Restored ${meta.slug}: ${versions.length} version(s), head=${head}.`);
     } else {
-      report.messages.push(
-        `Imported ${meta.slug}: ${versions.length} version(s), head=${head}.`,
-      );
+      report.messages.push(`Imported ${meta.slug}: ${versions.length} version(s), head=${head}.`);
     }
   }
 
@@ -743,11 +658,7 @@ export async function registerBackupRoutes(
   ): void => {
     done(null, body);
   };
-  for (const type of [
-    "application/gzip",
-    "application/x-gzip",
-    "application/x-tar",
-  ] as const) {
+  for (const type of ["application/gzip", "application/x-gzip", "application/x-tar"] as const) {
     try {
       app.addContentTypeParser(
         type,
@@ -765,19 +676,13 @@ export async function registerBackupRoutes(
       api.addHook("preHandler", requireAdminPreHandler);
 
       api.get("/backup", async (_request, reply) => {
-        const { bytes, manifest } = await buildBackupArchive(
-          deps.db,
-          deps.store,
-        );
+        const { bytes, manifest } = await buildBackupArchive(deps.db, deps.store);
         const filename = `excalidraw-collab-backup-${manifest.createdAt.replace(/[:.]/g, "-")}.tar.gz`;
         return reply
           .status(200)
           .header("Content-Type", "application/gzip")
           .header("Content-Length", bytes.byteLength)
-          .header(
-            "Content-Disposition",
-            `attachment; filename="${filename}"`,
-          )
+          .header("Content-Disposition", `attachment; filename="${filename}"`)
           .header("X-Backup-Scene-Count", String(manifest.sceneCount))
           .header("X-Backup-File-Count", String(manifest.fileCount))
           .send(bytes);
@@ -800,12 +705,7 @@ export async function registerBackupRoutes(
               400,
             );
           }
-          const report = restoreBackupArchive(
-            deps.db,
-            deps.store,
-            body,
-            policy,
-          );
+          const report = restoreBackupArchive(deps.db, deps.store, body, policy);
           return reply.status(200).send(report);
         },
       );

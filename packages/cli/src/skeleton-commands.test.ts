@@ -62,12 +62,14 @@ type Harness = {
   env: NodeJS.ProcessEnv;
 };
 
-async function startServer(opts: {
-  converter?: SkeletonConverter | null;
-} = {}): Promise<Harness> {
-  const dataDir = tempDir("excalicli-skel-data-");
-  const cwd = tempDir("excalicli-skel-cwd-");
-  const configHome = tempDir("excalicli-skel-xdg-");
+async function startServer(
+  opts: {
+    converter?: SkeletonConverter | null;
+  } = {},
+): Promise<Harness> {
+  const dataDir = tempDir("excali-skel-data-");
+  const cwd = tempDir("excali-skel-cwd-");
+  const configHome = tempDir("excali-skel-xdg-");
   const token = "test-bootstrap-token-skeleton-cli";
 
   const db = openDatabase(dataDir);
@@ -99,8 +101,8 @@ async function startServer(opts: {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     XDG_CONFIG_HOME: configHome,
-    EXCALICLI_SERVER: baseUrl,
-    EXCALICLI_TOKEN: token,
+    EXCALI_SERVER: baseUrl,
+    EXCALI_TOKEN: token,
   };
 
   return { app, db, baseUrl, token, cwd, env };
@@ -217,19 +219,19 @@ test("push --skeleton with mock converter pushes bound full elements", async () 
       const boxes = (elements as Array<{ id: string; type: string }>).filter(
         (e) => e.type === "rectangle",
       );
-      const arrows = (elements as Array<{
-        id: string;
-        type: string;
-        start?: { id: string };
-        end?: { id: string };
-      }>).filter((e) => e.type === "arrow");
+      const arrows = (
+        elements as Array<{
+          id: string;
+          type: string;
+          start?: { id: string };
+          end?: { id: string };
+        }>
+      ).filter((e) => e.type === "arrow");
 
       const full: unknown[] = [];
       for (const b of boxes) {
         const bound = arrows
-          .filter(
-            (a) => a.start?.id === b.id || a.end?.id === b.id,
-          )
+          .filter((a) => a.start?.id === b.id || a.end?.id === b.id)
           .map((a) => ({ id: a.id, type: "arrow" as const }));
         full.push({
           id: b.id,
@@ -291,12 +293,8 @@ test("push --skeleton with mock converter pushes bound full elements", async () 
             [100, 0],
           ],
           lastCommittedPoint: null,
-          startBinding: a.start?.id
-            ? { elementId: a.start.id, focus: 0, gap: 1 }
-            : null,
-          endBinding: a.end?.id
-            ? { elementId: a.end.id, focus: 0, gap: 1 }
-            : null,
+          startBinding: a.start?.id ? { elementId: a.start.id, focus: 0, gap: 1 } : null,
+          endBinding: a.end?.id ? { elementId: a.end.id, focus: 0, gap: 1 } : null,
           startArrowhead: null,
           endArrowhead: "arrow",
         });
@@ -318,8 +316,7 @@ test("push --skeleton with mock converter pushes bound full elements", async () 
   const lines = [
     "[",
     ...ARCH_SKELETON.map(
-      (el, i) =>
-        `  ${JSON.stringify(el)}${i < ARCH_SKELETON.length - 1 ? "," : ""}`,
+      (el, i) => `  ${JSON.stringify(el)}${i < ARCH_SKELETON.length - 1 ? "," : ""}`,
     ),
     "]",
     "",
@@ -365,9 +362,7 @@ test("push --skeleton with mock converter pushes bound full elements", async () 
     cwd: h.cwd,
   });
   assert.equal(pullCode, ExitCode.OK, pull.stderr);
-  const scene = JSON.parse(
-    fs.readFileSync(path.join(h.cwd, "arch.excalidraw"), "utf8"),
-  ) as {
+  const scene = JSON.parse(fs.readFileSync(path.join(h.cwd, "arch.excalidraw"), "utf8")) as {
     elements: Array<{
       id: string;
       type: string;
@@ -385,12 +380,8 @@ test("push --skeleton with mock converter pushes bound full elements", async () 
   assert.equal(a1.endBinding?.elementId, "db");
   assert.equal(a2.startBinding?.elementId, "api");
   assert.equal(a2.endBinding?.elementId, "cache");
-  assert.ok(
-    (api.boundElements ?? []).some((b) => b.id === "a-api-db"),
-  );
-  assert.ok(
-    (api.boundElements ?? []).some((b) => b.id === "a-api-cache"),
-  );
+  assert.ok((api.boundElements ?? []).some((b) => b.id === "a-api-db"));
+  assert.ok((api.boundElements ?? []).some((b) => b.id === "a-api-cache"));
 });
 
 test("push --skeleton reports validation index and reason", async () => {
@@ -416,16 +407,7 @@ test("push --skeleton reports validation index and reason", async () => {
 
   const c = capture();
   const code = await run({
-    argv: [
-      "push",
-      "bad",
-      "--skeleton",
-      "-f",
-      "bad.skeleton.json",
-      "-m",
-      "nope",
-      "--json",
-    ],
+    argv: ["push", "bad", "--skeleton", "-f", "bad.skeleton.json", "-m", "nope", "--json"],
     env: h.env,
     io: c.io,
     cwd: h.cwd,

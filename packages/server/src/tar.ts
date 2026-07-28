@@ -67,9 +67,7 @@ function splitPath(name: string): { name: string; prefix: string } {
       }
     }
   }
-  throw new Error(
-    `tar path too long for ustar name+prefix fields: ${normalized}`,
-  );
+  throw new Error(`tar path too long for ustar name+prefix fields: ${normalized}`);
 }
 
 function writeHeader(entry: TarEntry): Buffer {
@@ -116,9 +114,7 @@ function padToBlock(size: number): number {
 export function packTar(entries: readonly TarEntry[]): Buffer {
   const parts: Buffer[] = [];
   for (const entry of entries) {
-    const data = Buffer.isBuffer(entry.data)
-      ? entry.data
-      : Buffer.from(entry.data);
+    const data = Buffer.isBuffer(entry.data) ? entry.data : Buffer.from(entry.data);
     parts.push(writeHeader({ ...entry, data }));
     parts.push(data);
     const pad = padToBlock(data.byteLength);
@@ -137,7 +133,10 @@ export function packTarGz(entries: readonly TarEntry[]): Buffer {
 }
 
 function readOctal(buf: Buffer, start: number, length: number): number {
-  const raw = buf.toString("ascii", start, start + length).replace(/\0/g, "").trim();
+  const raw = buf
+    .toString("ascii", start, start + length)
+    .replace(/\0/g, "")
+    .trim();
   if (raw.length === 0) return 0;
   const n = Number.parseInt(raw, 8);
   return Number.isFinite(n) ? n : 0;
@@ -174,8 +173,7 @@ export function unpackTar(archive: Buffer): TarEntry[] {
     const mode = readOctal(header, 100, 8);
     const mtime = readOctal(header, 136, 12);
 
-    const fullName =
-      prefix.length > 0 ? `${prefix}/${name}` : name;
+    const fullName = prefix.length > 0 ? `${prefix}/${name}` : name;
 
     if (offset + size > archive.byteLength) {
       throw new Error(`tar entry truncated: ${fullName}`);

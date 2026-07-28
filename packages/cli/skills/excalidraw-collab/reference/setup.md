@@ -1,6 +1,6 @@
 # Setup and prerequisites
 
-**Read this only when `excalicli whoami` fails, `excalicli` is not on PATH, or
+**Read this only when `excali whoami` fails, `excali` is not on PATH, or
 the user explicitly asks you to help wire things up.** Everything here is the
 user's responsibility — surface the right command, don't guess at a server URL
 or mint credentials unprompted.
@@ -8,17 +8,17 @@ or mint credentials unprompted.
 ## Is the CLI available?
 
 ```sh
-excalicli --help
+excali --help
 ```
 
 If the binary is missing, the CLI may only exist inside a checkout of the
 excalidraw-collab monorepo. From that repo root, after `pnpm install && pnpm build`:
 
 ```sh
-node packages/cli/bin/excalicli --help
+node packages/cli/bin/excali --help
 ```
 
-The binary name is always `excalicli`, however it is invoked.
+The binary name is always `excali`, however it is invoked.
 
 ## Is there a server?
 
@@ -31,28 +31,28 @@ If no server is reachable, say so and stop — bringing one up is a user decisio
 The CLI needs a base URL and a bearer token:
 
 ```sh
-excalicli login --server http://HOST:PORT --token YOUR_TOKEN
-excalicli whoami
+excali login --server http://HOST:PORT --token YOUR_TOKEN
+excali whoami
 ```
 
 `YOUR_TOKEN` is either the server's `BOOTSTRAP_TOKEN` (admin, valid from first
 boot) or a named token minted by an admin:
 
 ```sh
-excalicli token create agent-name    # secret is printed exactly once
-excalicli token ls
-excalicli token revoke agent-name
+excali token create agent-name    # secret is printed exactly once
+excali token ls
+excali token revoke agent-name
 ```
 
-`login` writes `~/.config/excalicli/config.json` with mode `0600` (or
-`$XDG_CONFIG_HOME/excalicli/config.json`).
+`login` writes `~/.config/excali/config.json` with mode `0600` (or
+`$XDG_CONFIG_HOME/excali/config.json`).
 
 Environment variables override the config file:
 
-| Env var            | Purpose      |
-| ------------------ | ------------ |
-| `EXCALICLI_SERVER` | Base URL     |
-| `EXCALICLI_TOKEN`  | Bearer token |
+| Env var         | Purpose      |
+| --------------- | ------------ |
+| `EXCALI_SERVER` | Base URL     |
+| `EXCALI_TOKEN`  | Bearer token |
 
 Never write a token into a repository, issue, commit message, or any file that
 leaves the machine.
@@ -91,8 +91,8 @@ client-side substitute.
 ## Admin commands
 
 ```sh
-excalicli backup -o backup.tar.gz
-excalicli restore backup.tar.gz      # see --on-collision
+excali backup -o backup.tar.gz
+excali restore backup.tar.gz      # see --on-collision
 ```
 
 Both require an admin token. `restore` overwrites server state — confirm with
