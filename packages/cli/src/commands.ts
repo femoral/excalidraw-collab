@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { CommandResult } from "./format.js";
 import { formatTable } from "./format.js";
 import type { ResolvedConfig } from "./config.js";
@@ -76,8 +79,21 @@ export function listCommands(): Command[] {
   return [...registry.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Package version (keep in sync with package.json). */
-export const CLI_VERSION = "0.0.0";
+/**
+ * Package version, read from the shipped package.json (`dist/` sits one level
+ * below it both in the repo and in the published tarball) so it cannot drift.
+ */
+export const CLI_VERSION: string = readPackageVersion();
+
+function readPackageVersion(): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const raw = fs.readFileSync(path.resolve(here, "../package.json"), "utf8");
+  const version: unknown = (JSON.parse(raw) as { version?: unknown }).version;
+  if (typeof version !== "string" || version.length === 0) {
+    throw new Error("package.json is missing a version");
+  }
+  return version;
+}
 
 /**
  * Stub command that exercises both human-table and `--json` output modes.

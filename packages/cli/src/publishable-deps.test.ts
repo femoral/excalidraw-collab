@@ -66,6 +66,26 @@ test("CLI is publishable (not private)", () => {
   );
 });
 
+test("CLI reports the published package version", async () => {
+  const cli = readPackageJson(cliDir);
+  const { CLI_VERSION } = await import("./commands.js");
+  assert.equal(
+    CLI_VERSION,
+    (cli as { version?: string }).version,
+    "`excali version` must report the package.json version",
+  );
+});
+
+test("cli and core versions stay in lockstep", () => {
+  const cli = readPackageJson(cliDir) as { version?: string };
+  const core = readPackageJson(path.join(packagesDir, "core")) as { version?: string };
+  assert.equal(
+    core.version,
+    cli.version,
+    "core and cli are published together — bump both to the same version",
+  );
+});
+
 test("CLI runtime deps are non-private workspace packages (no third-party)", () => {
   const workspace = workspacePackages();
   const cli = readPackageJson(cliDir);

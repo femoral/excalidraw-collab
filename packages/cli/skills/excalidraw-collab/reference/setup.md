@@ -11,12 +11,16 @@ or mint credentials unprompted.
 excali --help
 ```
 
-If the binary is missing, the CLI may only exist inside a checkout of the
-excalidraw-collab monorepo. From that repo root, after `pnpm install && pnpm build`:
+If the binary is missing, it is published on npm and needs Node 24+. Installing
+it is the user's call — suggest one of these rather than running it unprompted:
 
 ```sh
-node packages/cli/bin/excali --help
+npm install -g @excalidraw-collab/cli    # or: pnpm add -g @excalidraw-collab/cli
+npx @excalidraw-collab/cli --help        # one-off, no install
 ```
+
+Inside a checkout of the excalidraw-collab monorepo, `pnpm install && pnpm build`
+then `node packages/cli/bin/excali` works too.
 
 The binary name is always `excali`, however it is invoked.
 

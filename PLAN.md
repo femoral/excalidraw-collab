@@ -234,6 +234,10 @@ single-tenant tool.
 
 ## 8. CLI (`excali`)
 
+Published to npm as `@excalidraw-collab/cli` (`npm install -g @excalidraw-collab/cli`),
+with `@excalidraw-collab/core` as its only runtime dependency — see
+[docs/release.md](./docs/release.md).
+
 Design rules: **every command accepts `--json`** (agents parse, humans read), **exit codes are
 meaningful** (`0` ok, `1` error, `4` conflict, `5` lock held), and state lives in
 `.excalidraw-collab/state.json` in the working dir (last pulled version per scene) so
